@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#e85a71">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>PocketPal</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+  :root {
+    --shell: #e85a71;
+    --shell-dark: #c43c55;
+    --lcd: #9bbc0f;
+    --ink: #0f380f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 4px;
+    overflow: hidden;
+  }
+  .info-panel {
+    width: min(400px, 96vw);
+    background: rgba(0,0,0,0.55);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+  .info-panel h2 {
+    font-size: 15px;
+    color: #f8a5b0;
+    margin-bottom: 4px;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .info-panel h2 .sound-btn {
+    font-size: 16px;
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .meters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    font-size: 12px;
+  }
+  .meter { display: flex; align-items: center; gap: 3px; }
+  .stage-line {
+    margin-top: 3px;
+    font-size: 11px;
+    opacity: 0.9;
+    display: flex;
+    justify-content: space-between;
+  }
+  .device {
+    width: min(400px, 96vw);
+    background: linear-gradient(165deg, #f2788c 0%, var(--shell) 45%, var(--shell-dark) 100%);
+    border-radius: 24px;
+    padding: 14px 14px 12px;
+    box-shadow:
+      0 0 0 3px #f9b4c0,
+      0 0 0 6px #b83550,
+      0 10px 24px rgba(0,0,0,0.45),
+      inset 0 3px 10px rgba(255,255,255,0.25);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .device::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 5px;
+    background: #222;
+    border-radius: 3px;
+  }
+  .lcd-bezel {
+    width: 100%;
+    background: #1a1a1a;
+    border-radius: 10px;
+    padding: 6px;
+    margin-top: 12px;
+    box-shadow: inset 0 0 0 2px #333, inset 0 0 12px #000;
+  }
+  .lcd {
+    width: 100%;
+    aspect-ratio: 1.35 / 1;
+    background: var(--lcd);
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .icons {
+    display: flex;
+    width: 100%;
+    gap: 3px;
+    margin: 8px 0 6px;
+    pointer-events: none; /* A/B/C only control */
+  }
+  .icon {
+    flex: 1;
+    height: 36px;
+    background: #222;
+    border: 2px solid #3a3a3a;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: #888;
+  }
+  .icon.on {
+    background: #333;
+    border-color: #fff;
+    color: #fff;
+    box-shadow: 0 0 6px rgba(255,255,255,0.3);
+  }
+  .btns {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+  }
+  .btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #4a4a4a, #222);
+    border: 3px solid #111;
+    box-shadow: 0 4px 0 #0a0a0a, inset 0 2px 3px rgba(255,255,255,0.1);
+    color: #ccc;
+    font-weight: 800;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .btn:active, .btn.pressed {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 #0a0a0a, inset 0 2px 5px rgba(0,0,0,0.4);
+  }
+  .btn.a { border-color: #4a9; }
+  .btn.b { border-color: #49a; }
+  .btn.c { border-color: #a54; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    z-index: 30;
+    color: var(--lcd);
+    text-align: center;
+    padding: 12px 10px 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    overflow-y: auto;
+  }
+  .overlay h2 { font-size: 14px; margin: 4px 0 8px; color: #c4d84a; }
+  .overlay p { margin: 3px 0; line-height: 1.35; }
+  .overlay button {
+    margin-top: 8px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 2px solid var(--lcd);
+    border-radius: 5px;
+    color: var(--lcd);
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 36px;
+  }
+  .overlay input {
+    margin-top: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    width: 85%;
+    background: #0a2a0a;
+    border: 1px solid var(--lcd);
+    color: var(--lcd);
+    text-align: center;
+    border-radius: 5px;
+  }
+  .overlay .btn-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .overlay .friend-list {
+    width: 100%;
+    max-height: 80px;
+    overflow-y: auto;
+    margin: 6px 0;
+    text-align: left;
+  }
+  .overlay .friend-item {
+    padding: 5px 8px;
+    margin: 3px 0;
+    border: 1px solid #3a5a3a;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .overlay .friend-item.selected {
+    border-color: var(--lcd);
+    background: #0a2a0a;
+  }
+  .hidden { display: none !important; }
+  .toast {
+    position: fixed;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.9);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 18px;
+    font-size: 13px;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="info-panel">
+    <h2>
+      <span id="pet-name">PocketPal</span>
+      <button class="sound-btn" id="soundBtn" title="Toggle sound">🔊</button>
+    </h2>
+    <div class="meters">
+      <div class="meter">🍖 <span id="h-hearts">♡♡♡♡</span></div>
+      <div class="meter">😊 <span id="y-hearts">♡♡♡♡</span></div>
+      <div class="meter">⚖️ <span id="wt">5g</span></div>
+      <div class="meter">🎓 <span id="disc">0%</span></div>
+      <div class="meter">👥 <span id="friends">0</span></div>
+    </div>
+    <div class="stage-line">
+      <span id="stage-line">Egg • Waiting...</span>
+      <span id="gen-line">Gen 1</span>
+    </div>
+  </div>
+
+  <div class="device" id="device">
+    <div class="lcd-bezel">
+      <div class="lcd">
+        <canvas id="c" width="240" height="178"></canvas>
+        <div class="overlay hidden" id="overlay">
+          <h2 id="otitle">PocketPal</h2>
+          <p id="omsg"></p>
+          <div id="overlay-extra"></div>
+          <button id="obtn">Start</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="icons" id="icons">
+      <div class="icon" data-a="status">📊</div>
+      <div class="icon" data-a="feed">🍖</div>
+      <div class="icon" data-a="play">🎮</div>
+      <div class="icon" data-a="clean">🧹</div>
+      <div class="icon" data-a="med">💊</div>
+      <div class="icon" data-a="light">💡</div>
+      <div class="icon" data-a="connect">📡</div>
+      <div class="icon" data-a="disc">📢</div>
+    </div>
+
+    <div class="btns">
+      <div class="btn a" id="btnA">A</div>
+      <div class="btn b" id="btnB">B</div>
+      <div class="btn c" id="btnC">C</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  POCKETPAL v2.6
+//  Real A/B/C control only • Fixed play • Bigger poop
+//  Better alert icon • Selection feedback
+// ============================================================
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 240, H = 178;
+
+const S = {
+  stage: 'egg', form: 'egg',
+  age: 0, weight: 5,
+  hunger: 4, happy: 4, disc: 0,
+  careMiss: 0, discMiss: 0,
+  sick: false, sleep: false, lights: true,
+  poop: false, poopX: 180, poopY: 145,
+  call: false,
+  born: null,
+  lastH: Date.now(), lastY: Date.now(),
+  lastP: Date.now(), lastAge: Date.now(), lastSave: Date.now(),
+  game: false, gScore: 0, gRound: 0, gameDir: 0,
+  menu: null, sel: 0,
+  sound: true,
+  difficulty: 'normal',
+  generation: 1,
+  deaths: 0, frame: 0,
+  myCode: null,
+  friends: [],
+  selectedFriend: 0,
+  married: false,
+  anim: null,
+  animTimer: 0,
+  inheritedBonus: 0,
+  petX: 120,
+  petTargetX: 120,
+  lastBeep: 0,
+  playResult: null // 'happy' | 'sad' | null for play feedback face
+};
+
+const NAMES = {
+  egg: 'Egg', baby: 'Pip', child: 'Nib',
+  teenGood: 'Lumi', teenBad: 'Grub',
+  adult1: 'Momo', adult2: 'Kiko', adult3: 'Taro',
+  adult4: 'Poko', adult5: 'Nori', adult6: 'Zuzu',
+  secret: 'Elder', dead: 'Spirit'
+};
+const ICONS = ['status','feed','play','clean','med','light','connect','disc'];
+const ICON_LABELS = {
+  status: 'Status',
+  feed: 'Feed',
+  play: 'Play',
+  clean: 'Clean',
+  med: 'Medicine',
+  light: 'Lights',
+  connect: 'Connect',
+  disc: 'Discipline'
+};
+const DIFF = {
+  casual: { hunger: 1.6, happy: 1.6, care: 0.7 },
+  normal: { hunger: 1.0, happy: 1.0, care: 1.0 },
+  strict: { hunger: 0.7, happy: 0.7, care: 1.4 }
+};
+
+const actx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(f=440, d=0.07, t='square', v=0.07) {
+  if (!S.sound) return;
+  const now = Date.now();
+  if (now - S.lastBeep < 50) return;
+  S.lastBeep = now;
+  try {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = t; o.frequency.value = f; g.gain.value = v;
+    o.connect(g); g.connect(actx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + d);
+    o.stop(actx.currentTime + d);
+  } catch(e){}
+}
+function toast(m) {
+  const t = document.getElementById('toast');
+  t.textContent = m;
+  t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function px(x, y, c) {
+  ctx.fillStyle = c;
+  ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+}
+function fillCirc(x, y, r, c) {
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++)
+      if (dx*dx + dy*dy <= r*r + 0.6) px(x+dx, y+dy, c);
+}
+function fillRect(x, y, w, h, c) {
+  ctx.fillStyle = c;
+  ctx.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+function drawHeart(x, y, filled) {
+  const INK = '#0f380f';
+  const shape = filled ? [
+    [0,1,1,0,1,1,0],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0]
+  ] : [
+    [0,1,1,0,1,1,0],[1,0,0,1,0,0,1],[1,0,0,0,0,0,1],
+    [0,1,0,0,0,1,0],[0,0,1,0,1,0,0],[0,0,0,1,0,0,0]
+  ];
+  for (let row = 0; row < shape.length; row++)
+    for (let col = 0; col < shape[row].length; col++)
+      if (shape[row][col]) px(x + col, y + row, INK);
+}
+function drawHeartsRow(x, y, n) {
+  for (let i = 0; i < 4; i++) drawHeart(x + i * 9, y, i < n);
+}
+
+const FONT = {
+  'A':[0x0E,0x11,0x11,0x1F,0x11,0x11,0x11],'B':[0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E],
+  'C':[0x0E,0x11,0x10,0x10,0x10,0x11,0x0E],'D':[0x1E,0x11,0x11,0x11,0x11,0x11,0x1E],
+  'E':[0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F],'F':[0x1F,0x10,0x10,0x1E,0x10,0x10,0x10],
+  'G':[0x0E,0x11,0x10,0x13,0x11,0x11,0x0E],'H':[0x11,0x11,0x11,0x1F,0x11,0x11,0x11],
+  'I':[0x0E,0x04,0x04,0x04,0x04,0x04,0x0E],'J':[0x01,0x01,0x01,0x01,0x11,0x11,0x0E],
+  'K':[0x11,0x12,0x14,0x18,0x14,0x12,0x11],'L':[0x10,0x10,0x10,0x10,0x10,0x10,0x1F],
+  'M':[0x11,0x1B,0x15,0x15,0x11,0x11,0x11],'N':[0x11,0x19,0x15,0x13,0x11,0x11,0x11],
+  'O':[0x0E,0x11,0x11,0x11,0x11,0x11,0x0E],'P':[0x1E,0x11,0x11,0x1E,0x10,0x10,0x10],
+  'Q':[0x0E,0x11,0x11,0x11,0x15,0x12,0x0D],'R':[0x1E,0x11,0x11,0x1E,0x14,0x12,0x11],
+  'S':[0x0E,0x11,0x10,0x0E,0x01,0x11,0x0E],'T':[0x1F,0x04,0x04,0x04,0x04,0x04,0x04],
+  'U':[0x11,0x11,0x11,0x11,0x11,0x11,0x0E],'V':[0x11,0x11,0x11,0x11,0x11,0x0A,0x04],
+  'W':[0x11,0x11,0x11,0x15,0x15,0x15,0x0A],'X':[0x11,0x11,0x0A,0x04,0x0A,0x11,0x11],
+  'Y':[0x11,0x11,0x0A,0x04,0x04,0x04,0x04],'Z':[0x1F,0x01,0x02,0x04,0x08,0x10,0x1F],
+  '0':[0x0E,0x11,0x13,0x15,0x19,0x11,0x0E],'1':[0x04,0x0C,0x04,0x04,0x04,0x04,0x0E],
+  '2':[0x0E,0x11,0x01,0x06,0x08,0x10,0x1F],'3':[0x1F,0x01,0x02,0x06,0x01,0x11,0x0E],
+  '4':[0x02,0x06,0x0A,0x12,0x1F,0x02,0x02],'5':[0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E],
+  '6':[0x06,0x08,0x10,0x1E,0x11,0x11,0x0E],'7':[0x1F,0x01,0x02,0x04,0x08,0x08,0x08],
+  '8':[0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E],'9':[0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C],
+  ' ':[0,0,0,0,0,0,0],':':[0,0,0x04,0,0,0x04,0],'.':[0,0,0,0,0,0x04,0x04],
+  '-':[0,0,0,0x1F,0,0,0],'!':[0x04,0x04,0x04,0x04,0x04,0,0x04]
+};
+function drawText(str, x, y, color) {
+  ctx.fillStyle = color || '#0f380f';
+  str = (''+str).toUpperCase();
+  let cx = x;
+  for (let i = 0; i < str.length; i++) {
+    const ch = FONT[str[i]] || FONT[' '];
+    for (let row = 0; row < 7; row++)
+      for (let col = 0; col < 5; col++)
+        if (ch[row] & (0x10 >> col)) ctx.fillRect(cx + col, y + row, 1, 1);
+    cx += 6;
+  }
+}
+
+function drawPet(cx, cy, form, f) {
+  const INK = '#0f380f';
+  const BG  = '#9bbc0f';
+  const blink = (f % 90 < 5);
+  // Never closed eyes during play mini-game
+  const eyesClosed = S.sleep && !S.game;
+
+  let bob = (Math.sin(f * 0.04) > 0.6) ? 1 : 0;
+  let shift = 0;
+  let scaleY = 1;
+
+  if (S.game) {
+    shift = S.gameDir === 0 ? -6 : 6;
+    bob = (f % 12 < 6) ? 1 : 0;
+  }
+  if (S.anim === 'eat') {
+    bob = (f % 8 < 4) ? 2 : 0;
+    scaleY = (f % 10 < 5) ? 0.9 : 1.05;
+  } else if (S.anim === 'clean') {
+    shift = Math.sin(f * 0.25) * 4;
+  } else if (S.anim === 'happy' || S.playResult === 'happy') {
+    bob = Math.abs(Math.sin(f * 0.22)) * 3;
+  } else if (eyesClosed) {
+    bob = (Math.sin(f * 0.02) > 0) ? 0 : 1;
+  }
+
+  if (!S.game && !S.anim && S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep) {
+    if (Math.abs(S.petX - S.petTargetX) < 2) {
+      if (Math.random() < 0.004) S.petTargetX = 50 + Math.random() * 140;
+    } else {
+      S.petX += Math.sign(S.petTargetX - S.petX) * 0.3;
+    }
+    cx = S.petX;
+  }
+
+  ctx.save();
+  ctx.translate(Math.round(cx + shift), Math.round(cy + bob));
+  if (scaleY !== 1) ctx.scale(1, scaleY);
+
+  // Mouth style based on play result
+  const happyMouth = S.playResult === 'happy' || S.anim === 'happy';
+  const sadMouth = S.playResult === 'sad';
+
+  if (form === 'egg') {
+    for (let y = -14; y <= 12; y++) {
+      const w = Math.floor(7 + (14 - Math.abs(y)) * 0.4);
+      for (let x = -w; x <= w; x++) {
+        if ((x*x)/(w*w) + (y*y)/196 < 1.0) px(x, y, INK);
+      }
+    }
+  }
+  else {
+    // Shared body for most stages
+    const r = form === 'baby' ? 14 : form === 'child' ? 15 : form === 'adult4' || form === 'adult6' ? 18 : 16;
+    if (form === 'adult5') {
+      for (let i = 0; i < 4; i++) fillCirc(0, -12 + i*8, 9 - i*0.4, INK);
+    } else if (form === 'dead') {
+      fillCirc(0, 3, 12, INK);
+      px(-16, 0, INK); px(-17, -1, INK); px(16, 0, INK); px(17, -1, INK);
+      for (let a = 0; a < 8; a++) {
+        const ang = a / 8 * Math.PI * 2;
+        px(Math.cos(ang)*9, -14 + Math.sin(ang)*2, INK);
+      }
+    } else {
+      fillCirc(0, form === 'adult1' ? 1 : 0, r, INK);
+    }
+
+    // Eyes
+    if (form !== 'egg' && form !== 'dead') {
+      if (eyesClosed) {
+        px(-6, -2, BG); px(-5, -2, BG); px(-4, -2, BG); px(-3, -2, BG);
+        px(3, -2, BG); px(4, -2, BG); px(5, -2, BG); px(6, -2, BG);
+      } else if (!blink) {
+        fillRect(-6, -4, 4, 4, BG);
+        fillRect(3, -4, 4, 4, BG);
+        px(-4, -2, INK); px(5, -2, INK);
+      }
+    }
+
+    // Mouth
+    if (form !== 'egg' && form !== 'dead' && !eyesClosed) {
+      if (happyMouth) {
+        px(-3, 5, BG); px(-2, 6, BG); px(-1, 7, BG); px(0, 7, BG); px(1, 7, BG); px(2, 6, BG); px(3, 5, BG);
+      } else if (sadMouth) {
+        px(-3, 7, BG); px(-2, 6, BG); px(-1, 5, BG); px(0, 5, BG); px(1, 5, BG); px(2, 6, BG); px(3, 7, BG);
+      } else {
+        px(-2, 5, BG); px(-1, 6, BG); px(0, 6, BG); px(1, 6, BG); px(2, 5, BG);
+      }
+    }
+
+    // Stage extras
+    if (form === 'baby') {
+      px(-16, 2, INK); px(-16, 3, INK); px(16, 2, INK); px(16, 3, INK);
+    } else if (form === 'child') {
+      px(-8, -16, INK); px(8, -16, INK);
+    } else if (form === 'teenGood') {
+      for (let i = -6; i <= 6; i += 3) px(i, -18, INK);
+    } else if (form === 'adult1') {
+      fillRect(-20, -8, 5, 10, INK); fillRect(15, -8, 5, 10, INK);
+    } else if (form === 'adult2') {
+      px(-18, -4, INK); px(18, -4, INK);
+    } else if (form === 'adult3') {
+      fillRect(-10, -10, 20, 7, INK);
+    } else if (form === 'adult4') {
+      fillRect(-7, 4, 14, 5, BG); px(-5, 5, INK); px(5, 5, INK);
+    } else if (form === 'secret') {
+      fillRect(-7, 5, 14, 4, INK); px(-10, -10, INK); px(10, -10, INK);
+    } else if (form === 'adult6') {
+      fillRect(-8, 5, 16, 4, INK);
+    }
+  }
+
+  if (S.anim === 'eat') {
+    px(14, -10, INK); px(15, -11, INK); px(16, -10, INK);
+  }
+  if (S.sick || S.anim === 'sick') {
+    px(18, -14, INK); px(19, -15, INK); px(20, -14, INK);
+  }
+  if (eyesClosed) {
+    const z = Math.floor((f % 48) / 16);
+    const zx = 13 + z * 2;
+    const zy = -15 - z * 3;
+    px(zx, zy, INK); px(zx+1, zy, INK); px(zx+2, zy, INK); px(zx+3, zy, INK);
+    px(zx+3, zy+1, INK);
+    px(zx+2, zy+2, INK);
+    px(zx+1, zy+3, INK);
+    px(zx, zy+4, INK); px(zx+1, zy+4, INK); px(zx+2, zy+4, INK); px(zx+3, zy+4, INK);
+  }
+
+  ctx.restore();
+
+  // Bigger poop at fixed location where pet was
+  if (S.poop && form !== 'egg' && form !== 'dead') {
+    const px0 = S.poopX || 180;
+    const py0 = S.poopY || 145;
+    // Larger classic pile
+    px(px0+1, py0-3, INK);
+    px(px0, py0-2, INK); px(px0+1, py0-2, INK); px(px0+2, py0-2, INK);
+    px(px0-1, py0-1, INK); px(px0, py0-1, INK); px(px0+1, py0-1, INK); px(px0+2, py0-1, INK); px(px0+3, py0-1, INK);
+    px(px0-1, py0, INK); px(px0, py0, INK); px(px0+1, py0, INK); px(px0+2, py0, INK); px(px0+3, py0, INK);
+    px(px0, py0+1, INK); px(px0+1, py0+1, INK); px(px0+2, py0+1, INK);
+  }
+}
+
+function drawMain() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  S.frame++;
+
+  drawText('HUNGER', 4, 4, '#0f380f');
+  drawHeartsRow(48, 3, S.hunger);
+  drawText('HAPPY', 4, 16, '#0f380f');
+  drawHeartsRow(48, 15, S.happy);
+
+  const now = new Date();
+  const clock = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  drawText(clock, 190, 4, '#0f380f');
+  drawText('AGE ' + S.age, 190, 16, '#0f380f');
+
+  // Better attention / call icon (classic style)
+  if (S.call && !S.sleep) {
+    // Small filled square with border + exclamation feel
+    fillRect(218, 28, 14, 14, '#0f380f');
+    fillRect(220, 30, 10, 10, '#9bbc0f');
+    // inner mark
+    px(224, 32, '#0f380f');
+    px(224, 33, '#0f380f');
+    px(224, 34, '#0f380f');
+    px(224, 36, '#0f380f');
+  }
+
+  drawPet(S.petX || 120, 100, S.form, S.frame);
+}
+
+function drawStatus() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  const lines = [
+    'NAME       ' + (NAMES[S.form] || S.form),
+    'AGE        ' + S.age + ' YEARS',
+    'WEIGHT     ' + S.weight + 'G',
+    'DISCIPLINE ' + S.disc + '%',
+    'CARE MISS  ' + Math.floor(S.careMiss),
+    'GENERATION ' + S.generation,
+    'DIFFICULTY ' + S.difficulty.toUpperCase(),
+    'FRIENDS    ' + S.friends.length
+  ];
+  lines.forEach((l, i) => drawText(l, 8, 10 + i * 16, '#0f380f'));
+}
+
+function drawGame() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  drawText('LOOK LEFT OR RIGHT?', 40, 8, '#0f380f');
+  drawText('ROUND ' + S.gRound + '/5  SCORE ' + S.gScore, 50, 22, '#0f380f');
+  drawPet(120, 100, S.form, S.frame);
+  drawText('A = LEFT   B = RIGHT', 40, 160, '#0f380f');
+  drawText('C = CANCEL', 80, 170, '#0f380f');
+}
+
+function render() {
+  if (S.stage === 'dead') {
+    ctx.fillStyle = '#9bbc0f';
+    ctx.fillRect(0, 0, W, H);
+    drawPet(120, 85, 'dead', S.frame);
+    drawText('RETURNED HOME', 70, 150, '#0f380f');
+  } else if (S.menu === 'status') {
+    drawStatus();
+  } else if (S.game) {
+    drawGame();
+  } else {
+    drawMain();
+  }
+  if (!S.lights && S.sleep) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function update() {
+  if (S.anim && Date.now() > S.animTimer) {
+    S.anim = null;
+    S.playResult = null;
+  }
+  if (S.stage === 'dead' || S.stage === 'egg') return;
+
+  const now = Date.now();
+  const d = DIFF[S.difficulty] || DIFF.normal;
+  const sp = 1.25;
+
+  if (now - S.lastH > (S.age < 1 ? 3.2 : 2.5) * 60000 / sp * d.hunger) {
+    if (S.hunger > 0) {
+      S.hunger--;
+      if (S.hunger === 0) S.call = true;
+    } else {
+      S.careMiss += d.care;
+      S.call = true;
+      if (Math.random() < 0.22) {
+        S.sick = true;
+        S.anim = 'sick';
+        S.animTimer = now + 2000;
+      }
+    }
+    S.lastH = now;
+    save();
+  }
+
+  if (now - S.lastY > (S.age < 1 ? 3.8 : 2.9) * 60000 / sp * d.happy) {
+    if (S.happy > 0) {
+      S.happy--;
+      if (S.happy === 0) S.call = true;
+    } else {
+      S.careMiss += d.care;
+      S.call = true;
+    }
+    S.lastY = now;
+    save();
+  }
+
+  if (now - S.lastP > 6.8 * 60000 / sp && !S.poop && !S.sleep) {
+    S.poop = true;
+    S.poopX = Math.round(S.petX || 120) + 16;
+    S.poopY = 145;
+    S.call = true;
+    S.lastP = now;
+    save();
+  }
+
+  if (!S.sleep && now - S.lastAge > 12 * 3600000 / sp) {
+    S.age++;
+    S.lastAge = now;
+    checkEvo();
+    beep(520, 0.1); beep(700, 0.12);
+    save();
+  }
+
+  if ((S.hunger + S.happy === 0 && S.careMiss > 7 * d.care) ||
+      (S.sick && S.careMiss > 10 * d.care) ||
+      (S.age > 16 && Math.random() < 0.00005)) {
+    die();
+  }
+
+  if (now - S.lastSave > 30000) save();
+}
+
+function checkEvo() {
+  const t = Date.now() - (S.born || Date.now());
+  if (S.stage === 'baby' && t > 1.7 * 60000) evo('child', 'child');
+  else if (S.stage === 'child' && S.age >= 1) evo('teen', S.careMiss < 3 ? 'teenGood' : 'teenBad');
+  else if (S.stage === 'teen' && S.age >= 3) evoAdult();
+  else if (S.stage === 'adult' && S.form === 'adult3' && S.disc >= 70 && S.age >= 7) {
+    evo('adult', 'secret');
+    toast('Secret form unlocked: Elder!');
+  }
+}
+function evo(st, fm) {
+  S.stage = st;
+  S.form = fm;
+  S.careMiss = Math.floor(S.careMiss * 0.4);
+  beep(640, 0.12); beep(860, 0.18);
+  toast('Evolved → ' + (NAMES[fm] || fm));
+  save();
+}
+function evoAdult() {
+  const c = S.careMiss - S.inheritedBonus;
+  const d = S.discMiss;
+  let f = 'adult6';
+  if (c <= 2 && d === 0) f = 'adult1';
+  else if (c <= 2 && d === 1) f = 'adult2';
+  else if (c <= 2) f = 'adult3';
+  else if (c <= 5 && d <= 1) f = 'adult4';
+  else if (c <= 7) f = 'adult5';
+  evo('adult', f);
+}
+function die() {
+  S.stage = 'dead';
+  S.form = 'dead';
+  S.call = false;
+  S.deaths++;
+  beep(150, 0.4, 'sawtooth');
+  show('Returned home', 'Age ' + S.age + '  ·  Gen ' + S.generation + '\\n\\nPress B to restart');
+  save();
+}
+
+function feed(type) {
+  if (S.stage === 'egg' || S.stage === 'dead' || S.sleep) return;
+  if (S.sick) { toast('Too sick to eat'); return; }
+  if (type === 'meal') {
+    if (S.hunger >= 4) { toast('Not hungry'); return; }
+    S.hunger = Math.min(4, S.hunger + 1);
+    S.weight += 1;
+    S.anim = 'eat';
+    S.animTimer = Date.now() + 1400;
+    beep(350, 0.06);
+    toast('Meal +1 Hunger');
+  } else {
+    S.happy = Math.min(4, S.happy + 1);
+    S.weight += 2;
+    S.anim = 'eat';
+    S.animTimer = Date.now() + 1400;
+    beep(450, 0.06);
+    toast('Snack +1 Happy');
+    if (S.weight > 36 && Math.random() < 0.3) {
+      S.sick = true;
+      S.anim = 'sick';
+      S.animTimer = Date.now() + 2000;
+      toast('Stomachache!');
+    }
+  }
+  S.call = false;
+  save();
+}
+function play() {
+  if (S.stage === 'egg' || S.stage === 'dead' || S.sleep || S.sick) {
+    toast(S.sick ? 'Too sick' : 'Cannot play now');
+    return;
+  }
+  S.game = true;
+  S.gRound = 1;
+  S.gScore = 0;
+  S.gameDir = Math.random() < 0.5 ? 0 : 1;
+  S.menu = null;
+  S.anim = null;
+  S.playResult = null;
+  beep(550, 0.07);
+  toast('A=Left  B=Right  C=Cancel');
+}
+function resolve(choice) {
+  // choice: 0 = left (A), 1 = right (B)
+  if (choice === S.gameDir) {
+    S.gScore++;
+    S.playResult = 'happy';
+    beep(740, 0.06);
+  } else {
+    S.playResult = 'sad';
+    beep(180, 0.1);
+  }
+  S.gRound++;
+  if (S.gRound > 5) {
+    S.game = false;
+    if (S.gScore >= 3) {
+      S.happy = Math.min(4, S.happy + 1);
+      S.weight = Math.max(5, S.weight - 1);
+      S.anim = 'happy';
+      S.playResult = 'happy';
+      S.animTimer = Date.now() + 1600;
+      toast('Won! ' + S.gScore + '/5  +Happy');
+      beep(680, 0.07); beep(900, 0.12);
+    } else {
+      S.playResult = 'sad';
+      S.animTimer = Date.now() + 1200;
+      toast('Lost ' + S.gScore + '/5');
+    }
+    S.call = false;
+    save();
+  } else {
+    S.gameDir = Math.random() < 0.5 ? 0 : 1;
+    // brief face then clear
+    setTimeout(() => { if (S.game) S.playResult = null; }, 400);
+  }
+}
+function clean() {
+  if (S.poop) {
+    S.poop = false;
+    S.call = false;
+    S.anim = 'clean';
+    S.animTimer = Date.now() + 1200;
+    beep(260, 0.06);
+    toast('Cleaned!');
+    if (Math.random() < 0.15) S.disc = Math.min(100, S.disc + 5);
+    save();
+  } else toast('Nothing to clean');
+}
+function med() {
+  if (S.sick) {
+    S.sick = false;
+    beep(390, 0.09);
+    toast('Feeling better');
+    save();
+  } else toast('Not sick');
+}
+function light() {
+  S.lights = !S.lights;
+  if (!S.lights) {
+    S.sleep = true;
+    S.anim = 'sleep';
+    S.animTimer = Date.now() + 999999;
+    toast('Lights out... zzz');
+  } else {
+    S.sleep = false;
+    S.anim = null;
+    toast('Lights on');
+  }
+  beep(280, 0.05);
+  save();
+}
+function disc() {
+  if (S.call && S.hunger > 0 && S.happy > 0 && !S.poop && !S.sick) {
+    S.disc = Math.min(100, S.disc + 12);
+    S.call = false;
+    beep(210, 0.1);
+    toast('Disciplined +');
+  } else if (S.call) {
+    S.discMiss++;
+    toast('Bad timing');
+  } else {
+    toast('No need right now');
+  }
+  save();
+}
+
+function generateCode() {
+  if (!S.myCode) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    S.myCode = code;
+    save();
+  }
+  return S.myCode;
+}
+
+function showConnectMenu() {
+  const code = generateCode();
+  const extra = document.getElementById('overlay-extra');
+  let friendHtml = '';
+  if (S.friends.length === 0) {
+    friendHtml = '<p style="font-size:12px;opacity:0.8">No friends yet</p>';
+  } else {
+    friendHtml = '<div class="friend-list">';
+    S.friends.forEach((f, i) => {
+      const sel = i === S.selectedFriend ? 'selected' : '';
+      friendHtml += '<div class="friend-item ' + sel + '" onclick="window.selectFriend(' + i + ')">' + f.name + ' (' + f.code + ') · Age ' + f.age + '</div>';
+    });
+    friendHtml += '</div>';
+  }
+  extra.innerHTML =
+    '<p>Your code: <strong style="letter-spacing:2px">' + code + '</strong></p>' +
+    '<p style="font-size:12px">Share with a friend</p>' +
+    '<input id="friend-code" placeholder="Enter friend code" maxlength="8">' +
+    '<div class="btn-row"><button onclick="window.addFriend()">Add Friend</button></div>' +
+    '<p style="margin-top:10px">Select friend to breed:</p>' +
+    friendHtml +
+    '<div class="btn-row"><button onclick="window.tryBreed()">Breed with selected</button></div>' +
+    '<p style="margin-top:8px;font-size:12px">Friends: ' + S.friends.length + ' · Gen ' + S.generation + '</p>';
+  show('Connect', 'Friendship & Breeding');
+  document.getElementById('obtn').textContent = 'Close';
+}
+
+function selectFriend(i) {
+  S.selectedFriend = i;
+  showConnectMenu();
+}
+window.selectFriend = selectFriend;
+
+function addFriend() {
+  const input = document.getElementById('friend-code');
+  if (!input) return;
+  const code = (input.value || '').trim().toUpperCase();
+  if (!code || code.length < 4) { toast('Enter a valid code'); return; }
+  if (code === S.myCode) { toast('That is your own code'); return; }
+  if (S.friends.find(f => f.code === code)) { toast('Already friends'); return; }
+
+  const fakeForms = ['adult1','adult2','adult4','adult3','adult5'];
+  S.friends.push({
+    code,
+    name: 'Friend-' + code.slice(0, 3),
+    form: fakeForms[Math.floor(Math.random() * fakeForms.length)],
+    age: 4 + Math.floor(Math.random() * 6),
+    quality: Math.random()
+  });
+  S.happy = Math.min(4, S.happy + 1);
+  S.anim = 'happy';
+  S.animTimer = Date.now() + 1500;
+  toast('New friend! +Happy');
+  beep(600, 0.1); beep(800, 0.12);
+  save();
+  showConnectMenu();
+}
+
+function tryBreed() {
+  if (S.stage !== 'adult') { toast('Need to be Adult first'); return; }
+  if (S.friends.length === 0) { toast('Add a friend first'); return; }
+  if (S.married) { toast('Already has offspring'); return; }
+
+  const partner = S.friends[S.selectedFriend] || S.friends[0];
+  S.married = true;
+  S.happy = 4;
+  const parentQuality = (S.careMiss < 3 ? 0.7 : 0.3) + (partner.quality || 0.4);
+  S.inheritedBonus = parentQuality > 0.9 ? 2 : parentQuality > 0.6 ? 1 : 0;
+
+  toast('Married ' + partner.name + '!');
+  beep(500, 0.1); beep(700, 0.1); beep(900, 0.15);
+
+  setTimeout(() => {
+    S.stage = 'baby';
+    S.form = 'baby';
+    S.age = 0;
+    S.weight = 5;
+    S.hunger = 2 + (S.inheritedBonus > 0 ? 1 : 0);
+    S.happy = 2 + (S.inheritedBonus > 1 ? 1 : 0);
+    S.disc = Math.floor(S.disc / 2);
+    S.careMiss = 0;
+    S.discMiss = 0;
+    S.sick = false;
+    S.poop = false;
+    S.call = false;
+    S.born = Date.now();
+    S.married = false;
+    S.generation++;
+    S.lastH = Date.now();
+    S.lastY = Date.now();
+    S.lastP = Date.now();
+    S.lastAge = Date.now();
+    toast('Gen ' + S.generation + ' hatched!' + (S.inheritedBonus ? ' (good genes)' : ''));
+    beep(620, 0.1); beep(820, 0.15);
+    save();
+    hide();
+  }, 2500);
+}
+
+window.addFriend = addFriend;
+window.tryBreed = tryBreed;
+
+// ===== REAL TAMAGOTCHI A/B/C CONTROL =====
+// A = move selection left / Left in game
+// B = confirm selection / Right in game
+// C = cancel
+
+function updateIconHighlight() {
+  document.querySelectorAll('.icon').forEach((el, i) => el.classList.toggle('on', i === S.sel));
+}
+
+function selectIcon(dir) {
+  if (S.game || S.stage === 'egg' || S.stage === 'dead') return;
+  S.sel = (S.sel + dir + ICONS.length) % ICONS.length;
+  updateIconHighlight();
+  const name = ICON_LABELS[ICONS[S.sel]] || ICONS[S.sel];
+  toast(name); // show what is selected
+  beep(150, 0.02, 'square', 0.03);
+}
+
+function confirm() {
+  if (S.game) {
+    resolve(1); // B = Right during play
+    return;
+  }
+  if (S.menu === 'feed') {
+    feed('meal');
+    S.menu = null;
+    return;
+  }
+  if (S.stage === 'dead') {
+    restart();
+    return;
+  }
+  if (S.stage === 'egg') return;
+
+  const a = ICONS[S.sel];
+  if (a === 'status') {
+    S.menu = S.menu === 'status' ? null : 'status';
+    toast(S.menu === 'status' ? 'Status' : 'Closed');
+  } else if (a === 'feed') {
+    S.menu = 'feed';
+    toast('A: Meal   B: Snack');
+  } else if (a === 'play') {
+    play();
+  } else if (a === 'clean') {
+    clean();
+  } else if (a === 'med') {
+    med();
+  } else if (a === 'light') {
+    light();
+  } else if (a === 'connect') {
+    showConnectMenu();
+  } else if (a === 'disc') {
+    disc();
+  }
+  beep(250, 0.04);
+}
+
+function cancel() {
+  if (S.game) {
+    // C cancels the mini-game
+    S.game = false;
+    S.playResult = null;
+    toast('Play cancelled');
+    beep(120, 0.03);
+    return;
+  }
+  if (S.menu === 'feed') {
+    S.menu = null;
+    toast('Cancelled');
+    return;
+  }
+  if (S.menu === 'status') {
+    S.menu = null;
+    toast('Closed');
+    return;
+  }
+  hide();
+  beep(120, 0.03);
+}
+
+// Button handlers — ONLY control method
+document.getElementById('btnA').onclick = () => {
+  press('btnA');
+  if (S.game) {
+    resolve(0); // A = Left
+  } else if (S.menu === 'feed') {
+    feed('meal');
+    S.menu = null;
+  } else {
+    selectIcon(-1); // A = previous icon
+  }
+};
+
+document.getElementById('btnB').onclick = () => {
+  press('btnB');
+  if (S.game) {
+    resolve(1); // B = Right
+  } else if (S.menu === 'feed') {
+    feed('snack');
+    S.menu = null;
+  } else {
+    confirm(); // B = confirm
+  }
+};
+
+document.getElementById('btnC').onclick = () => {
+  press('btnC');
+  cancel(); // C = cancel always
+};
+
+function press(id) {
+  const e = document.getElementById(id);
+  e.classList.add('pressed');
+  setTimeout(() => e.classList.remove('pressed'), 70);
+}
+
+// Keyboard support matching A/B/C
+document.addEventListener('keydown', e => {
+  if (['a', 'ArrowLeft'].includes(e.key)) document.getElementById('btnA').click();
+  if (['s', 'ArrowDown', 'Enter', ' '].includes(e.key)) document.getElementById('btnB').click();
+  if (['d', 'ArrowRight', 'Escape'].includes(e.key)) document.getElementById('btnC').click();
+});
+
+document.getElementById('soundBtn').onclick = () => {
+  S.sound = !S.sound;
+  document.getElementById('soundBtn').textContent = S.sound ? '🔊' : '🔇';
+  toast(S.sound ? 'Sound On' : 'Sound Off');
+  save();
+};
+
+function updateUI() {
+  document.getElementById('h-hearts').textContent = '♥'.repeat(S.hunger) + '♡'.repeat(4 - S.hunger);
+  document.getElementById('y-hearts').textContent = '♥'.repeat(S.happy) + '♡'.repeat(4 - S.happy);
+  document.getElementById('wt').textContent = S.weight + 'g';
+  document.getElementById('disc').textContent = S.disc + '%';
+  document.getElementById('friends').textContent = S.friends.length;
+  document.getElementById('pet-name').textContent = NAMES[S.form] || 'PocketPal';
+  document.getElementById('gen-line').textContent = 'Gen ' + S.generation;
+  document.getElementById('soundBtn').textContent = S.sound ? '🔊' : '🔇';
+
+  const labels = {
+    egg: 'Egg • Hatching...',
+    baby: 'Baby • Pip',
+    child: 'Child • Nib',
+    teen: 'Teen • ' + (NAMES[S.form] || ''),
+    adult: 'Adult • ' + (NAMES[S.form] || ''),
+    dead: 'Returned home'
+  };
+  document.getElementById('stage-line').textContent = labels[S.stage] || S.stage;
+}
+
+const SAVE_KEY = 'pocketpal_save';
+function save() {
+  S.lastSave = Date.now();
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
+}
+function load() {
+  try {
+    let raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) {
+      const oldKeys = ['pocketpal_v24','pocketpal_v23','pocketpal_v21','pocketpal_v20','tama_v19'];
+      for (const k of oldKeys) {
+        raw = localStorage.getItem(k);
+        if (raw) { localStorage.setItem(SAVE_KEY, raw); break; }
+      }
+    }
+    if (!raw) return false;
+    Object.assign(S, JSON.parse(raw));
+    if (S.poopX === undefined) S.poopX = 180;
+    if (S.poopY === undefined) S.poopY = 145;
+    const mins = (Date.now() - (S.lastSave || Date.now())) / 60000;
+    if (mins > 2 && S.stage !== 'egg' && S.stage !== 'dead') {
+      const d = DIFF[S.difficulty] || DIFF.normal;
+      S.hunger = Math.max(0, S.hunger - Math.floor(mins / (3 * d.hunger)));
+      S.happy  = Math.max(0, S.happy - Math.floor(mins / (3.7 * d.happy)));
+      toast('Welcome back · ' + Math.floor(mins) + ' min passed');
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+window.addEventListener('beforeunload', save);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') save();
+});
+
+function restart() {
+  const deaths = S.deaths;
+  const friends = S.friends;
+  const generation = S.generation;
+  const difficulty = S.difficulty;
+  const sound = S.sound;
+  Object.assign(S, {
+    stage: 'egg', form: 'egg', age: 0, weight: 5,
+    hunger: 4, happy: 4, disc: 0, careMiss: 0, discMiss: 0,
+    sick: false, sleep: false, lights: true, poop: false,
+    poopX: 180, poopY: 145, call: false,
+    born: Date.now(), lastH: Date.now(), lastY: Date.now(),
+    lastP: Date.now(), lastAge: Date.now(),
+    game: false, menu: null, deaths, frame: 0, gameDir: 0,
+    friends, married: false, anim: null, selectedFriend: 0,
+    generation, difficulty, sound, inheritedBonus: 0,
+    petX: 120, petTargetX: 120, playResult: null
+  });
+  hide();
+  setTimeout(() => {
+    if (S.stage === 'egg') {
+      S.stage = 'baby';
+      S.form = 'baby';
+      S.born = Date.now();
+      S.hunger = 2;
+      S.happy = 2;
+      toast('It hatched! Pip is here');
+      beep(600, 0.1); beep(800, 0.15);
+      save();
+    }
+  }, 5500);
+  save();
+}
+function show(title, msg) {
+  document.getElementById('otitle').textContent = title;
+  document.getElementById('omsg').textContent = msg;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function hide() {
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('overlay-extra').innerHTML = '';
+  document.getElementById('obtn').textContent = 'Close';
+}
+document.getElementById('obtn').onclick = () => {
+  if (S.stage === 'dead' || S.stage === 'egg') restart();
+  else hide();
+};
+
+function loop() {
+  update();
+  render();
+  updateUI();
+  requestAnimationFrame(loop);
+}
+
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    self.addEventListener('install', e => self.skipWaiting());
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.open('pocketpal-v26').then(cache => {
+        return cache.match(e.request).then(r => r || fetch(e.request).then(resp => {
+          if (e.request.url.startsWith(self.location.origin)) cache.put(e.request, resp.clone());
+          return resp;
+        }).catch(() => caches.match('./')));
+      }));
+    });
+  `;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+}
+
+function init() {
+  if (!load() || S.stage === 'egg') {
+    show('PocketPal', 'A = Select   B = Confirm   C = Cancel\\n\\nTap Start');
+    document.getElementById('obtn').textContent = 'Start New Life';
+  } else {
+    hide();
+    toast('Save restored · Gen ' + S.generation);
+  }
+  updateIconHighlight();
+  requestAnimationFrame(loop);
+}
+init();
+</script>
+</body>
+</html>
