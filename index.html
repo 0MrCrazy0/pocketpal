@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.18 -->
+<!-- Public Release - POCKETPAL v2.19 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -333,7 +333,7 @@
 
 <script>
 // ============================================================
-//  POCKETPAL v2.18
+//  POCKETPAL v2.19
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -476,7 +476,7 @@ function melEat()    { melody([[300,0.05],[260,0.05],[300,0.05]]); }
 
 // Small looping LCD-era chiptune. It starts only after a real user gesture,
 // which keeps mobile browser autoplay rules happy.
-const MUSIC = [523, 587, 659, 587, 523, 440, 494, 523];
+const MUSIC = []; // no background loop — event melodies only
 function musicNote(f) {
   if (!S.sound || S.paused || S.sleep || document.visibilityState === 'hidden') return;
   try {
@@ -490,17 +490,8 @@ function musicNote(f) {
   } catch(e) {}
 }
 function startMusic() {
-  if (S.musicPlaying) return;
-  S.musicPlaying = true;
-  const tick = () => {
-    if (!S.musicPlaying) return;
-    if (S.sound && !S.paused && !S.sleep && document.visibilityState !== 'hidden') {
-      musicNote(MUSIC[S.musicStep % MUSIC.length]);
-      S.musicStep = (S.musicStep + 1) % MUSIC.length;
-    }
-    S.musicTimer = setTimeout(tick, 420);
-  };
-  tick();
+  // Background music disabled by design — only event melodies (evolve/wake/win/etc.)
+  stopMusic();
 }
 function stopMusic() {
   S.musicPlaying = false;
@@ -1145,23 +1136,29 @@ function drawGame() {
   ctx.fillStyle = '#9bbc0f';
   ctx.fillRect(0, 0, W, H);
   if (S.gameType === 'memory') {
-    drawText('MEMORY GAME', 70, 6, '#0f380f');
-    drawText('ROUND ' + S.gRound + '  SCORE ' + S.gScore, 55, 18, '#0f380f');
+    drawText('MEMORY', 90, 6, '#0f380f');
+    drawText('R' + S.gRound + ' SCORE ' + S.gScore, 70, 18, '#0f380f');
     if (S.memPhase === 'show') {
       const dir = S.memSeq[S.memIdx];
-      drawText(dir === 0 ? '<< LEFT' : 'RIGHT >>', 70, 40, '#0f380f');
-      drawText('WATCH...', 90, 54, '#0f380f');
+      drawText(dir === 0 ? '<<  LEFT' : 'RIGHT  >>', 65, 38, '#0f380f');
+      drawText('WATCH ' + (S.memIdx + 1) + '/' + S.memSeq.length, 70, 52, '#0f380f');
+      // Pet leans the shown direction
+      S.gameDir = dir;
     } else {
-      drawText('YOUR TURN', 80, 40, '#0f380f');
-      drawText('A=LEFT  B=RIGHT', 55, 54, '#0f380f');
+      drawText('YOUR TURN', 80, 38, '#0f380f');
+      drawText('A=LEFT  B=RIGHT', 55, 52, '#0f380f');
+      drawText('STEP ' + (S.memIdx + 1) + '/' + S.memSeq.length, 70, 64, '#0f380f');
     }
-    drawPet(120, 110, S.form, S.frame);
+    drawPet(120, 112, S.form, S.frame);
     drawText('C = CANCEL', 80, 168, '#0f380f');
   } else {
-    drawText('LOOK LEFT OR RIGHT?', 40, 8, '#0f380f');
+    // LOOK game — big clear prompt of where pet is facing
+    drawText('WHERE IS PET LOOKING?', 30, 8, '#0f380f');
     drawText('ROUND ' + S.gRound + '/5  SCORE ' + S.gScore, 50, 22, '#0f380f');
-    drawPet(120, 100, S.form, S.frame);
-    drawText('A = LEFT   B = RIGHT', 40, 160, '#0f380f');
+    // Direction banner
+    drawText(S.gameDir === 0 ? '<<' : '>>', S.gameDir === 0 ? 40 : 180, 48, '#0f380f');
+    drawPet(120, 105, S.form, S.frame);
+    drawText('A = LEFT   B = RIGHT', 40, 158, '#0f380f');
     drawText('C = CANCEL', 80, 170, '#0f380f');
   }
 }
@@ -1204,15 +1201,19 @@ function update() {
   // The wall clock always follows the phone, including egg/dead/paused states.
   syncDeviceClock(now);
 
-  // Memory game: advance "show sequence" phase
+  // Memory game: show each step, then switch to input
   if (S.game && S.gameType === 'memory' && S.memPhase === 'show' && now > (S.memTimer || 0)) {
-    S.memIdx++;
-    if (S.memIdx >= S.memSeq.length) {
+    // Finished displaying current step — advance
+    if (S.memIdx >= S.memSeq.length - 1) {
+      // Whole sequence shown
       S.memIdx = 0;
       S.memPhase = 'input';
-      toast('Your turn!');
+      toast('Your turn! A=Left B=Right');
+      beep(600, 0.05);
     } else {
-      S.memTimer = now + 700;
+      S.memIdx++;
+      S.memTimer = now + 750;
+      beep(400, 0.03);
     }
   }
 
@@ -1278,7 +1279,9 @@ function update() {
     S.call = false;
     // Age once per calendar morning after a night of sleep
     const dayKey = new Date(now).toDateString();
-    if (S.lastAgeDay !== dayKey) {
+    // Also age if last age-up was more than 10 hours ago (covers edge cases)
+    const longEnough = !S.lastAge || (now - S.lastAge > 10 * 3600000);
+    if (S.lastAgeDay !== dayKey && longEnough) {
       S.age++;
       S.lastAgeDay = dayKey;
       S.lastAge = now;
@@ -1286,6 +1289,11 @@ function update() {
       S.animTimer = now + 1200;
       checkEvo();
       toast('Good morning! Age ' + S.age);
+      melWake();
+    } else if (S.lastAgeDay !== dayKey) {
+      // Same morning re-wake: still mark the day, soft toast
+      S.lastAgeDay = dayKey;
+      toast('Good morning!');
       melWake();
     } else {
       toast('Good morning!');
@@ -1540,7 +1548,7 @@ function startLookGame() {
   S.anim = null;
   S.playResult = null;
   beep(550, 0.07);
-  toast('Look game! A=Left B=Right');
+  toast('Which way is the pet looking?');
 }
 function startMemoryGame() {
   S.game = true;
@@ -1548,27 +1556,29 @@ function startMemoryGame() {
   S.gRound = 1;
   S.gScore = 0;
   S.memSeq = [Math.random() < 0.5 ? 0 : 1];
-  S.memIdx = 0;
+  S.memIdx = 0;           // index currently shown / expected
   S.memPhase = 'show';
-  S.memTimer = Date.now() + 800;
+  S.memTimer = Date.now() + 900;  // show first direction
   S.menu = null;
   S.anim = null;
   S.playResult = null;
   beep(550, 0.07);
-  toast('Memory! Watch then repeat');
+  toast('Watch the sequence...');
 }
 function play() {
   if (S.stage === 'egg' || S.stage === 'dead' || S.sleep || S.sick) {
     toast(S.sick ? 'Too sick' : 'Cannot play now');
     return;
   }
-  // Choose mini-game
   S.menu = 'playpick';
   toast('A: Look game   B: Memory');
 }
 function endPlay(won) {
   S.game = false;
+  S.gameType = null;
   S.memPhase = 'show';
+  S.memSeq = [];
+  S.memIdx = 0;
   if (won) {
     S.happy = Math.min(4, S.happy + 1);
     S.weight = Math.max(5, S.weight - 1);
@@ -1588,48 +1598,61 @@ function endPlay(won) {
   save();
 }
 function resolve(choice) {
+  if (!S.game) return;
+  // ---- MEMORY GAME ----
   if (S.gameType === 'memory') {
-    if (S.memPhase !== 'input') return;
+    if (S.memPhase !== 'input') {
+      toast('Wait — watch first');
+      return;
+    }
     const need = S.memSeq[S.memIdx];
     if (choice === need) {
       S.memIdx++;
       S.playResult = 'happy';
       beep(740, 0.05);
       if (S.memIdx >= S.memSeq.length) {
-        // Round cleared — grow sequence
         S.gScore++;
         S.gRound++;
-        if (S.gRound > 5) {
-          endPlay(S.gScore >= 3);
+        if (S.gRound > 4) {
+          endPlay(true);
           return;
         }
+        // Add one more step and replay full sequence
         S.memSeq.push(Math.random() < 0.5 ? 0 : 1);
         S.memIdx = 0;
         S.memPhase = 'show';
         S.memTimer = Date.now() + 700;
+        S.playResult = null;
         toast('Good! Watch again...');
       }
     } else {
       S.playResult = 'sad';
-      endPlay(S.gScore >= 3);
+      beep(180, 0.1);
+      endPlay(S.gScore >= 2);
     }
     return;
   }
-  // Look left/right game
+  // ---- LOOK LEFT/RIGHT GAME ----
   if (choice === S.gameDir) {
     S.gScore++;
     S.playResult = 'happy';
     beep(740, 0.06);
+    toast('Correct!');
   } else {
     S.playResult = 'sad';
     beep(180, 0.1);
+    toast('Wrong...');
   }
   S.gRound++;
   if (S.gRound > 5) {
     endPlay(S.gScore >= 3);
   } else {
-    S.gameDir = Math.random() < 0.5 ? 0 : 1;
-    setTimeout(() => { if (S.game) S.playResult = null; }, 400);
+    // Brief pause then new direction
+    setTimeout(() => {
+      if (!S.game || S.gameType !== 'look') return;
+      S.gameDir = Math.random() < 0.5 ? 0 : 1;
+      S.playResult = null;
+    }, 500);
   }
 }
 function clean() {
@@ -2228,9 +2251,16 @@ function applyOfflineCatchup(now) {
       cursor.setDate(cursor.getDate() + 1);
     }
   } catch(e) { nights = 0; }
-  // Cap: never more than elapsed days
-  const maxDays = Math.max(0, Math.floor(elapsed / (24 * 3600000)));
-  nights = Math.min(nights, maxDays);
+  // Cap: allow at least midnight-based nights (floor of hours/24 was wrongly zeroing overnight)
+  const maxDays = Math.max(0, Math.ceil(elapsed / (24 * 3600000)));
+  if (maxDays > 0) nights = Math.min(nights, maxDays);
+  // If we crossed a midnight and were away > 3 hours, keep at least 1 night
+  if (nights === 0 && elapsed > 3 * 3600000) {
+    const a = new Date(last), b = new Date(now);
+    if (a.getDate() !== b.getDate() || a.getMonth() !== b.getMonth() || a.getFullYear() !== b.getFullYear()) {
+      nights = 1;
+    }
+  }
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
   const ageGain = Math.max(nights, awakeAgeGain);
@@ -2297,24 +2327,29 @@ function load() {
     }
     // v2.17: authentic 8pm-8am sleep + morning age-up
     S.difficulty = 'realtime';
-    // One-time growth catch-up for players who slept under the old
-    // "no age on morning wake" bug. Uses real days since birth.
-    if (!S._ageCatchupDone && S.stage !== 'egg' && S.stage !== 'dead' && S.born) {
-      const daysSinceBorn = Math.floor((Date.now() - Number(S.born)) / (24 * 3600000));
-      if (daysSinceBorn > S.age) {
-        const missed = Math.min(daysSinceBorn - S.age, 10);
-        if (missed > 0) {
-          S.age += missed;
-          S.lastAge = Date.now();
-          S.lastAgeDay = new Date().toDateString();
-          for (let i = 0; i < 6; i++) {
-            const before = S.stage;
-            checkEvo();
-            if (S.stage === before) break;
-          }
-          // Toast after init finishes drawing
-          setTimeout(() => toast('Growth catch-up! Age ' + S.age + (missed > 1 ? ' (+' + missed + ')' : '')), 600);
+    // Growth catch-up: count calendar midnights since birth vs current age.
+    // Re-runs if age is still behind (so a failed prior catch-up can recover).
+    if (S.stage !== 'egg' && S.stage !== 'dead' && S.born) {
+      const bornDate = new Date(Number(S.born));
+      const nowDate = new Date();
+      bornDate.setHours(0,0,0,0);
+      nowDate.setHours(0,0,0,0);
+      const calendarDays = Math.max(0, Math.round((nowDate - bornDate) / (24 * 3600000)));
+      // At least 1 age if the pet has lived past one 8am wake after birth day
+      let expected = calendarDays;
+      // If born yesterday and it's already past 8am today, expect age >= 1
+      if (expected === 0 && (Date.now() - Number(S.born)) > 12 * 3600000) expected = 1;
+      if (expected > S.age) {
+        const missed = Math.min(expected - S.age, 10);
+        S.age += missed;
+        S.lastAge = Date.now();
+        S.lastAgeDay = new Date().toDateString();
+        for (let i = 0; i < 6; i++) {
+          const before = S.stage;
+          checkEvo();
+          if (S.stage === before) break;
         }
+        setTimeout(() => toast('Growth catch-up! Age ' + S.age + (missed > 1 ? ' (+' + missed + ')' : '')), 600);
       }
       S._ageCatchupDone = true;
     }
@@ -2440,14 +2475,14 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./service-worker.js?v=2.18', { updateViaCache: 'none' })
+  navigator.serviceWorker.register('./service-worker.js?v=2.19', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.18', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.19', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
