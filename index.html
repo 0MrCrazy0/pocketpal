@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.34.1 -->
+<!-- Public Release - POCKETPAL v2.35.1 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -321,7 +321,7 @@
 
 <script>
 // ============================================================
-//  POCKETPAL v2.34.1
+//  POCKETPAL v2.35.1
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -338,6 +338,7 @@ const S = {
   poop: false, poopX: 180, poopY: 145,
   call: false,
   lastFalseCall: 0,
+  loadGraceUntil: 0,
   sickSince: 0,
   _wakePoopAt: 0,
   born: null,
@@ -1643,9 +1644,15 @@ function update() {
     }
   }
 
-  if ((S.hunger + S.happy === 0 && S.careMiss > 7 * d.care) ||
-      (S.sick && S.careMiss > 10 * d.care) ||
-      (S.age > 18 && Math.random() < 0.00004)) {
+  // Death only after sustained neglect — never on the same moment you open the app
+  // (loadGraceUntil gives a short window to feed/clean after offline catch-up)
+  if (now < (S.loadGraceUntil || 0)) {
+    // grace: no death
+  } else if ((S.hunger + S.happy === 0 && S.careMiss > 14 * d.care) ||
+      (S.sick && S.hunger === 0 && S.careMiss > 16 * d.care)) {
+    die();
+  } else if (S.age > 30 && Math.random() < 0.00001) {
+    // Very rare old-age return (much gentler than before)
     die();
   }
 
@@ -2906,13 +2913,14 @@ function applyOfflineCatchup(now) {
   const hLoss = Math.floor(activeMin / hungerStep);
   const yLoss = Math.floor(activeMin / happyStep);
   if (hLoss > 0) {
-    S.hunger = Math.max(0, S.hunger - hLoss);
-    S.careMiss += Math.max(0, hLoss - 1) * d.care;
+    S.hunger = Math.max(0, S.hunger - Math.min(hLoss, 4)); // cap offline drain
+    // Care miss grows slowly offline — player gets a chance to recover on return
+    S.careMiss += Math.min(3, Math.max(0, hLoss - 1)) * d.care;
     if (S.hunger === 0) { S.call = true; careNotify('hunger', 'Your PocketPal is hungry.'); }
   }
   if (yLoss > 0) {
-    S.happy = Math.max(0, S.happy - yLoss);
-    S.careMiss += Math.max(0, yLoss - 1) * d.care;
+    S.happy = Math.max(0, S.happy - Math.min(yLoss, 4));
+    S.careMiss += Math.min(3, Math.max(0, yLoss - 1)) * d.care;
     if (S.happy === 0) { S.call = true; careNotify('happy', 'Your PocketPal wants attention.'); }
   }
   if (!S.poop && activeMin >= poopStep) {
@@ -2969,6 +2977,8 @@ function applyOfflineCatchup(now) {
   S.lastVirtTick = now;
   if (activeMin > 0) S.anim = null;
   if (elapsed >= 2 * 60000) toast('Welcome back · ' + Math.floor(elapsed / 60000) + ' min passed');
+  // Grace: do not die immediately after offline catch-up / app update
+  S.loadGraceUntil = now + 3 * 60000; // 3 minutes to care for pet
   S.lastSave = now;
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
   return elapsed;
@@ -3060,6 +3070,8 @@ function load() {
       S.anim = null;
     }
     if (!isNightTime()) S.lightsMissPending = false;
+    // Never kill the moment the app/update loads
+    S.loadGraceUntil = Date.now() + 3 * 60000;
 
     // If was paused, stay paused (true freeze). Otherwise simulate care while
     // the PWA was closed/backgrounded, including the night sleep window.
@@ -3176,14 +3188,14 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./service-worker.js?v=2.34', { updateViaCache: 'none' })
+  navigator.serviceWorker.register('./service-worker.js?v=2.35', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.34.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.35.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
