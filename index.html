@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.35.1 -->
+<!-- Public Release - POCKETPAL v2.36.1 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -321,7 +321,7 @@
 
 <script>
 // ============================================================
-//  POCKETPAL v2.35.1
+//  POCKETPAL v2.36.1
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -728,20 +728,26 @@ function drawPet(cx, cy, form, f) {
   let scaleY = 1;
   let scaleX = 1;
   let rotHint = 0;
-  // Stage personality in idle
+  // Stage personality in idle — more "alive" without squashy nonsense
   if (!S.game && !S.anim && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
+    // Soft continuous breathe (all stages)
+    bob = (Math.sin(f * 0.08) > 0) ? 1 : 0;
     if (S.stage === 'baby' || S.stage === 'child') {
-      // Bouncier little body
-      if (f % 40 < 3) bob = 2;
+      // Energetic: frequent tiny hops
+      if (f % 36 < 4) bob = 2;
+      if (f % 90 < 8) shift = (f % 18 < 9) ? 1 : -1;
     } else if (S.stage === 'teen') {
-      // Occasional lean
-      if (Math.floor(f / 90) % 2 === 0 && f % 90 < 40) shift = 1;
-      else if (f % 90 < 40) shift = -1;
+      // Restless lean + hop
+      if (Math.floor(f / 80) % 2 === 0 && f % 80 < 35) shift = 1;
+      else if (f % 80 < 35) shift = -1;
+      if (f % 50 < 3) bob = 2;
     } else if (S.stage === 'adult') {
-      // Calmer, prouder stance — rare slow sway
-      if (f % 120 < 50) shift = (Math.floor(f / 30) % 2 === 0) ? 1 : 0;
-      bob = (Math.sin(f * 0.03) > 0.7) ? 1 : 0;
+      // Calm sway; rare proud stretch
+      if (f % 100 < 45) shift = (Math.floor(f / 25) % 2 === 0) ? 1 : 0;
+      if (f % 200 < 10) bob = 2; // stretch up moment
     }
+    // Content pets occasionally "sigh" hop when full hearts
+    if (S.happy >= 3 && S.hunger >= 3 && f % 160 < 5) bob = 2;
   }
 
   // Low energy slump when hearts low
@@ -1644,16 +1650,20 @@ function update() {
     }
   }
 
-  // Death only after sustained neglect — never on the same moment you open the app
-  // (loadGraceUntil gives a short window to feed/clean after offline catch-up)
+  // Death: neglect always; old-age closer to classic adult lifespan
+  // Classic units often lived ~10–14+ days with good care, then returned.
+  // Our age ≈ days; adults become eligible after a full life.
   if (now < (S.loadGraceUntil || 0)) {
-    // grace: no death
+    // grace after load/offline — no death
   } else if ((S.hunger + S.happy === 0 && S.careMiss > 14 * d.care) ||
       (S.sick && S.hunger === 0 && S.careMiss > 16 * d.care)) {
     die();
-  } else if (S.age > 30 && Math.random() < 0.00001) {
-    // Very rare old-age return (much gentler than before)
-    die();
+  } else if (S.stage === 'adult' && S.age >= 12) {
+    // Rising chance with age (classic: long adult life → natural return)
+    // ~age 12 soft start; by 18–20 much more likely over time
+    const over = S.age - 11; // 1 at age 12
+    const chance = Math.min(0.00012, 0.000012 * over * over);
+    if (Math.random() < chance) die();
   }
 
   if (now - S.lastSave > 30000) save();
@@ -3188,14 +3198,14 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./service-worker.js?v=2.35', { updateViaCache: 'none' })
+  navigator.serviceWorker.register('./service-worker.js?v=2.36', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.35.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.36.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
