@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.19 -->
+<!-- Public Release - POCKETPAL v2.20 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -333,7 +333,7 @@
 
 <script>
 // ============================================================
-//  POCKETPAL v2.19
+//  POCKETPAL v2.20
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -543,51 +543,50 @@ function careNotify(type, message) {
 }
 function requestNotifications() {
   if (!('Notification' in window)) {
-    toast('Notifications not supported on this browser');
+    toast('Alerts need a modern browser');
     return;
   }
-  // Already decided — toggle on/off
   if (Notification.permission === 'granted') {
     S.notifications = !S.notifications;
     const btn = document.getElementById('notifyBtn');
     if (btn) btn.textContent = S.notifications ? '🔔' : '🔕';
-    toast(S.notifications ? 'Care alerts ON' : 'Care alerts OFF');
     if (S.notifications) {
-      // Test notification so player knows it works
+      toast('Care alerts ON — install to Home Screen for closed-app alerts');
       try {
         new Notification('PocketPal', {
-          body: 'Care alerts are on. We will notify you when Pip needs you.',
+          body: 'Alerts on. Add to Home Screen so you get notified when the app is closed.',
           tag: 'pocketpal-ready',
           icon: './icon-192.png'
         });
       } catch(e) {}
+    } else {
+      toast('Care alerts OFF');
     }
     save();
     return;
   }
   if (Notification.permission === 'denied') {
     S.notifications = false;
-    toast('Notifications blocked — enable in phone Settings');
+    toast('Blocked — enable Notifications in phone Settings for this site');
     save();
     return;
   }
-  // permission === 'default' → ask
   Notification.requestPermission().then(permission => {
     if (permission === 'granted') {
       S.notifications = true;
       const btn = document.getElementById('notifyBtn');
       if (btn) btn.textContent = '🔔';
-      toast('Care alerts ON');
+      toast('Alerts ON — Add to Home Screen for best results');
       try {
         new Notification('PocketPal', {
-          body: 'Care alerts enabled! We will notify you when your pet needs care.',
+          body: 'Care alerts enabled. Install the app to your Home Screen for alerts while closed.',
           tag: 'pocketpal-ready',
           icon: './icon-192.png'
         });
       } catch(e) {}
     } else {
       S.notifications = false;
-      toast('Notifications blocked');
+      toast('Notifications not allowed');
     }
     save();
   }).catch(() => toast('Notifications unavailable'));
@@ -704,7 +703,9 @@ function drawPet(cx, cy, form, f) {
   // Eyes closed during sleep (unless game), yawn, or death rise
   const eyesClosed = ((S.sleep && !S.game) || a === 'yawn' || a === 'poop') && a !== 'wake';
 
-  let bob = (Math.sin(f * 0.04) > 0.6) ? 1 : 0;
+  // Gentle idle breathe + occasional hop
+  let bob = (Math.sin(f * 0.05) > 0.5) ? 1 : 0;
+  if (!S.game && !S.anim && !S.sleep && (f % 180 < 8)) bob = 3; // tiny hop
   let shift = 0;
   let scaleY = 1;
   let scaleX = 1;
@@ -1001,104 +1002,134 @@ function drawPet(cx, cy, form, f) {
     }
   }
 
-  // Action props
+  // Action props — richer classic-style feedback
   if (S.anim === 'eat') {
-    px(14, -10, INK); px(15, -11, INK); px(16, -10, INK);
+    // Spoon / food near mouth
+    const chew = (f % 10 < 5);
+    px(14, -8, INK); px(15, -9, INK); px(16, -8, INK); // food
+    px(18, -6, INK); px(19, -5, INK); px(20, -4, INK); // spoon handle
+    if (chew) { px(-1, 5, BG); px(0, 6, BG); px(1, 5, BG); }
   }
   if (S.sick || S.anim === 'sick') {
-    px(18, -14, INK); px(19, -15, INK); px(20, -14, INK);
+    // Small skull / cross mark
+    fillCirc(20, -14, 3, INK);
+    px(20, -14, BG);
+    px(18, -11, INK); px(22, -11, INK);
   }
-  // Wave arm
   if (S.anim === 'wave' && (f % 10 < 5)) {
     px(18, -6, INK); px(20, -8, INK); px(22, -10, INK); px(23, -9, INK);
   }
-  // Call ! mark near pet
+  // Call ! near pet head
   if (S.anim === 'call' || (S.call && !S.sleep && !S.anim)) {
-    px(16, -18, INK); px(16, -16, INK); px(16, -14, INK); px(16, -11, INK);
+    px(16, -20, INK); px(16, -18, INK); px(16, -16, INK); px(16, -14, INK);
+    px(16, -11, INK);
   }
-  // Zzz when sleeping or yawning trailing
+  // Larger Zzz trail when sleeping / yawning
   if (eyesClosed || S.anim === 'yawn') {
     const z = Math.floor((f % 48) / 16);
-    const zx = 13 + z * 2;
-    const zy = -15 - z * 3;
-    px(zx, zy, INK); px(zx+1, zy, INK); px(zx+2, zy, INK); px(zx+3, zy, INK);
-    px(zx+3, zy+1, INK);
-    px(zx+2, zy+2, INK);
-    px(zx+1, zy+3, INK);
-    px(zx, zy+4, INK); px(zx+1, zy+4, INK); px(zx+2, zy+4, INK); px(zx+3, zy+4, INK);
+    for (let k = 0; k <= z; k++) {
+      const zx = 12 + k * 5;
+      const zy = -14 - k * 5;
+      px(zx, zy, INK); px(zx+1, zy, INK); px(zx+2, zy, INK); px(zx+3, zy, INK);
+      px(zx+3, zy+1, INK);
+      px(zx+2, zy+2, INK);
+      px(zx+1, zy+3, INK);
+      px(zx, zy+4, INK); px(zx+1, zy+4, INK); px(zx+2, zy+4, INK); px(zx+3, zy+4, INK);
+    }
   }
 
   ctx.restore();
 
-  // Poop pile (hidden during poop squat until anim ends — appears after)
+  // Poop pile — larger classic 2-scoop pile (hidden during squat anim)
   if (S.poop && form !== 'egg' && form !== 'dead' && S.anim !== 'poop') {
     const px0 = S.poopX || 180;
     const py0 = S.poopY || 145;
-    px(px0+1, py0-3, INK);
-    px(px0, py0-2, INK); px(px0+1, py0-2, INK); px(px0+2, py0-2, INK);
-    px(px0-1, py0-1, INK); px(px0, py0-1, INK); px(px0+1, py0-1, INK); px(px0+2, py0-1, INK); px(px0+3, py0-1, INK);
-    px(px0-1, py0, INK); px(px0, py0, INK); px(px0+1, py0, INK); px(px0+2, py0, INK); px(px0+3, py0, INK);
-    px(px0, py0+1, INK); px(px0+1, py0+1, INK); px(px0+2, py0+1, INK);
+    // back scoop
+    fillCirc(px0 + 2, py0 - 2, 4, INK);
+    // front scoop
+    fillCirc(px0 - 2, py0, 5, INK);
+    // highlight dots (empty pixels via BG)
+    const BG2 = '#9bbc0f';
+    px(px0 - 3, py0 - 1, BG2);
+    px(px0 + 1, py0 - 3, BG2);
+  }
+}
+
+function drawModeStrip() {
+  // Small selected-mode icon strip at bottom of LCD (classic feel)
+  const INK = '#0f380f';
+  const labels = ['ST','FD','PL','CL','MD','LT','CN','DS'];
+  const x0 = 8;
+  const y = H - 12;
+  for (let i = 0; i < labels.length; i++) {
+    const x = x0 + i * 29;
+    if (i === S.sel) {
+      fillRect(x - 2, y - 2, 26, 11, INK);
+      drawText(labels[i], x + 2, y, '#9bbc0f');
+    } else {
+      drawText(labels[i], x + 2, y, INK);
+    }
   }
 }
 
 function drawMain() {
   const night = isNightTime();
-  // Slightly dimmer LCD at night for atmosphere
-  ctx.fillStyle = night ? '#8fad0e' : '#9bbc0f';
+  const lcdBg = night ? '#8fad0e' : '#9bbc0f';
+  ctx.fillStyle = lcdBg;
   ctx.fillRect(0, 0, W, H);
   if (!S.paused) S.frame++;
 
-  drawText('HUNGER', 4, 4, '#0f380f');
+  const INK = '#0f380f';
+
+  drawText('HUNGER', 4, 4, INK);
   drawHeartsRow(48, 3, S.hunger);
-  drawText('HAPPY', 4, 16, '#0f380f');
+  drawText('HAPPY', 4, 16, INK);
   drawHeartsRow(48, 15, S.happy);
 
-  // Clock
+  // Clock (right)
   let h12 = S.virtualHour % 12;
   if (h12 === 0) h12 = 12;
   const ampm = S.virtualHour < 12 ? 'AM' : 'PM';
   const clock = h12 + ':' + S.virtualMin.toString().padStart(2,'0') + ampm;
-  drawText(clock, 175, 4, '#0f380f');
-  drawText('AGE ' + S.age, 190, 16, '#0f380f');
+  drawText(clock, 168, 4, INK);
+  drawText('AGE ' + S.age, 184, 16, INK);
 
-  // Sun (day) or Moon (night) icon top-right area
-  const INK = '#0f380f';
+  // Sun / Moon — left of clock, never overlaps call icon
   if (night) {
-    // Crescent moon
-    fillCirc(228, 48, 6, INK);
-    fillCirc(231, 46, 5, night ? '#8fad0e' : '#9bbc0f');
+    fillCirc(155, 10, 5, INK);
+    fillCirc(158, 8, 4, lcdBg); // crescent
   } else {
-    // Simple sun
-    fillCirc(228, 48, 4, INK);
+    fillCirc(155, 10, 3, INK);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      px(228 + Math.round(Math.cos(a) * 7), 48 + Math.round(Math.sin(a) * 7), INK);
+      px(155 + Math.round(Math.cos(a) * 6), 10 + Math.round(Math.sin(a) * 6), INK);
     }
   }
 
-  // Attention / call icon
-  if ((S.call || S.lightsMissPending) && !S.sleep) {
-    fillRect(218, 28, 14, 14, '#0f380f');
-    fillRect(220, 30, 10, 10, night ? '#8fad0e' : '#9bbc0f');
-    px(224, 32, '#0f380f');
-    px(224, 33, '#0f380f');
-    px(224, 34, '#0f380f');
-    px(224, 36, '#0f380f');
+  // Attention / call icon — bottom-left of pet area (classic alert placement)
+  if ((S.call || S.lightsMissPending || S.poop) && !S.sleep) {
+    fillRect(6, 130, 16, 16, INK);
+    fillRect(8, 132, 12, 12, lcdBg);
+    // ! mark
+    px(13, 134, INK); px(13, 135, INK); px(13, 136, INK); px(13, 137, INK);
+    px(13, 140, INK);
   }
 
-  drawPet(S.petX || 120, 100, S.form, S.frame);
+  drawPet(S.petX || 120, 95, S.form, S.frame);
   drawFx();
 
-  // Zzz when sleeping — clearer floating Zs
+  // Clearer floating Zzz when sleeping
   if (S.sleep) {
-    const z = Math.floor(S.frame / 18) % 3;
-    drawText('Z'.repeat(z + 1), 148, 62 - z * 2, '#0f380f');
+    const z = Math.floor(S.frame / 16) % 3;
+    drawText('Z'.repeat(z + 1), 150, 55 - z * 3, INK);
   }
 
+  // Selected mode strip (classic LCD icon row feel)
+  drawModeStrip();
+
   if (S.paused) {
-    fillRect(72, 72, 96, 24, '#0f380f');
-    drawText('PAUSED', 102, 80, '#9bbc0f');
+    fillRect(72, 72, 96, 24, INK);
+    drawText('PAUSED', 102, 80, lcdBg);
   }
 }
 
@@ -1361,13 +1392,14 @@ function update() {
     }
 
     // Poop — squat animation first, then pile appears
-    if (now - S.lastP > 6.8 * 60000 / sp && !S.poop && S.anim !== 'poop') {
+    if (now - S.lastP > 5.5 * 60000 / sp && !S.poop && S.anim !== 'poop') {
       S.poopX = Math.round(S.petX || 120) + 16;
       S.poopY = 145;
       S.anim = 'poop';
       S.animTimer = now + 1100;
       S._pendingPoop = true;
       careNotify('poop', 'PocketPal made a mess.');
+      toast('Needs cleaning!');
       S.lastP = now;
       S.poopSince = now;
       beep(200, 0.08);
@@ -2475,14 +2507,14 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./service-worker.js?v=2.19', { updateViaCache: 'none' })
+  navigator.serviceWorker.register('./service-worker.js?v=2.20', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.19', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.20', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();

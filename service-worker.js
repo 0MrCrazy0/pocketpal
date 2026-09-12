@@ -1,5 +1,5 @@
-/* PocketPal Service Worker v2.19 */
-const CACHE = 'pocketpal-v219';
+/* PocketPal Service Worker v2.20 */
+const CACHE = 'pocketpal-v220';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon.svg'
 ];
