@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.36.1 -->
+<!-- Public Release - POCKETPAL v2.66 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -283,6 +283,7 @@
 
   <div class="device" id="device">
     <div class="shell-controls">
+      <button class="sound-btn" id="shellColorBtn" title="Change shell color">🎨</button>
       <button class="sound-btn" id="notifyBtn" title="Care notifications">🔔</button>
       <button class="sound-btn" id="soundBtn" title="Toggle sound">🔊</button>
     </div>
@@ -320,8 +321,56 @@
   </div>
 
 <script>
+
+/* ============================================================
+   POCKETPAL — GAME RULES & MECHANICS (dev notes)
+   ------------------------------------------------------------
+   CARE (Tamagotchi-style)
+   - Hunger 0-4: drains while awake; meal fills more than snack
+   - Happy 0-4: drains while awake; play/snack/train/win/clean raise
+     Unhappy stages: 4 joy · 3 content · 2 ok · 1 low · 0 miserable
+   - Discipline 0-100%: only rises on correct false-call scold
+   - Weight: +meal/snack, -play/train/battle; evo path + battle power
+   - Care miss: empty meters, ignored lights, piled poop, long sick
+   - Poop: stacks up to 4 piles; pet avoids piles; full screen → unhappy/sick/death risk
+   - Sick: neglect, max filth, battle injury; medicine or slow heal
+   - Injury: battle loss flag → sick + needs medicine
+   - Call: real need or false call (discipline only if false)
+
+   CLOCK / SLEEP
+   - Uses device local time
+   - Night window 8:00 PM – 8:00 AM
+   - Lights OFF at night → sleep; ignore lights → care miss + sleep
+   - Lights OFF in day → dark room; babies/children may nap
+   - Morning wake → +1 age (once per calendar day) + evo checks
+   - Pause (hold B) freezes care timers
+
+   GROWTH
+   - Stages: egg → baby → child → teen → adult (+ secret Elder)
+   - Forms: Pip→Nib→Lumi/Grub→Momo/Kiko/Taro/Poko/Nori/Zuzu/Nova/Bibi/Rin/Bolt
+   - growthPhase 0-3: body visibly fills out each ~1h awake (and offline catch-up)
+   - Morning/age evo changes stage form; growthPhase resets on evo
+   - Offline: growth + age applied; evo animation plays on return if form changed
+   - Discipline does not drain from unhappiness; false-calls rise when bored/sad
+
+   PLAY
+   - Look: guess left/right from pet lean/eyes (no arrow spoilers)
+   - Memory: watch sequence then repeat; grows longer
+   - Train XP: timing GO → Battle XP
+
+   BATTLE (Teen+)
+   - Training: roster of named PocketPals with age/XP/W-L/WT/DISC
+   - Friend: code snapshot opponent
+   - Stats: HP from stage+XP; power from stage/disc/happy/XP
+   - POW charge (mash B); STA costs on attack; Guard recovers STA
+   - Level = 1 + floor(XP/5) — shown on LCD + Status + battle
+
+   LIFE
+   - Death: long neglect or adult old-age after age ~12+
+   - Restart → Gen+1; friends/XP preferences kept where saved
+   ============================================================ */
 // ============================================================
-//  POCKETPAL v2.36.1
+//  POCKETPAL v2.66
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -335,10 +384,18 @@ const S = {
   hunger: 4, happy: 4, disc: 0,
   careMiss: 0, discMiss: 0,
   sick: false, sleep: false, lights: true,
-  poop: false, poopX: 180, poopY: 145,
+  poop: false, poopX: 180,
+  poopCount: 0, poopY: 145,
   call: false,
   lastFalseCall: 0,
   loadGraceUntil: 0,
+  injured: false,
+  shellTheme: 0,
+  growthPhase: 0,
+  careStreak: 0,
+  petFamily: [],
+  lastCareDay: '',
+  lastGrowthAt: 0,
   sickSince: 0,
   _wakePoopAt: 0,
   born: null,
@@ -393,12 +450,60 @@ const S = {
   tiltTimer: 0
 };
 
+
+const FORM_TRAITS = {
+  egg: 'Waiting',
+  baby: 'Curious',
+  child: 'Playful',
+  teenGood: 'Bright',
+  teenBad: 'Stubborn',
+  adult1: 'Gentle',
+  adult2: 'Swift',
+  adult3: 'Steady',
+  adult4: 'Jolly',
+  adult5: 'Sluggish',
+  adult6: 'Gloomy',
+  adult7: 'Radiant',
+  adult8: 'Strict',
+  adult9: 'Athletic',
+  adult10: 'Fierce',
+  secret: 'Wise',
+  dead: 'Peaceful'
+};
+function formTrait(form) {
+  return FORM_TRAITS[form] || 'Unique';
+}
+function recordFamilyMember(reason) {
+  if (!S.petFamily) S.petFamily = [];
+  const entry = {
+    form: S.form,
+    name: NAMES[S.form] || S.form,
+    trait: formTrait(S.form),
+    stage: S.stage,
+    age: S.age,
+    gen: S.generation || 1,
+    wins: S.battleWins || 0,
+    losses: S.battleLosses || 0,
+    xp: S.battleXP || 0,
+    disc: S.disc || 0,
+    careMiss: Math.floor(S.careMiss || 0),
+    reason: reason || 'lived',
+    at: Date.now()
+  };
+  // One slot per form+gen to avoid spam; keep history of variants
+  const key = entry.form + '-G' + entry.gen;
+  S.petFamily = S.petFamily.filter(e => (e.form + '-G' + e.gen) !== key);
+  S.petFamily.unshift(entry);
+  if (S.petFamily.length > 24) S.petFamily.pop();
+}
+
 const NAMES = {
   egg: 'Egg', baby: 'Pip', child: 'Nib',
   teenGood: 'Lumi', teenBad: 'Grub',
   adult1: 'Momo', adult2: 'Kiko', adult3: 'Taro',
   adult4: 'Poko', adult5: 'Nori', adult6: 'Zuzu',
   adult7: 'Nova', adult8: 'Bibi',
+  adult9: 'Rin', adult10: 'Bolt',
   secret: 'Elder', dead: 'Spirit'
 };
 const ICONS = ['status','feed','play','clean','med','light','connect','disc'];
@@ -417,6 +522,36 @@ const ICON_LABELS = {
 const DIFF = {
   realtime: { hunger: 1.0, happy: 1.0, care: 1.0, timeScale: 0.12 }
 };
+
+// Shell case colors (cycle with 🎨)
+const SHELL_THEMES = [
+  { name: 'Pink', shell: '#e85a71', dark: '#c43c55', light: '#f2788c', edge: '#f9b4c0', deep: '#b83550' },
+  { name: 'Blue', shell: '#4a7fd4', dark: '#2f5fad', light: '#6b9aef', edge: '#a8c4f5', deep: '#1e4a8c' },
+  { name: 'Green', shell: '#3cb878', dark: '#2a8f5c', light: '#5dd49a', edge: '#9ae8c0', deep: '#1f7a4a' },
+  { name: 'Purple', shell: '#9b59b6', dark: '#7d3c98', light: '#bb7fd4', edge: '#d4b0e8', deep: '#5b2c6f' },
+  { name: 'Orange', shell: '#e67e22', dark: '#c96a12', light: '#f39c4a', edge: '#f5c48a', deep: '#a85a10' },
+  { name: 'Teal', shell: '#1abc9c', dark: '#148f77', light: '#48d1b5', edge: '#8ee6d4', deep: '#0e6655' },
+  { name: 'White', shell: '#eceff1', dark: '#b0bec5', light: '#ffffff', edge: '#ffffff', deep: '#78909c' },
+  { name: 'Black', shell: '#37474f', dark: '#263238', light: '#546e7a', edge: '#78909c', deep: '#102027' }
+];
+function applyShellTheme(idx) {
+  const t = SHELL_THEMES[((idx % SHELL_THEMES.length) + SHELL_THEMES.length) % SHELL_THEMES.length];
+  const root = document.documentElement;
+  root.style.setProperty('--shell', t.shell);
+  root.style.setProperty('--shell-dark', t.dark);
+  const dev = document.getElementById('device');
+  if (dev) {
+    dev.style.background = 'linear-gradient(165deg, ' + t.light + ' 0%, ' + t.shell + ' 45%, ' + t.dark + ' 100%)';
+    dev.style.boxShadow = '0 0 0 3px ' + t.edge + ', 0 0 0 6px ' + t.deep + ', 0 10px 24px rgba(0,0,0,0.45), inset 0 3px 10px rgba(255,255,255,0.25)';
+  }
+}
+function cycleShellColor() {
+  S.shellTheme = ((S.shellTheme || 0) + 1) % SHELL_THEMES.length;
+  applyShellTheme(S.shellTheme);
+  toast('Shell: ' + SHELL_THEMES[S.shellTheme].name);
+  beep(400, 0.05);
+  save();
+}
 
 const actx = new (window.AudioContext || window.webkitAudioContext)();
 function wakeAudio() {
@@ -496,47 +631,124 @@ function stopMusic() {
   clearTimeout(S.musicTimer);
   S.musicTimer = 0;
 }
+function countDueCares() {
+  let n = 0;
+  if (S.stage === 'egg' || S.stage === 'dead' || S.paused) return 0;
+  if (S.hunger <= 1) n++;
+  if (S.happy <= 1) n++;
+  if (S.poop) n++;
+  if (S.sick || S.injured) n++;
+  if (S.lightsMissPending) n++;
+  if (S.call && S._falseCall) n++;
+  return n;
+}
+
+// Optional Web Push via Cloudflare Worker:
+// 1) Deploy cloudflare-worker.js
+
+// Default Cloudflare Worker (care alerts + live battle cards when redeployed)
+if (typeof window !== 'undefined') {
+  if (!window.POCKETPAL_PUSH_URL) {
+    window.POCKETPAL_PUSH_URL = 'https://pocketpal.crzymn05.workers.dev/push';
+  }
+  if (!window.POCKETPAL_WORKER_URL) {
+    window.POCKETPAL_WORKER_URL = 'https://pocketpal.crzymn05.workers.dev';
+  }
+}
+
+// Override: window.POCKETPAL_PUSH_URL = 'https://YOUR_WORKER.workers.dev/push'
+// 3) Set window.POCKETPAL_VAPID_PUBLIC = 'your-vapid-public-key'
+async function subscribeWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  if (!window.POCKETPAL_VAPID_PUBLIC) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const key = urlBase64ToUint8Array(window.POCKETPAL_VAPID_PUBLIC);
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    }
+    if (window.POCKETPAL_PUSH_URL) {
+      await fetch(window.POCKETPAL_PUSH_URL.replace(/\/push$/, '/subscribe'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub, petId: S.myCode || 'local' })
+      }).catch(() => {});
+    }
+    return sub;
+  } catch (e) { return null; }
+}
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function updateAppBadge() {
+  const n = countDueCares();
+  try {
+    if (navigator.setAppBadge) {
+      if (n > 0) navigator.setAppBadge(n);
+      else if (navigator.clearAppBadge) navigator.clearAppBadge();
+    }
+  } catch (e) {}
+}
 function careNotify(type, message) {
   if (!S.notifications) return;
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
   const now = Date.now();
-  // Avoid repeated alerts for the same condition for 15 minutes.
   if (S.lastNotifyType === type && now - (S.lastNotifyAt || 0) < 15 * 60000) return;
   S.lastNotifyType = type;
   S.lastNotifyAt = now;
+  updateAppBadge();
   const opts = {
     body: message,
     tag: 'pocketpal-' + type,
     renotify: true,
-    icon: './icon-192.png',
+    icon: './icon-512.png',
     badge: './icon-192.png',
+    image: './icon-512.png',
     vibrate: [120, 60, 120],
-    silent: false
+    silent: false,
+    requireInteraction: false,
+    data: { url: './index.html', type: type, care: true }
   };
   try {
-    // Prefer service worker notifications (works better when PWA is backgrounded)
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.ready.then(reg => {
-        return reg.showNotification('PocketPal', opts);
-      }).catch(() => {
-        try { new Notification('PocketPal', opts); } catch(e2) {}
-      });
-    } else if (navigator.serviceWorker) {
-      navigator.serviceWorker.ready.then(reg => {
-        return reg.showNotification('PocketPal', opts);
-      }).catch(() => {
-        try { new Notification('PocketPal', opts); } catch(e2) {}
-      });
+    const titleMap = {
+      hunger: 'PocketPal — Hungry',
+      happy: 'PocketPal — Wants Play',
+      poop: 'PocketPal — Needs Clean',
+      sick: 'PocketPal — Needs Medicine',
+      lights: 'PocketPal — Bedtime',
+      discipline: 'PocketPal — Discipline'
+    };
+    const title = titleMap[type] || 'PocketPal';
+    // Optional Cloudflare Worker relay (set window.POCKETPAL_PUSH_URL to enable)
+    try {
+      if (window.POCKETPAL_PUSH_URL && navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+          if (!sub) return;
+          fetch(window.POCKETPAL_PUSH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription: sub, title: title, body: message, type: type })
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+    } catch (e) {}
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.ready.then(reg => reg.showNotification(title, opts))
+        .catch(() => { try { new Notification(title, opts); } catch(e2) {} });
     } else {
-      new Notification('PocketPal', opts);
+      new Notification(title, opts);
     }
   } catch(e) {
     try { new Notification('PocketPal', { body: message }); } catch(e2) {}
   }
-  // Toast only if app is in foreground (OS handles closed-app notifications)
   if (document.visibilityState === 'visible') {
-    // Avoid stacking many toasts when returning from background
     if (!S._lastCareToastAt || Date.now() - S._lastCareToastAt > 2500) {
       toast(message);
       S._lastCareToastAt = Date.now();
@@ -553,12 +765,13 @@ function requestNotifications() {
     const btn = document.getElementById('notifyBtn');
     if (btn) btn.textContent = S.notifications ? '🔔' : '🔕';
     if (S.notifications) {
-      toast('Care alerts ON — install to Home Screen for closed-app alerts');
+      toast('Care alerts ON — install PWA for best delivery'); subscribeWebPush();
       try {
         new Notification('PocketPal', {
-          body: 'Alerts on. Add to Home Screen so you get notified when the app is closed.',
+          body: 'Alerts on. Install to Home Screen for closed-app care pings.',
           tag: 'pocketpal-ready',
-          icon: './icon-192.png'
+          icon: './icon-512.png',
+          badge: './icon-192.png'
         });
       } catch(e) {}
     } else {
@@ -578,12 +791,13 @@ function requestNotifications() {
       S.notifications = true;
       const btn = document.getElementById('notifyBtn');
       if (btn) btn.textContent = '🔔';
-      toast('Alerts ON — Add to Home Screen for best results');
+      toast('Alerts ON — Add to Home Screen for best results'); subscribeWebPush();
       try {
         new Notification('PocketPal', {
-          body: 'Care alerts enabled. Install the app to your Home Screen for alerts while closed.',
+          body: 'Care alerts enabled. Install to Home Screen for closed-app pings.',
           tag: 'pocketpal-ready',
-          icon: './icon-192.png'
+          icon: './icon-512.png',
+          badge: './icon-192.png'
         });
       } catch(e) {}
     } else {
@@ -666,6 +880,14 @@ function drawText(str, x, y, color) {
     cx += 6;
   }
 }
+function drawTextCentered(str, y, color) {
+  str = (''+str).toUpperCase();
+  const w = str.length * 6;
+  drawText(str, Math.max(0, Math.floor((W - w) / 2)), y, color);
+}
+function battleLevel(xp) {
+  return 1 + Math.floor((xp || 0) / 5);
+}
 
 function spawnFx(type, x, y, n) {
   for (let i = 0; i < (n || 1); i++) {
@@ -687,15 +909,12 @@ function drawFx() {
     if (p.life <= 0) { S.fx.splice(i, 1); continue; }
     const x = Math.round(p.x), y = Math.round(p.y);
     if (p.type === 'heart') {
-      // Clear pixel love-heart (cleft on top so it reads as ♥)
-      //   ██ ██
-      //  ███████
-      //  ███████
-      //   █████
-      //    ███
-      //     █
-      px(x-2, y-3, INK); px(x-1, y-3, INK);              px(x+1, y-3, INK); px(x+2, y-3, INK);
-      px(x-3, y-2, INK); px(x-2, y-2, INK); px(x-1, y-2, INK); px(x, y-2, INK); px(x+1, y-2, INK); px(x+2, y-2, INK); px(x+3, y-2, INK);
+      // Large clear ♥ (cleft + pointed bottom)
+      px(x-3, y-4, INK); px(x-2, y-4, INK);           px(x+2, y-4, INK); px(x+3, y-4, INK);
+      px(x-4, y-3, INK); px(x-3, y-3, INK); px(x-2, y-3, INK); px(x-1, y-3, INK);
+      px(x+1, y-3, INK); px(x+2, y-3, INK); px(x+3, y-3, INK); px(x+4, y-3, INK);
+      px(x-4, y-2, INK); px(x-3, y-2, INK); px(x-2, y-2, INK); px(x-1, y-2, INK); px(x, y-2, INK);
+      px(x+1, y-2, INK); px(x+2, y-2, INK); px(x+3, y-2, INK); px(x+4, y-2, INK);
       px(x-3, y-1, INK); px(x-2, y-1, INK); px(x-1, y-1, INK); px(x, y-1, INK); px(x+1, y-1, INK); px(x+2, y-1, INK); px(x+3, y-1, INK);
       px(x-2, y, INK); px(x-1, y, INK); px(x, y, INK); px(x+1, y, INK); px(x+2, y, INK);
       px(x-1, y+1, INK); px(x, y+1, INK); px(x+1, y+1, INK);
@@ -716,10 +935,10 @@ function drawFx() {
 function drawPet(cx, cy, form, f) {
   const INK = '#0f380f';
   const BG  = '#9bbc0f';
-  const blink = (f % 90 < 5);
+  const blink = S.game || S.battle ? (f % 120 < 3) : (f % 90 < 5);
   const a = S.anim;
   // Eyes closed during sleep (unless game), yawn, or death rise
-  const eyesClosed = ((S.sleep && !S.game) || a === 'yawn' || a === 'poop') && a !== 'wake';
+  const eyesClosed = !S.battle && !S.game && ((S.sleep) || a === 'yawn') && a !== 'wake' && a !== 'poop';
 
   // Gentle idle breathe + stage-based pose
   let bob = (Math.sin(f * 0.05) > 0.5) ? 1 : 0;
@@ -728,33 +947,53 @@ function drawPet(cx, cy, form, f) {
   let scaleY = 1;
   let scaleX = 1;
   let rotHint = 0;
-  // Stage personality in idle — more "alive" without squashy nonsense
-  if (!S.game && !S.anim && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
-    // Soft continuous breathe (all stages)
+  // Stage personality in idle — breathe, sit, wave, hop (life-like)
+  if (!S.battle && !S.game && !S.anim && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
     bob = (Math.sin(f * 0.08) > 0) ? 1 : 0;
+    const cycle = Math.floor(f / 40) % 12;
+    // Sit pose (lower bob) every few cycles
+    if (cycle === 5 || cycle === 6) bob = 3;
+    // Wave (shift + arm feel) when content
+    if (S.happy >= 2 && (cycle === 8 || cycle === 9)) {
+      shift = (f % 16 < 8) ? 2 : -1;
+      bob = 1;
+    }
     if (S.stage === 'baby' || S.stage === 'child') {
-      // Energetic: frequent tiny hops
       if (f % 36 < 4) bob = 2;
       if (f % 90 < 8) shift = (f % 18 < 9) ? 1 : -1;
     } else if (S.stage === 'teen') {
-      // Restless lean + hop
       if (Math.floor(f / 80) % 2 === 0 && f % 80 < 35) shift = 1;
       else if (f % 80 < 35) shift = -1;
       if (f % 50 < 3) bob = 2;
     } else if (S.stage === 'adult') {
-      // Calm sway; rare proud stretch
-      if (f % 100 < 45) shift = (Math.floor(f / 25) % 2 === 0) ? 1 : 0;
-      if (f % 200 < 10) bob = 2; // stretch up moment
+      // Per-adult idle personality
+      const fm = S.form;
+      if (fm === 'adult1' || fm === 'adult7') { // Momo / Nova — proud
+        if (f % 120 < 50) shift = 0;
+        if (f % 180 < 12) bob = 2;
+      } else if (fm === 'adult2' || fm === 'adult9') { // Kiko / Rin — athletic sway
+        shift = (Math.floor(f / 20) % 2 === 0) ? 1 : -1;
+        if (f % 60 < 4) bob = 2;
+      } else if (fm === 'adult5' || fm === 'adult6') { // Nori / Zuzu — heavy sit
+        bob = 2 + ((f % 100 < 40) ? 1 : 0);
+        shift = 0;
+      } else if (fm === 'adult8' || fm === 'adult10') { // Bibi / Bolt — alert
+        if (f % 70 < 8) shift = (f % 14 < 7) ? 2 : -2;
+        if (f % 90 < 5) bob = 2;
+      } else if (fm === 'secret') {
+        bob = (Math.sin(f * 0.05) > 0) ? 0 : 1; // calm elder
+      } else {
+        if (f % 100 < 45) shift = (Math.floor(f / 25) % 2 === 0) ? 1 : 0;
+        if (f % 200 < 10) bob = 2;
+      }
     }
-    // Content pets occasionally "sigh" hop when full hearts
     if (S.happy >= 3 && S.hunger >= 3 && f % 160 < 5) bob = 2;
   }
 
   // Low energy slump when hearts low
   const lowEnergy = !S.sleep && !S.game && !a && (S.hunger <= 1 || S.happy <= 1);
   if (lowEnergy) {
-    bob = 2; // sit lower
-    scaleY = 0.92;
+    bob = 2; // sit lower — no fractional scale (keeps pixels crisp)
   }
 
   // Occasional head tilt when idle and content
@@ -764,9 +1003,17 @@ function drawPet(cx, cy, form, f) {
     else S.tiltTimer = 0;
   }
 
-  if (S.game) {
-    shift = S.gameDir === 0 ? -6 : 6;
-    bob = (f % 12 < 6) ? 1 : 0;
+  if (S.game && S.gameType === 'look') {
+    // After eyes settle, lean toward TRUE answer (clearer than body-trick confusion)
+    const settled = !S._lookSettleAt || Date.now() >= S._lookSettleAt;
+    if (settled) shift = S.gameDir === 0 ? -10 : 10;
+    bob = (Math.sin(f * 0.15) > 0) ? 1 : 0;
+  } else if (S.game && S.gameType === 'memory') {
+    // Memory: pet stays mostly center; side labels teach the sequence
+    bob = (Math.sin(f * 0.15) > 0) ? 1 : 0;
+    if (S.memPhase === 'show') shift = S.gameDir === 0 ? -6 : 6;
+  } else if (S.game && S.gameType === 'train') {
+    bob = S.trainPhase === 'go' ? ((f % 6 < 3) ? 2 : 0) : ((Math.sin(f * 0.12) > 0) ? 1 : 0);
   }
 
   // ---- Animation poses ----
@@ -788,7 +1035,7 @@ function drawPet(cx, cy, form, f) {
     if (f % 10 === 0) spawnFx('heart', cx, cy - 18, 1);
   } else if (a === 'sulk') {
     bob = 2; // slight sit
-    scaleY = 0.95;
+    scaleY = 1;
     shift = Math.sin(f * 0.05) * 1;
   } else if (a === 'evo') {
     bob = (f % 8 < 4) ? 2 : 0;
@@ -809,7 +1056,7 @@ function drawPet(cx, cy, form, f) {
     bob = 0;
   } else if (a === 'poop') {
     bob = 3; // mild squat
-    scaleY = 0.92;
+    scaleY = 1;
     scaleX = 1.05;
   } else if (a === 'yawn') {
     bob = 0;
@@ -837,28 +1084,47 @@ function drawPet(cx, cy, form, f) {
     bob = (Math.sin(f * 0.02) > 0) ? 0 : 1;
   }
 
-  // Idle wander
-  if (!S.game && !a && S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep) {
+  // Idle wander — main screen only; avoid poop piles (classic)
+  if (!S.battle && !S.game && !a && S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep) {
+    const spots = S.poopSpots || (S.poop ? [S.poopX || 180] : []);
+    const blocked = (x) => spots.some(p => Math.abs(x - p) < 18);
     if (Math.abs(S.petX - S.petTargetX) < 2) {
-      if (Math.random() < 0.004) S.petTargetX = 50 + Math.random() * 140;
+      if (Math.random() < 0.006) {
+        let tries = 0, tx = 50 + Math.random() * 140;
+        while (blocked(tx) && tries++ < 8) tx = 50 + Math.random() * 140;
+        // If floor is full of poop, pet is trapped → stay put (miserable)
+        if (blocked(tx) && (S.poopCount || 0) >= 4) {
+          S.petTargetX = S.petX;
+        } else {
+          S.petTargetX = blocked(tx) ? S.petX : tx;
+        }
+      }
     } else {
-      S.petX += Math.sign(S.petTargetX - S.petX) * (lowEnergy ? 0.15 : 0.3);
+      const step = (lowEnergy || (S.poopCount || 0) >= 3) ? 0.12 : 0.3;
+      const next = S.petX + Math.sign(S.petTargetX - S.petX) * step;
+      if (!blocked(next)) S.petX = next;
+      else S.petTargetX = S.petX; // stop at pile edge
     }
     cx = S.petX;
   }
 
   ctx.save();
   ctx.translate(Math.round(cx + shift), Math.round(cy + bob));
-  if (scaleY !== 1 || scaleX !== 1) ctx.scale(scaleX, scaleY);
+  // NEVER use fractional ctx.scale — it blurs/ghosts pixel art on mobile.
+  // Size differences come from sprite shapes (baby vs adult fillCirc), not canvas scale.
+  scaleX = 1;
+  scaleY = 1;
 
   // Mouth style: care state faces (hungry / dirty / sick / happy)
-  const faceHungry = !S.playResult && S.hunger <= 1 && !S.sick && !S.sleep;
-  const faceDirty = !S.playResult && S.poop && !S.sick && !S.sleep;
-  const faceSick = S.sick || S.anim === 'sick';
+  // Care faces suppressed during minigames/battles so poop doesn't force a sad face mid-game
+  const busyPlay = S.game || S.battle;
+  const faceHungry = !busyPlay && !S.playResult && S.hunger <= 1 && !S.sick && !S.sleep;
+  const faceDirty = !busyPlay && !S.playResult && S.poop && !S.sick && !S.sleep;
+  const faceSick = !busyPlay && (S.sick || S.anim === 'sick');
   const happyMouth = S.playResult === 'happy' || S.anim === 'happy' || S.anim === 'joy' || S.anim === 'dance' ||
     (!S.playResult && !faceHungry && !faceDirty && !faceSick && S.happy >= 3 && !S.sleep);
   const sadMouth = S.playResult === 'sad' || S.anim === 'sad' || S.anim === 'sulk' || faceHungry || faceDirty ||
-    (!S.playResult && S.happy <= 1 && !S.sleep && !faceSick);
+    (!busyPlay && !S.playResult && S.happy <= 1 && !S.sleep && !faceSick);
 
   // ========== DISTINCT SPRITES PER FORM ==========
   if (form === 'egg') {
@@ -899,25 +1165,49 @@ function drawPet(cx, cy, form, f) {
   }
   else {
     // --- BODY shapes (unique per form) ---
+    // growthPhase 0..3 = fills out + gains detail within stage
+    // Keep YOUR pet's growth in battles; rivals use their stored growth
+    let g = 0;
+    if (form !== 'egg' && form !== 'dead') {
+      if (S.battle && S.bat && form === S.bat.enemyForm && form !== S.form) {
+        g = Math.min(3, S.bat.enemyGrowth || 0);
+      } else {
+        g = Math.min(3, S.growthPhase || 0);
+      }
+    }
     if (form === 'baby') {
-      // Small round blob with tiny arms
-      fillCirc(0, 2, 13, INK);
-      px(-15, 4, INK); px(-15, 5, INK); px(15, 4, INK); px(15, 5, INK);
+      // Nugget → chubby baby with feet/arms as it grows
+      const r = 10 + g;
+      fillCirc(0, 2, r, INK);
+      px(-12 - g, 4, INK); px(12 + g, 4, INK);
+      if (g >= 1) { px(-13 - g, 5, INK); px(13 + g, 5, INK); }
+      if (g >= 2) { fillRect(-5, 10 + g, 3, 2, INK); fillRect(3, 10 + g, 3, 2, INK); }
+      if (g >= 3) { px(-2, -r + 2, BG); px(2, -r + 2, BG); } // tiny brow nubs
     } else if (form === 'child') {
-      // Slightly taller with ear nubs
-      fillCirc(0, 1, 15, INK);
-      fillCirc(-9, -14, 4, INK); fillCirc(9, -14, 4, INK);
+      const r = 13 + g;
+      fillCirc(0, 1, r, INK);
+      fillCirc(-8 - g, -12 - Math.floor(g/2), 3 + (g > 1 ? 1 : 0), INK);
+      fillCirc(8 + g, -12 - Math.floor(g/2), 3 + (g > 1 ? 1 : 0), INK);
+      if (g >= 1) { fillRect(-6, 12 + Math.floor(g/2), 4, 2, INK); fillRect(3, 12 + Math.floor(g/2), 4, 2, INK); }
+      if (g >= 2) { px(-r + 2, 2, INK); px(r - 2, 2, INK); } // stub arms
+      if (g >= 3) { px(0, -r - 1, INK); px(-1, -r, INK); px(1, -r, INK); } // little tuft
     } else if (form === 'teenGood') {
-      // Lumi — clean oval + sparkle crest
-      fillCirc(0, 0, 16, INK);
-      for (let i = -7; i <= 7; i += 2) px(i, -19, INK);
-      px(0, -21, INK); px(-2, -20, INK); px(2, -20, INK);
+      const r = 14 + g;
+      fillCirc(0, 0, r, INK);
+      for (let i = -7; i <= 7; i += 2) px(i, -17 - g, INK);
+      px(0, -19 - g, INK); px(-2, -18 - g, INK); px(2, -18 - g, INK);
+      if (g >= 1) { fillRect(-7, 13 + g, 4, 2, INK); fillRect(4, 13 + g, 4, 2, INK); }
+      if (g >= 2) { px(-r, -2, INK); px(r, -2, INK); px(-r - 1, 0, INK); px(r + 1, 0, INK); }
+      if (g >= 3) { px(-3, -r + 4, BG); px(3, -r + 4, BG); } // cheek shine
     } else if (form === 'teenBad') {
-      // Grub — lumpy uneven body
-      fillCirc(-3, 1, 14, INK);
-      fillCirc(5, 3, 11, INK);
-      px(-12, -12, INK); px(12, -10, INK);
-      px(-10, -14, INK); px(10, -13, INK);
+      const r1 = 12 + g, r2 = 10 + g;
+      fillCirc(-3, 1, r1, INK);
+      fillCirc(5, 3, r2, INK);
+      px(-12 - g, -12, INK); px(12 + g, -10, INK);
+      px(-10 - g, -14, INK); px(10 + g, -13, INK);
+      if (g >= 1) { fillRect(-8, 14, 4, 2, INK); fillRect(5, 14, 4, 2, INK); }
+      if (g >= 2) { px(-14 - g, 2, INK); px(14 + g, 4, INK); }
+      if (g >= 3) { px(-5, -2, BG); px(6, 0, BG); }
       fillRect(-5, 8, 10, 3, BG);
     } else if (form === 'adult1') {
       // Momo — best care, round with side fins/ears
@@ -972,6 +1262,18 @@ function drawPet(cx, cy, form, f) {
         px(-10+i, -12-i, INK); px(10-i, -12-i, INK);
       }
       fillRect(-9, 15, 5, 3, INK); fillRect(4, 15, 5, 3, INK);
+    } else if (form === 'adult9') {
+      // Rin — sleek athletic (good care + play/train heavy)
+      fillCirc(0, 0, 14, INK);
+      fillRect(-18, -2, 8, 4, INK); fillRect(10, -2, 8, 4, INK);
+      px(-8, -14, INK); px(8, -14, INK);
+      fillRect(-6, 14, 4, 3, INK); fillRect(3, 14, 4, 3, INK);
+    } else if (form === 'adult10') {
+      // Bolt — battle-hardened spiky adult
+      fillCirc(0, 1, 15, INK);
+      px(0, -18, INK); px(-2, -16, INK); px(2, -16, INK);
+      px(-16, 0, INK); px(16, 0, INK); px(-15, -4, INK); px(15, -4, INK);
+      fillRect(-8, 15, 5, 3, INK); fillRect(4, 15, 5, 3, INK);
     } else if (form === 'secret') {
       // Elder — dignified with staff-like marks and beard
       fillCirc(0, 0, 16, INK);
@@ -989,45 +1291,59 @@ function drawPet(cx, cy, form, f) {
     if (form !== 'dead') {
       const ey = form === 'baby' ? -1 : -3; // socket vertical position
       if (eyesClosed) {
-        // closed lids
-        px(-6, ey+1, BG); px(-5, ey+1, BG); px(-4, ey+1, BG); px(-3, ey+1, BG);
-        px(3, ey+1, BG); px(4, ey+1, BG); px(5, ey+1, BG); px(6, ey+1, BG);
+        px(-7, ey+1, BG); px(-6, ey+1, BG); px(-5, ey+1, BG); px(-4, ey+1, BG);
+        px(4, ey+1, BG); px(5, ey+1, BG); px(6, ey+1, BG); px(7, ey+1, BG);
       } else if (!blink) {
-        // Fixed eye sockets (white of the eye) — never move
-        fillRect(-6, ey, 4, 4, BG);
-        fillRect(3, ey, 4, 4, BG);
+        // Cute larger sockets + tiny pupil dots
+        fillRect(-8, ey - 1, 6, 6, BG);
+        fillRect(3, ey - 1, 6, 6, BG);
 
-        // Pupil look direction (both eyes move together)
         let lookX = 0, lookY = 0;
-        const lookCycle = Math.floor(f / 50) % 10;
-        if (S.poop) {
-          // Glance toward poop
+        // Fast life-like glance cycle (everywhere including minigames)
+        const lookCycle = Math.floor(f / 22) % 12;
+
+        if (S.game && S.gameType === 'look') {
+          // First ~0.7s glance around, then lock onto true answer (gameDir)
+          const settled = !S._lookSettleAt || Date.now() >= S._lookSettleAt;
+          if (!settled) {
+            if (lookCycle % 4 === 0) lookX = -1;
+            else if (lookCycle % 4 === 1) lookX = 1;
+            else if (lookCycle % 4 === 2) lookY = -1;
+            else lookX = 0;
+          } else {
+            lookX = (S.gameDir === 0) ? -1 : 1;
+            lookY = 0;
+          }
+        } else if (S.game && S.gameType === 'memory' && S.memPhase === 'show') {
+          lookX = (S.gameDir === 0) ? -1 : 1;
+        } else if (S.game || S.battle) {
+          // Still lively in other games/battles
+          if (lookCycle === 2 || lookCycle === 3) lookX = -1;
+          else if (lookCycle === 6 || lookCycle === 7) lookX = 1;
+          else if (lookCycle === 4) lookY = -1;
+          else if (lookCycle === 9) lookY = 1;
+        } else if (S.poop) {
           lookX = (S.poopX > (S.petX || 120)) ? 1 : -1;
           lookY = 1;
         } else if (S.call || S.lightsMissPending) {
-          // Worried glance up-right toward alert
           lookX = 1; lookY = -1;
         } else if (S.hunger <= 1 || S.happy <= 1) {
-          // Glance up at the meters
           lookY = -1;
-          lookX = (lookCycle < 5) ? -1 : 1;
+          lookX = (lookCycle < 6) ? -1 : 1;
         } else {
-          // Natural idle looking around (both pupils together)
-          // Hold center most of the time, then glance
           if (lookCycle === 2 || lookCycle === 3) lookX = -1;
           else if (lookCycle === 6 || lookCycle === 7) lookX = 1;
           if (lookCycle === 4) lookY = -1;
-          if (lookCycle === 8) lookY = 1;
-          // lookCycle 0,1,5,9 = center (looking at player)
+          if (lookCycle === 8 || lookCycle === 9) lookY = 1;
         }
 
-        // Pupils (dark dots) move inside the fixed sockets
-        // Socket is 4x4 at (-6,ey) and (3,ey); center pupil at (-4, ey+1) / (5, ey+1)
-        // lookX/Y shift pupil by 1px within socket bounds
-        px(-4 + lookX, ey + 1 + lookY, INK);
-        px(-4 + lookX, ey + 2 + lookY, INK); // slightly taller pupil
-        px(5 + lookX, ey + 1 + lookY, INK);
-        px(5 + lookX, ey + 2 + lookY, INK);
+        // Single dark pupil dot per eye (reads clearly in sockets)
+        const lx = lookX;
+        const ly = lookY;
+        px(-6 + lx, ey + 1 + ly, INK);
+        px(-5 + lx, ey + 1 + ly, INK);
+        px(5 + lx, ey + 1 + ly, INK);
+        px(6 + lx, ey + 1 + ly, INK);
       }
     }
 
@@ -1080,8 +1396,8 @@ function drawPet(cx, cy, form, f) {
     px(15, -16, INK); px(15, -14, INK); px(15, -12, INK);
     px(15, -9, INK);
   }
-  // Larger Zzz trail when sleeping / yawning
-  if (eyesClosed || S.anim === 'yawn') {
+  // Zzz only when actually sleeping or yawning — never during poop
+  if ((S.sleep || S.anim === 'yawn') && S.anim !== 'poop') {
     const z = Math.floor((f % 48) / 16);
     for (let k = 0; k <= z; k++) {
       const zx = 12 + k * 5;
@@ -1096,23 +1412,22 @@ function drawPet(cx, cy, form, f) {
 
   ctx.restore();
 
-  // Poop pile — classic stacked scoops (hidden during squat anim)
-  if (S.poop && form !== 'egg' && form !== 'dead' && S.anim !== 'poop') {
-    const px0 = S.poopX || 180;
-    const py0 = S.poopY || 145;
+  // Poop piles only on main home — fill the floor as stacks grow (classic)
+  if (S.poop && !S.game && !S.battle && form !== 'egg' && form !== 'dead' && S.anim !== 'poop') {
     const BG2 = '#9bbc0f';
-    // Bottom wide scoop
-    fillCirc(px0, py0 + 1, 5, INK);
-    fillCirc(px0 - 4, py0 + 2, 3, INK);
-    fillCirc(px0 + 4, py0 + 2, 3, INK);
-    // Middle scoop
-    fillCirc(px0 - 1, py0 - 3, 4, INK);
-    // Top tip
-    fillCirc(px0, py0 - 7, 3, INK);
-    // Specular dots so it reads as 3D poop, not a blob
-    px(px0 - 2, py0 - 4, BG2);
-    px(px0 + 1, py0 - 8, BG2);
-    px(px0 - 1, py0 + 1, BG2);
+    const py0 = S.poopY || 145;
+    const spots = (S.poopSpots && S.poopSpots.length) ? S.poopSpots : [S.poopX || 180];
+    const n = Math.max(spots.length, Math.min(4, S.poopCount || 1));
+    for (let s = 0; s < n; s++) {
+      const ox = spots[s] !== undefined ? spots[s] : (50 + s * 45);
+      fillCirc(ox, py0 + 1, 5, INK);
+      fillCirc(ox - 4, py0 + 2, 3, INK);
+      fillCirc(ox + 4, py0 + 2, 3, INK);
+      fillCirc(ox - 1, py0 - 3, 4, INK);
+      fillCirc(ox, py0 - 7, 3, INK);
+      px(ox - 2, py0 - 4, BG2);
+      px(ox + 1, py0 - 8, BG2);
+    }
   }
 }
 
@@ -1156,12 +1471,16 @@ function drawMain() {
   let mood = 'OK';
   if (S.stage === 'dead') mood = 'GONE';
   else if (S.sleep) mood = 'ASLEEP';
+  else if (S.injured && S.sick) mood = 'INJURED';
   else if (S.sick) mood = 'SICK';
-  else if (S.poop) mood = 'DIRTY';
+  else if ((S.poopCount || 0) >= 4) mood = 'TRAPPED';
+  else if ((S.poopCount || 0) >= 2 || S.poop) mood = 'DIRTY';
   else if (S.hunger <= 0) mood = 'STARVING';
   else if (S.hunger <= 1) mood = 'HUNGRY';
-  else if (S.happy <= 0) mood = 'SAD';
-  else if (S.happy >= 3 && S.hunger >= 3) mood = 'HAPPY';
+  else if (S.happy <= 0) mood = 'MISERY';
+  else if (S.happy <= 1) mood = 'SAD';
+  else if (S.happy >= 4 && S.hunger >= 3) mood = 'JOY';
+  else if (S.happy >= 3 && S.hunger >= 2) mood = 'HAPPY';
   else if (S.call) mood = 'CALLING';
   drawText(mood, 4, 37, INK);
 
@@ -1169,7 +1488,7 @@ function drawMain() {
   drawText('WT ' + (S.weight || 0) + 'G', 100, 3, INK);
   drawText('DISC ' + (S.disc || 0) + '%', 100, 14, INK);
   drawText('AGE ' + S.age, 100, 26, INK);
-  drawText('XP ' + (S.battleXP || 0), 100, 37, INK);
+  drawText('XP ' + (S.battleXP || 0) + ' LV' + battleLevel(S.battleXP), 100, 37, INK);
 
   // --- TOP RIGHT: Gen above Friends, then clock, sun/moon ---
   let h12 = S.virtualHour % 12;
@@ -1222,11 +1541,11 @@ function drawMain() {
 
 function nextEvoHint() {
   if (S.stage === 'egg') return 'WAIT TO HATCH';
-  if (S.stage === 'baby') return 'CHILD SOON';
-  if (S.stage === 'child') return S.age >= 1 ? 'READY FOR TEEN' : 'NEED AGE 1';
-  if (S.stage === 'teen') return S.age >= 3 ? 'READY FOR ADULT' : 'NEED AGE 3';
+  if (S.stage === 'baby') return 'CHILD (TIME)';
+  if (S.stage === 'child') return S.age >= 2 ? 'READY FOR TEEN' : ('NEED AGE 2 NOW ' + S.age);
+  if (S.stage === 'teen') return S.age >= 5 ? 'READY FOR ADULT' : ('NEED AGE 5 NOW ' + S.age);
   if (S.stage === 'adult') {
-    if ((S.form === 'adult1' || S.form === 'adult3') && S.disc >= 75 && S.age >= 8) return 'SECRET READY';
+    if ((S.form === 'adult1' || S.form === 'adult3' || S.form === 'adult7' || S.form === 'adult10') && S.disc >= 75 && S.age >= 12) return 'SECRET READY';
     return 'FULLY GROWN';
   }
   if (S.stage === 'dead') return '---';
@@ -1250,63 +1569,89 @@ function drawStatus() {
     S.battle ? 'IN BATTLE' : null
   ].filter(Boolean).join(' ') || 'OK';
   const lines = [
-    'NAME  ' + (NAMES[S.form] || S.form),
-    'STAGE ' + (S.stage || '').toUpperCase() + '  GEN ' + S.generation,
-    'AGE ' + S.age + ' YR   WEIGHT ' + S.weight + ' G',
-    'HUNGER ' + S.hunger + '/4   HAPPY ' + S.happy + '/4',
-    'DISCIPLINE ' + S.disc + '%   D-MISS ' + Math.floor(S.discMiss),
-    'CARE MISS ' + Math.floor(S.careMiss) + '   DEATHS ' + (S.deaths || 0),
-    'FRIENDS ' + ((S.friends && S.friends.length) || 0) + '   CODE ' + (S.myCode || '---'),
+    (NAMES[S.form] || S.form) + ' · ' + formTrait(S.form),
+    (S.stage||'').toUpperCase() + ' GEN' + S.generation + '  POW ' + battlePower(),
+    'AGE ' + S.age + '  WT ' + S.weight + 'G  LV ' + battleLevel(S.battleXP),
+    'HUN ' + S.hunger + '/4  HAP ' + S.happy + '/4  DISC ' + S.disc + '%',
+    'STREAK ' + (S.careStreak || 0) + 'D  FAMILY ' + ((S.petFamily&&S.petFamily.length)||0),
     'BATTLE ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L  XP ' + (S.battleXP||0),
-    'NEXT EVO  ' + nextEvoHint(),
-    'TIME ' + timeStr + '  SLEEP 8PM-8AM',
-    'SOUND ' + (S.sound ? 'ON' : 'OFF') + '  ALERTS ' + (S.notifications ? 'ON' : 'OFF'),
-    'STATE ' + state + ' · ' + flags
+    'NEXT ' + nextEvoHint(),
+    'CODE ' + (S.myCode || '---') + '  FR ' + ((S.friends && S.friends.length)||0),
+    'TIME ' + timeStr + '  8PM-8AM',
+    'PACE REAL-PET  ALERT ' + (S.notifications?'ON':'OFF'),
+    state + (flags && flags !== 'OK' ? ' ' + flags : '')
   ];
-  lines.forEach((l, i) => drawText(l, 4, 4 + i * 14, '#0f380f'));
+  lines.forEach((l, i) => drawText(String(l).slice(0, 38), 4, 3 + i * 16, '#0f380f'));
 }
 
 function drawGame() {
   ctx.fillStyle = '#9bbc0f';
   ctx.fillRect(0, 0, W, H);
+  const INK = '#0f380f';
+
+  // ========== TRAIN XP (timing skill — Digimon training vibe) ==========
   if (S.gameType === 'train') {
-    drawText('TRAINING', 85, 8, '#0f380f');
-    drawText('ROUND ' + S.gRound + '/4  SCORE ' + S.gScore, 50, 22, '#0f380f');
+    drawTextCentered('TRAIN XP', 4, INK);
+    drawTextCentered('PRESS THE LETTER', 16, INK);
+    drawTextCentered(S.gScore + ' OK / R' + S.gRound + '/4', 28, INK);
     drawPet(120, 100, S.form, S.frame);
     if (S.trainPhase === 'go') {
-      drawText('!!! GO !!!', 80, 48, '#0f380f');
-      drawText('PRESS B NOW', 70, 150, '#0f380f');
+      // Always show a concrete letter (never blank)
+      if (S.trainBtn !== 'A' && S.trainBtn !== 'B') S.trainBtn = 'B';
+      const letter = S.trainBtn;
+      drawTextCentered('*** GO ***', 44, INK);
+      drawTextCentered('PRESS ' + letter + ' NOW', 56, INK);
+      drawTextCentered('HURRY!', 150, INK);
     } else {
-      drawText('WAIT...', 95, 48, '#0f380f');
-      drawText('B WHEN GO APPEARS', 50, 150, '#0f380f');
+      drawTextCentered('WAIT FOR IT...', 48, INK);
+      drawTextCentered('DONT PRESS YET', 150, INK);
     }
-    drawText('C = CANCEL', 80, 166, '#0f380f');
-  } else if (S.gameType === 'memory') {
-    drawText('MEMORY', 90, 6, '#0f380f');
-    drawText('R' + S.gRound + ' SCORE ' + S.gScore, 70, 18, '#0f380f');
+    drawTextCentered('C CANCEL', 166, INK);
+    return;
+  }
+
+  // ========== MEMORY (Simon sequence — NOT the same as Look) ==========
+  if (S.gameType === 'memory') {
+    drawTextCentered('MEMORY', 4, INK);
+    drawTextCentered('REPEAT THE ORDER', 16, INK);
+    drawTextCentered('LEN ' + (S.memSeq ? S.memSeq.length : 0) + '  OK ' + S.gScore, 28, INK);
     if (S.memPhase === 'show') {
       const dir = S.memSeq[S.memIdx];
-      drawText(dir === 0 ? '<<  LEFT' : 'RIGHT  >>', 65, 38, '#0f380f');
-      drawText('WATCH ' + (S.memIdx + 1) + '/' + S.memSeq.length, 70, 52, '#0f380f');
-      // Pet leans the shown direction
       S.gameDir = dir;
+      // Big side flash only (sequence teach) — pet stays centered
+      drawTextCentered('WATCH', 42, INK);
+      drawTextCentered((S.memIdx + 1) + ' / ' + S.memSeq.length, 54, INK);
+      if (dir === 0) {
+        drawText('<<<', 16, 90, INK);
+        drawText('LEFT', 16, 102, INK);
+      } else {
+        drawText('>>>', 190, 90, INK);
+        drawText('RIGHT', 180, 102, INK);
+      }
+      drawPet(120, 115, S.form, S.frame);
     } else {
-      drawText('YOUR TURN', 80, 38, '#0f380f');
-      drawText('A=LEFT  B=RIGHT', 55, 52, '#0f380f');
-      drawText('STEP ' + (S.memIdx + 1) + '/' + S.memSeq.length, 70, 64, '#0f380f');
+      // Input: no spoilers, centered pet, player must remember
+      drawTextCentered('YOUR TURN', 42, INK);
+      drawTextCentered('STEP ' + (S.memIdx + 1) + '/' + S.memSeq.length, 54, INK);
+      drawPet(120, 110, S.form, S.frame);
+      drawTextCentered('A LEFT   B RIGHT', 152, INK);
     }
-    drawPet(120, 112, S.form, S.frame);
-    drawText('C = CANCEL', 80, 168, '#0f380f');
-  } else {
-    // LOOK game — big clear prompt of where pet is facing
-    drawText('WHERE IS PET LOOKING?', 30, 8, '#0f380f');
-    drawText('ROUND ' + S.gRound + '/5  SCORE ' + S.gScore, 50, 22, '#0f380f');
-    // Direction banner
-    drawText(S.gameDir === 0 ? '<<' : '>>', S.gameDir === 0 ? 40 : 180, 48, '#0f380f');
-    drawPet(120, 105, S.form, S.frame);
-    drawText('A = LEFT   B = RIGHT', 40, 158, '#0f380f');
-    drawText('C = CANCEL', 80, 170, '#0f380f');
+    drawTextCentered('C CANCEL', 166, INK);
+    return;
   }
+
+  // ========== LOOK (classic Tamagotchi — guess facing, one shot per round) ==========
+  // Completely different: no sequence, no GO timing — just read the pet once
+  drawTextCentered('LOOK', 4, INK);
+  drawTextCentered('WHICH WAY?', 16, INK);
+  drawTextCentered('R' + S.gRound + '/5  SCORE ' + S.gScore, 28, INK);
+  drawPet(120, 100, S.form, S.frame);
+  if (S._lookSettleAt && Date.now() < S._lookSettleAt) {
+    drawTextCentered('WATCH...', 48, INK);
+  } else {
+    drawTextCentered('A LEFT  OR  B RIGHT', 48, INK);
+  }
+  drawTextCentered('C CANCEL', 166, INK);
 }
 
 function render() {
@@ -1356,9 +1701,10 @@ function update() {
   if (S.game && S.gameType === 'train') {
     if (S.trainPhase === 'wait' && now >= (S.trainUntil || 0)) {
       S.trainPhase = 'go';
-      S.trainUntil = now + 900; // reaction window
-      toast('GO! Press B');
-      beep(800, 0.06);
+      S.trainBtn = (Math.random() < 0.5) ? 'A' : 'B';
+      S.trainUntil = now + 750;
+      toast('PRESS ' + S.trainBtn + '!');
+      beep(880, 0.06);
     } else if (S.trainPhase === 'go' && now >= (S.trainUntil || 0)) {
       // Too slow
       S.playResult = 'sad';
@@ -1430,7 +1776,7 @@ function update() {
       S.lightsMissPending = true;
       S.sleepStart = now;
       S.call = true; // attention icon for "turn lights off"
-      careNotify('lights', 'PocketPal is sleepy. Turn the lights off.');
+      careNotify('lights', 'Needs LIGHTS OUT — turn lights OFF for sleep!');
       S.anim = 'yawn';
       S.animTimer = now + 1600;
       toast('Getting sleepy... turn lights OFF');
@@ -1514,7 +1860,7 @@ function update() {
         S.hunger--;
         if (S.hunger === 0) {
           S.call = true; S._falseCall = false;
-          careNotify('hunger', 'Your PocketPal is hungry.');
+          careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!');
           S.anim = 'call'; S.animTimer = now + 1200;
         }
       } else {
@@ -1524,7 +1870,7 @@ function update() {
         S.anim = 'call'; S.animTimer = now + 1200;
         if (Math.random() < 0.22) {
           S.sick = true; S.sickSince = now;
-          careNotify('sick', 'PocketPal is sick and needs medicine.');
+          careNotify('sick', 'Needs MEDICINE — open PocketPal and heal me!');
           S.anim = 'sick';
           S.animTimer = now + 2000;
           melSick();
@@ -1540,7 +1886,7 @@ function update() {
         S.happy--;
         if (S.happy === 0) {
           S.call = true; S._falseCall = false;
-          careNotify('happy', 'Your PocketPal wants attention.');
+          careNotify('happy', 'Needs PLAY — open PocketPal and play with me!');
           S.anim = 'call'; S.animTimer = now + 1200;
         }
       } else {
@@ -1559,6 +1905,7 @@ function update() {
       if (S.hunger >= 2 && S.happy >= 1 && !S.poop && Math.random() < 0.15) {
         S.sick = false;
         S.sickSince = 0;
+        S.injured = false;
         S.anim = 'happy';
         S.animTimer = now + 1000;
         toast('Feeling better on its own');
@@ -1570,40 +1917,69 @@ function update() {
     }
 
     // Post-wake delayed poop (if due overnight)
-    if (S._wakePoopAt && now >= S._wakePoopAt && !S.poop && S.anim !== 'poop') {
+    if (S._wakePoopAt && now >= S._wakePoopAt && (S.poopCount || 0) < 4 && S.anim !== 'poop') {
       S._wakePoopAt = 0;
       S.poopX = Math.round(S.petX || 120) + 16;
       S.poopY = 145;
-      S.anim = 'poop';
-      S.animTimer = now + 1100;
-      S._pendingPoop = true;
-      careNotify('poop', 'PocketPal made a mess.');
-      toast('Needs cleaning!');
-      melPoop();
       S.lastP = now;
       S.poopSince = now;
+      if (S.game || S.battle) {
+        S.poop = true;
+        S.poopCount = Math.min(4, (S.poopCount || 0) + 1);
+        careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
+      } else {
+        S.anim = 'poop';
+        S.animTimer = now + 1100;
+        S._pendingPoop = true;
+        careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
+        toast('Needs cleaning!');
+        melPoop();
+      }
       save();
     }
 
     // Poop — squat animation first, then pile appears
-    if (now - S.lastP > 5.5 * 60000 / sp && !S.poop && S.anim !== 'poop') {
+    if (now - S.lastP > 5.5 * 60000 / sp && (S.poopCount || 0) < 4 && S.anim !== 'poop') {
       S.poopX = Math.round(S.petX || 120) + 16;
       S.poopY = 145;
-      S.anim = 'poop';
-      S.animTimer = now + 1100;
-      S._pendingPoop = true;
-      careNotify('poop', 'PocketPal made a mess.');
-      toast('Needs cleaning!');
-      melPoop();
       S.lastP = now;
       S.poopSince = now;
-      beep(200, 0.08);
+      if (S.game || S.battle) {
+        S.poop = true;
+        S.poopCount = Math.min(4, (S.poopCount || 0) + 1);
+        if (!S.poopSpots) S.poopSpots = [];
+        S.poopSpots.push(Math.round(S.petX || 120) + 16);
+        careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
+      } else {
+        S.anim = 'poop';
+        S.animTimer = now + 1100;
+        S._pendingPoop = true;
+        careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
+        toast('Needs cleaning!');
+        melPoop();
+        beep(200, 0.08);
+      }
       save();
     }
-    // Leaving poop too long = care mistake (classic dirty neglect)
-    if (S.poop && S.poopSince && now - S.poopSince > 8 * 60000 / sp) {
-      S.careMiss += d.care;
-      S.poopSince = now; // don't spam every frame
+    // Filth escalation (classic: piles fill screen → misery → sick → death risk)
+    if (S.poop && S.poopSince && now - S.poopSince > 6 * 60000 / sp) {
+      const stacks = Math.max(1, S.poopCount || 1);
+      S.careMiss += d.care * stacks;
+      if (S.happy > 0) S.happy = Math.max(0, S.happy - 1);
+      // Screen full of poop (4) — pet trapped, gets sick
+      if (stacks >= 4 && !S.sick && Math.random() < 0.35) {
+        S.sick = true;
+        S.sickSince = now;
+        S.call = true;
+        careNotify('sick', 'Needs MEDICINE — too filthy!');
+        toast('Sick from the mess!');
+        melSick();
+      } else if (stacks >= 3) {
+        toast('Filthy! (' + stacks + '/4 piles)');
+      } else {
+        toast(stacks > 1 ? 'Messy! (' + stacks + ' piles)' : 'Still dirty!');
+      }
+      S.poopSince = now;
       S.call = true;
       save();
     }
@@ -1614,11 +1990,12 @@ function update() {
     const disc = S.disc || 0;
     if (disc < 100 &&
         !S.call && !S.poop && !S.sick && !S.lightsMissPending &&
-        S.hunger > 1 && S.happy > 1 &&
         S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep &&
         (now - (S.lastFalseCall || 0)) > fcCooldown / Math.max(0.5, (DIFF[S.difficulty]||DIFF.realtime).timeScale || 0.15)) {
-      // Lower chance as discipline rises
-      const chance = disc >= 80 ? 0.000008 : disc >= 50 ? 0.000015 : 0.000025;
+      // Unhappy pets false-call more; disc does NOT passively drain (classic scold-based)
+      let chance = disc >= 80 ? 0.000008 : disc >= 50 ? 0.000015 : 0.000025;
+      if (S.happy <= 1) chance *= 2.5;
+      if (S.hunger <= 1) chance *= 0.5; // real need prefers hunger call
       if (Math.random() < chance) {
         S.call = true;
         S._falseCall = true;
@@ -1627,13 +2004,55 @@ function update() {
         S.animTimer = now + 1500;
         toast('Calling... (try Discipline)');
         melCall();
-        careNotify('discipline', 'PocketPal wants attention — try Discipline.');
+        careNotify('discipline', 'False call — open PocketPal and use Discipline!');
+        save();
+      }
+    }
+  }
+
+
+  // Daytime boredom / sleepiness (not a full night sleep)
+  if (!S.sleep && !S.game && !S.battle && !isNightTime() && S.stage !== 'egg' && S.stage !== 'dead') {
+    // Bored (happy 0-1): yawn + call for attention/play; lights optional comfort
+    if (S.happy <= 1 && !S.call && Math.random() < 0.00002) {
+      S.anim = 'yawn';
+      S.animTimer = now + 1200;
+      S.call = true;
+      careNotify('happy', 'Needs PLAY — bored and restless!');
+      toast('Bored... wants to play');
+    }
+    // Babies get sleepy in long daytime stretches
+    if ((S.stage === 'baby' || S.stage === 'child') && S.happy >= 2 && S.hunger >= 2 &&
+        (now - (S.lastNapOffer || 0)) > 25 * 60000 && Math.random() < 0.000015) {
+      S.lastNapOffer = now;
+      S.call = true;
+      S.lightsMissPending = false;
+      careNotify('lights', 'Sleepy baby — lights OFF for a nap?');
+      toast('Getting sleepy...');
+      S.anim = 'yawn';
+      S.animTimer = now + 1000;
+    }
+  }
+
+  // Mid-day growth ticks (visible change every ~1 real hour while awake)
+  if (!S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
+    const gEvery = 90 * 60000; // ~90 min real time per growth step
+    if (!S.lastGrowthAt) S.lastGrowthAt = now;
+    if (now - S.lastGrowthAt > gEvery) {
+      S.lastGrowthAt = now;
+      if ((S.growthPhase || 0) < 3) {
+        S.growthPhase = (S.growthPhase || 0) + 1;
+        S.anim = 'grow';
+        S.animTimer = now + 1000;
+        toast('Growing... (' + S.growthPhase + '/3)');
+        beep(500, 0.06);
         save();
       }
     }
   }
 
   // Backup awake-time age (secondary to morning wake-up age).
+
   // Guarded by lastAgeDay so we never age twice on the same calendar day.
   if (!S.sleep && now - S.lastAge > 20 * 3600000 / sp) {
     const dayKey = new Date(now).toDateString();
@@ -1656,7 +2075,8 @@ function update() {
   if (now < (S.loadGraceUntil || 0)) {
     // grace after load/offline — no death
   } else if ((S.hunger + S.happy === 0 && S.careMiss > 14 * d.care) ||
-      (S.sick && S.hunger === 0 && S.careMiss > 16 * d.care)) {
+      (S.sick && S.hunger === 0 && S.careMiss > 16 * d.care) ||
+      ((S.poopCount || 0) >= 4 && S.sick && S.happy === 0 && S.careMiss > 12 * d.care)) {
     die();
   } else if (S.stage === 'adult' && S.age >= 12) {
     // Rising chance with age (classic: long adult life → natural return)
@@ -1673,15 +2093,16 @@ function checkEvo() {
   const t = Date.now() - (S.born || Date.now());
   // Classic-style timing (accelerated for web play)
   // Real Gen1: baby ~65 min, child ~1 day, teen ~1-2 days — we scale for playable sessions
-  if (S.stage === 'baby' && t > 1.7 * 60000) {
+  // Real-pet pace (web-friendly): longer stages so growth phases matter
+  // Baby ~4 min life, child needs age 2, teen needs age 5, secret later
+  if (S.stage === 'baby' && t > 4 * 60000) {
     evo('child', 'child');
-  } else if (S.stage === 'child' && S.age >= 1) {
-    // Teen branch: care quality (classic: good care → good teen)
+  } else if (S.stage === 'child' && S.age >= 2) {
     const good = (S.careMiss - S.inheritedBonus) < 3;
     evo('teen', good ? 'teenGood' : 'teenBad');
-  } else if (S.stage === 'teen' && S.age >= 3) {
+  } else if (S.stage === 'teen' && S.age >= 5) {
     evoAdult();
-  } else if (S.stage === 'adult' && (S.form === 'adult1' || S.form === 'adult3') && S.disc >= 75 && S.age >= 8) {
+  } else if (S.stage === 'adult' && (S.form === 'adult1' || S.form === 'adult3' || S.form === 'adult7' || S.form === 'adult10') && S.disc >= 75 && S.age >= 12) {
     evo('adult', 'secret');
     toast('Secret form unlocked: Elder!');
   }
@@ -1689,13 +2110,15 @@ function checkEvo() {
 function evo(st, fm) {
   S.stage = st;
   S.form = fm;
-  // Carry some care history but decay (classic keeps cumulative influence)
+  S.growthPhase = 0;
+  S.lastGrowthAt = Date.now();
   S.careMiss = Math.floor(S.careMiss * 0.45);
   S.anim = 'evo';
   S.animTimer = Date.now() + 2200;
   S.playResult = null;
   melEvolve();
-  toast('Evolved → ' + (NAMES[fm] || fm) + '!');
+  toast('Evolved → ' + (NAMES[fm] || fm) + ' · ' + formTrait(fm));
+  if (st === 'adult' || st === 'teen') recordFamilyMember('evolved');
   save();
 }
 function evoAdult() {
@@ -1705,13 +2128,15 @@ function evoAdult() {
   const d = S.discMiss;
   const overweight = S.weight > 28;
   let f = 'adult6'; // worst default (neglected)
-  if (c === 0 && d === 0 && S.disc >= 90 && S.weight >= 8 && S.weight <= 20) f = 'adult7'; // rare perfect → Nova
-  else if (c <= 1 && d === 0 && S.disc >= 60 && !overweight) f = 'adult1'; // perfect → Momo
-  else if (c <= 2 && d <= 1 && !overweight) f = 'adult2';             // very good → Kiko
-  else if (c <= 3 && S.disc >= 70) f = 'adult8';                      // disciplined → Bibi
-  else if (c <= 3) f = 'adult3';                                       // good → Taro
-  else if (c <= 5 && d <= 2) f = 'adult4';                             // average → Poko
-  else if (c <= 8 || overweight) f = 'adult5';                         // poor / heavy → Nori
+  if (c === 0 && d === 0 && S.disc >= 90 && S.weight >= 8 && S.weight <= 20) f = 'adult7'; // Nova
+  else if (c <= 1 && d === 0 && S.disc >= 60 && !overweight) f = 'adult1'; // Momo
+  else if (c <= 2 && (S.battleWins || 0) >= 8 && !overweight) f = 'adult10'; // Bolt — battle path
+  else if (c <= 2 && d <= 1 && !overweight) f = 'adult2'; // Kiko
+  else if (c <= 3 && S.disc >= 70) f = 'adult8'; // Bibi
+  else if (c <= 3 && (S.battleXP || 0) >= 20) f = 'adult9'; // Rin — trained athlete
+  else if (c <= 3) f = 'adult3'; // Taro
+  else if (c <= 5 && d <= 2) f = 'adult4'; // Poko
+  else if (c <= 8 || overweight) f = 'adult5'; // Nori
   // else adult6 Zuzu
   evo('adult', f);
 }
@@ -1719,6 +2144,7 @@ function die() {
   if (S.stage === 'dead') return;
   S.call = false;
   S.deaths++;
+  recordFamilyMember('returned');
   S.anim = 'death';
   S.animTimer = Date.now() + 2500;
   S.stage = 'dead'; // stop update loop immediately
@@ -1747,7 +2173,7 @@ function feed(type) {
       return;
     }
     S.hunger = Math.min(4, S.hunger + 1);
-    S.weight += 1;
+    if (S.weight < 50) S.weight += 1;
     S.anim = 'eat';
     S.animTimer = Date.now() + 1400;
     beep(350, 0.06);
@@ -1789,32 +2215,56 @@ function feed(type) {
   S._falseCall = false;
   save();
 }
+function fairBit(prev) {
+  // True coin flip; only break long same-runs (not forced alternating)
+  let v = Math.random() < 0.5 ? 0 : 1;
+  if (prev !== undefined && prev !== null && v === prev && Math.random() < 0.35) v = 1 - prev;
+  return v;
+}
+function fairSeq(len) {
+  // Build mixed sequence — not all 0s or alternating 010101
+  const out = [];
+  for (let i = 0; i < len; i++) out.push(fairBit(out[i - 1]));
+  // Ensure not monochrome
+  if (out.every(x => x === out[0])) out[len - 1] = 1 - out[0];
+  return out;
+}
 function startLookGame() {
+  S.battle = false; S.bat = null;
   S.game = true;
   S.gameType = 'look';
+  S.sleep = false; S.anim = null;
   S.gRound = 1;
   S.gScore = 0;
-  S.gameDir = Math.random() < 0.5 ? 0 : 1;
+  S.gameDir = fairBit(); // TRUE direction (eyes)
+  S._lastLookDir = S.gameDir;
+  // ~40% of rounds: body leans OPPOSITE (confuse player — trust the eyes)
+  S._lookBodyDir = S.gameDir; // classic: body and eyes agree
+  S._lookSettleAt = Date.now() + 500;
   S.menu = null;
   S.anim = null;
   S.playResult = null;
+  S.sleep = false;
+  S._lookReveal = 0;
   beep(550, 0.07);
-  toast('Which way is the pet looking?');
+  toast('LOOK: which way is the pet facing?');
 }
 function startMemoryGame() {
+  S.battle = false; S.bat = null;
   S.game = true;
   S.gameType = 'memory';
   S.gRound = 1;
   S.gScore = 0;
-  S.memSeq = [Math.random() < 0.5 ? 0 : 1];
-  S.memIdx = 0;           // index currently shown / expected
+  S.memSeq = fairSeq(3);
+  S.memIdx = 0;
   S.memPhase = 'show';
-  S.memTimer = Date.now() + 900;  // show first direction
+  S.memTimer = Date.now() + 800;
   S.menu = null;
   S.anim = null;
   S.playResult = null;
+  S.sleep = false;
   beep(550, 0.07);
-  toast('Watch the sequence...');
+  toast('MEMORY: watch the order, then repeat');
 }
 function play() {
   if (S.stage === 'egg' || S.stage === 'dead' || S.sleep || S.sick) {
@@ -1836,13 +2286,15 @@ function endPlay(won) {
     S.anim = 'dance';
     S.playResult = 'happy';
     S.animTimer = Date.now() + 2000;
-    toast('Won! +Happy');
+    spawnFx('heart', S.petX || 120, 70, 5);
+    spawnFx('star', S.petX || 120, 90, 3);
+    toast('Won! +Happy  +closer bond');
     melWin();
   } else {
     S.anim = 'sulk';
     S.playResult = 'sad';
     S.animTimer = Date.now() + 1800;
-    toast('Lost...');
+    toast('Lost... try again');
     melLose();
   }
   S.call = false;
@@ -1869,7 +2321,11 @@ function resolve(choice) {
           return;
         }
         // Add one more step and replay full sequence
-        S.memSeq.push(Math.random() < 0.5 ? 0 : 1);
+        S.memSeq.push(fairBit(S.memSeq[S.memSeq.length - 1]));
+        if (S.memSeq.length >= 3) {
+          const t = S.memSeq.slice(-3);
+          if (t[0]===t[1] && t[1]===t[2]) S.memSeq[S.memSeq.length-1] = 1 - t[2];
+        }
         S.memIdx = 0;
         S.memPhase = 'show';
         S.memTimer = Date.now() + 700;
@@ -1896,12 +2352,13 @@ function resolve(choice) {
   }
   S.gRound++;
   if (S.gRound > 5) {
-    endPlay(S.gScore >= 3);
+    endPlay(S.gScore >= 4);
   } else {
     // Brief pause then new direction
     setTimeout(() => {
       if (!S.game || S.gameType !== 'look') return;
-      S.gameDir = Math.random() < 0.5 ? 0 : 1;
+      S.gameDir = fairBit(S._lastLookDir);
+      S._lastLookDir = S.gameDir;
       S.playResult = null;
     }, 500);
   }
@@ -1909,14 +2366,19 @@ function resolve(choice) {
 function clean() {
   if (S.paused) { toast('Paused'); return; }
   if (S.sleep) { toast('Sleeping...'); return; }
-  if (S.poop) {
+  if (S.poop || (S.poopCount || 0) > 0) {
     S.poop = false;
+    S.poopCount = 0;
+    S.poopSpots = [];
     S.poopSince = 0;
     S.call = false;
     S._falseCall = false;
-    S.anim = 'clean';
+    S.anim = 'happy';
     S.animTimer = Date.now() + 1200;
-    beep(260, 0.06);
+    S.playResult = 'happy';
+    spawnFx('heart', S.petX || 120, 70, 5);
+    spawnFx('heart', (S.petX || 120) - 8, 85, 2);
+    beep(260, 0.06); beep(520, 0.05);
     toast('Cleaned!');
     if (Math.random() < 0.15) S.disc = Math.min(100, S.disc + 5);
     save();
@@ -1925,12 +2387,14 @@ function clean() {
 function med() {
   if (S.paused) { toast('Paused'); return; }
   if (S.sick) {
+    const wasInj = S.injured;
     S.sick = false;
     S.sickSince = 0;
+    S.injured = false;
     S.anim = 'happy';
     S.animTimer = Date.now() + 1000;
     beep(390, 0.09);
-    toast('Feeling better');
+    toast(wasInj ? 'Injury healed!' : 'Feeling better');
     save();
   } else {
     S.anim = 'refuse';
@@ -1974,10 +2438,19 @@ function light() {
       toast('Lights out... zzz');
       beep(220, 0.08);
     } else {
-      // Daytime: dark room only — never sleep at 2pm
+      // Daytime: room goes dark. Babies may nap; older pets stay awake.
       S.lightsMissPending = false;
-      toast('Lights off (day — still awake)');
-      beep(280, 0.05);
+      if ((S.stage === 'baby' || S.stage === 'child') && Math.random() < 0.45) {
+        S.sleep = true;
+        S.anim = 'sleep';
+        S.animTimer = Date.now() + 999999;
+        S._dayNap = true;
+        toast('Baby nap... zzz');
+        beep(220, 0.08);
+      } else {
+        toast('Lights off (day — still awake)');
+        beep(280, 0.05);
+      }
     }
   } else {
     if (S.sleep && !isNightTime()) {
@@ -1987,10 +2460,12 @@ function light() {
       toast('Lights on • Good morning!');
       beep(480, 0.07);
     } else if (S.sleep) {
+      const wasNap = S._dayNap;
       S.sleep = false;
+      S._dayNap = false;
       S.anim = 'wake';
       S.animTimer = Date.now() + 1000;
-      toast('Woken early');
+      toast(wasNap ? 'Nap over' : 'Woken early');
       beep(400, 0.05);
     } else {
       toast('Lights on');
@@ -2002,6 +2477,11 @@ function light() {
 
 function togglePause() {
   if (S.stage === 'egg' || S.stage === 'dead') return;
+  if (S.game || S.battle) {
+    toast(S.battle ? 'Finish battle first' : 'Finish mini-game first');
+    beep(160, 0.06);
+    return;
+  }
   const now = Date.now();
 
   S.paused = !S.paused;
@@ -2084,14 +2564,23 @@ function friendFromCode(code) {
   let seed = 0;
   for (let i = 0; i < code.length; i++) seed = (seed * 31 + CODE_CHARS.indexOf(code[i])) >>> 0;
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 0x100000000; };
-  const forms = ['adult1','adult2','adult3','adult4','adult5'];
-  const names = ['Momo','Kiko','Taro','Poko','Nori','Zuzu','Lumi','Pip'];
+  const forms = ['teenGood','teenBad','adult1','adult2','adult3','adult4','adult5','adult6','adult7','adult8','adult9','adult10'];
+  const names = ['Momo','Kiko','Taro','Poko','Nori','Zuzu','Lumi','Grub','Nova','Bibi','Rin','Bolt'];
+  const form = forms[Math.floor(rnd() * forms.length)];
+  const stage = form.startsWith('teen') ? 'teen' : 'adult';
   return {
     code,
     name: names[Math.floor(rnd() * names.length)] + '-' + code.slice(0, 2),
-    form: forms[Math.floor(rnd() * forms.length)],
-    age: 4 + Math.floor(rnd() * 6),
-    quality: 0.25 + rnd() * 0.7 // 0.25–0.95, never pure random junk
+    form,
+    stage,
+    age: stage === 'teen' ? 3 + Math.floor(rnd() * 3) : 5 + Math.floor(rnd() * 8),
+    xp: Math.floor(rnd() * 40),
+    wins: Math.floor(rnd() * 15),
+    losses: Math.floor(rnd() * 10),
+    wt: 10 + Math.floor(rnd() * 12),
+    disc: Math.floor(30 + rnd() * 70),
+    growth: Math.floor(rnd() * 4),
+    quality: 0.25 + rnd() * 0.7
   };
 }
 function generateCode() {
@@ -2121,18 +2610,24 @@ function battleMaxHP(st, xp) {
   return Math.min(14, base + Math.floor((xp || 0) / 8));
 }
 function battlePower() {
-  // Derived from care — not a separate RPG sheet
+  // Care-derived power (Tamagotchi/Digimon hybrid — not a full RPG sheet)
+  // Stage + discipline + training XP matter most; meters + weight fine-tune.
   let p = stageRank(S.stage);
-  p += Math.floor((S.disc || 0) / 25);          // discipline
-  p += Math.floor((S.battleXP || 0) / 6);       // training / wins
+  p += Math.floor((S.disc || 0) / 20);          // disc every 20%
+  p += Math.floor((S.battleXP || 0) / 5);       // train/battle XP
+  p += Math.min(2, Math.floor((S.battleWins || 0) / 8)); // win legacy
   if (S.happy >= 3) p += 1;
   if (S.happy <= 1) p -= 1;
   if (S.hunger <= 0) p -= 2;
   if (S.hunger >= 3) p += 1;
   if (S.weight > 28) p -= 1;
+  if (S.weight >= 10 && S.weight <= 20) p += 1; // ideal band
   if (S.weight < 8) p -= 1;
   if ((S.careMiss || 0) > 6) p -= 1;
-  return Math.max(1, p);
+  // Form flavor (tiny)
+  if (S.form === 'adult10' || S.form === 'adult7') p += 1; // Bolt / Nova
+  if (S.form === 'adult6' || S.form === 'teenBad') p -= 1; // neglected
+  return Math.max(1, Math.min(18, p));
 }
 function canBattle() {
   if (S.stage === 'egg' || S.stage === 'dead') return 'No pet';
@@ -2145,30 +2640,87 @@ function canBattle() {
   return null;
 }
 function makeEnemy(kind, friend) {
-  // kind: 'train' | 'friend'
-  const myR = stageRank(S.stage);
-  let st = S.stage;
-  let name = 'WildPal';
-  let power = battlePower();
-  let xp = S.battleXP || 0;
-  if (kind === 'train') {
-    // Slightly weaker/stronger CPU for practice
-    const roll = Math.random();
-    if (roll < 0.35 && myR > 2) st = 'teen';
-    else if (roll > 0.75) st = S.stage === 'teen' ? 'adult' : S.stage;
-    name = ['Rookie', 'Sparky', 'Dummy', 'Challenger'][Math.floor(Math.random() * 4)];
-    power = Math.max(1, battlePower() + (Math.random() < 0.5 ? -1 : 0));
-    xp = Math.max(0, (S.battleXP || 0) + Math.floor(Math.random() * 4) - 1);
-  } else if (friend) {
-    name = friend.name || 'Friend';
-    // Estimate stage from friend age
+  // Player-like opponents using real PocketPal names/forms + visible stats
+  const ROSTER = [
+    // Fresh teens (many options — avoid always Grub)
+    { name: 'Lumi', form: 'teenGood', stage: 'teen', age: 2, xp: 2, wins: 0, losses: 1, wt: 12, disc: 40, tier: 'fresh' },
+    { name: 'Spark', form: 'teenGood', stage: 'teen', age: 1, xp: 3, wins: 1, losses: 1, wt: 11, disc: 35, tier: 'fresh' },
+    { name: 'Mint', form: 'teenGood', stage: 'teen', age: 2, xp: 4, wins: 2, losses: 0, wt: 10, disc: 50, tier: 'fresh' },
+    { name: 'Grub', form: 'teenBad', stage: 'teen', age: 2, xp: 1, wins: 0, losses: 3, wt: 16, disc: 15, tier: 'fresh' },
+    { name: 'Dust', form: 'teenBad', stage: 'teen', age: 3, xp: 2, wins: 1, losses: 4, wt: 15, disc: 20, tier: 'fresh' },
+    { name: 'Pebble', form: 'teenBad', stage: 'teen', age: 1, xp: 0, wins: 0, losses: 2, wt: 14, disc: 10, tier: 'fresh' },
+    // Mid
+    { name: 'Kiko', form: 'adult2', stage: 'adult', age: 5, xp: 8, wins: 4, losses: 3, wt: 14, disc: 55, tier: 'mid' },
+    { name: 'Taro', form: 'adult3', stage: 'adult', age: 6, xp: 10, wins: 5, losses: 4, wt: 15, disc: 50, tier: 'mid' },
+    // Hardened
+    { name: 'Momo', form: 'adult1', stage: 'adult', age: 9, xp: 22, wins: 14, losses: 3, wt: 13, disc: 85, tier: 'hard' },
+    { name: 'Nova', form: 'adult7', stage: 'adult', age: 11, xp: 30, wins: 18, losses: 2, wt: 12, disc: 95, tier: 'hard' },
+    { name: 'Bibi', form: 'adult8', stage: 'adult', age: 8, xp: 16, wins: 9, losses: 5, wt: 14, disc: 80, tier: 'hard' },
+    { name: 'Rin', form: 'adult9', stage: 'adult', age: 7, xp: 18, wins: 10, losses: 4, wt: 12, disc: 70, tier: 'mid' },
+    { name: 'Bolt', form: 'adult10', stage: 'adult', age: 10, xp: 28, wins: 20, losses: 3, wt: 13, disc: 88, tier: 'hard' },
+    // Same-stage peers
+    { name: 'Pip', form: 'child', stage: 'child', age: 1, xp: 0, wins: 0, losses: 0, wt: 8, disc: 20, tier: 'fresh' },
+    { name: 'Nib', form: 'baby', stage: 'baby', age: 0, xp: 0, wins: 0, losses: 0, wt: 5, disc: 0, tier: 'fresh' }
+  ];
+  let pick;
+  if (kind === 'friend' && friend) {
     const a = friend.age || 1;
-    st = a >= 3 ? 'adult' : a >= 1 ? 'teen' : 'child';
-    power = stageRank(st) + Math.floor((friend.quality || 0.5) * 3);
-    xp = Math.floor((friend.quality || 0.5) * 10);
+    const st = a >= 3 ? 'adult' : a >= 1 ? 'teen' : 'child';
+    const form = st === 'adult' ? 'adult2' : st === 'teen' ? 'teenGood' : 'child';
+    pick = {
+      name: friend.name || 'Friend',
+      form: friend.form || form,
+      stage: friend.stage || st,
+      age: friend.age != null ? friend.age : a,
+      xp: friend.xp != null ? friend.xp : Math.floor((friend.quality || 0.5) * 20),
+      wins: friend.wins != null ? friend.wins : Math.floor((friend.quality || 0.5) * 10),
+      losses: friend.losses != null ? friend.losses : Math.floor((1 - (friend.quality || 0.5)) * 6),
+      wt: friend.wt != null ? friend.wt : 10 + Math.floor((friend.quality || 0.5) * 8),
+      disc: friend.disc != null ? friend.disc : Math.floor((friend.quality || 0.5) * 90),
+      tier: friend.tier || ((friend.quality || 0) > 0.7 ? 'hard' : 'mid'),
+      growth: friend.growth != null ? friend.growth : 2
+    };
+  } else {
+    // Training: rotate a MIX of weak → strong (never always Grub)
+    const mySt = S.stage === 'adult' || S.stage === 'secret' ? 'adult' : (S.stage === 'teen' ? 'teen' : S.stage);
+    let pool = ROSTER.slice();
+    // Weight pool: more fresh/mid than hard
+    const weighted = [];
+    pool.forEach(r => {
+      // Prefer same stage but allow others for variety
+      const same = r.stage === mySt || (mySt === 'teen' && r.stage === 'teen');
+      const n = r.tier === 'fresh' ? (same ? 5 : 2) : r.tier === 'mid' ? (same ? 3 : 2) : (same ? 1 : 1);
+      for (let i = 0; i < n; i++) weighted.push(r);
+    });
+    // Exclude last 2 fought names
+    if (!S._recentEnemies) S._recentEnemies = [];
+    let filtered = weighted.filter(r => S._recentEnemies.indexOf(r.name) < 0);
+    if (filtered.length < 3) filtered = weighted;
+    pick = filtered[Math.floor(Math.random() * filtered.length)] || ROSTER[0];
+    S._recentEnemies.push(pick.name);
+    if (S._recentEnemies.length > 3) S._recentEnemies.shift();
   }
-  const hp = battleMaxHP(st === 'adult' && (friend && friend.quality > 0.85) ? 'secret' : st, xp);
-  return { name, stage: st, power, hp, maxHP: hp };
+  // Fair stats from roster — DO NOT inflate HP to match player XP (that made everyone impossible)
+  let xp = pick.xp || 0;
+  const myLv = battleLevel(S.battleXP);
+  // Mild bump only for hard tier vs high-level players
+  if (kind !== 'friend' && pick.tier === 'hard' && myLv > 10) {
+    xp = Math.min(xp + Math.floor(myLv * 0.8), xp + 15);
+  }
+  let power = Math.max(1, stageRank(pick.stage) + Math.floor((pick.disc || 0) / 35) + Math.floor(xp / 10));
+  let hp = 3 + stageRank(pick.stage) + Math.floor(xp / 8);
+  if (pick.tier === 'fresh') hp = Math.max(3, Math.min(hp, 6));
+  if (pick.tier === 'mid') hp = Math.max(5, Math.min(hp, 9));
+  if (pick.tier === 'hard') hp = Math.max(7, Math.min(hp, 12));
+  // Player high level still wins more often vs fresh
+  if (pick.tier === 'fresh' && myLv >= 8) { power = Math.max(1, power - 1); hp = Math.max(3, hp - 1); }
+  return {
+    name: pick.name, stage: pick.stage, form: pick.form, power, hp, maxHP: hp,
+    age: pick.age, xp, wins: pick.wins || 0, losses: pick.losses || 0,
+    wt: pick.wt || 10, disc: pick.disc || 0, tier: pick.tier || 'mid',
+    level: battleLevel(xp),
+    growth: pick.growth != null ? pick.growth : Math.min(3, Math.floor(Math.random() * 4))
+  };
 }
 function startBattle(kind, friend) {
   const block = canBattle();
@@ -2179,9 +2731,12 @@ function startBattle(kind, friend) {
   S.battle = true;
   S.menu = null;
   S.game = false;
+  S.gameType = null;
+  S.sleep = false;
+  S.anim = null;
   S.bat = {
     kind: kind,
-    phase: 'intro',       // intro | order | charge | clash | enemy | result | end
+    phase: 'intro',
     phaseUntil: Date.now() + 1400,
     round: 1,
     maxRounds: 5,
@@ -2193,28 +2748,45 @@ function startBattle(kind, friend) {
     enPower: en.power,
     enemyName: en.name,
     enemyStage: en.stage,
-    order: null,          // 'attack' | 'guard' | null
-    charge: 0,            // 0-10 from mashing B
-    log: 'READY!',
+    enemyForm: en.form,
+    enemyAge: en.age || 0,
+    enemyXP: en.xp || 0,
+    enemyWins: en.wins || 0,
+    enemyLosses: en.losses || 0,
+    enemyWt: en.wt || 10,
+    enemyDisc: en.disc || 0,
+    enemyTier: en.tier || 'mid',
+    enemyLevel: en.level || battleLevel(en.xp),
+    enemyGrowth: en.growth != null ? en.growth : 0,
+    order: null,
+    charge: 0,
+    myStamina: 8,        // Digimon-inspired stamina for power attacks
+    myStaminaMax: 10,
+    enStamina: 10,
+    log: 'YOUR PET VS RIVAL!',
     pendingDmg: 0,
     won: null
   };
   S.anim = 'call';
   S.animTimer = Date.now() + 1000;
   beep(500, 0.08); beep(700, 0.1);
-  toast('Battle! A=Guard  B=Attack');
+  toast('Battle! You vs Rival — A Guard B Attack');
 }
 function battleOrder(choice) {
-  // choice: 'guard' | 'attack'
   if (!S.battle || !S.bat) return;
   if (S.bat.phase !== 'order' && S.bat.phase !== 'charge') return;
+  if (choice === 'attack' && (S.bat.myStamina || 0) <= 0) {
+    toast('No stamina! Guard to recover');
+    beep(140, 0.06);
+    return;
+  }
   S.bat.order = choice;
   if (choice === 'attack') {
     S.bat.charge = Math.min(10, (S.bat.charge || 0) + 1);
     beep(600 + S.bat.charge * 40, 0.03);
   } else {
     beep(320, 0.05);
-    toast('Guard!');
+    if (S.bat.phase === 'order') toast('Guard (recover STA)');
   }
 }
 function advanceBattle(now) {
@@ -2234,28 +2806,37 @@ function advanceBattle(now) {
     // Default attack if no order (autonomy)
     if (!B.order) B.order = 'attack';
     B.phase = 'charge';
-    B.phaseUntil = now + 1200;
-    B.log = B.order === 'guard' ? 'GUARDING...' : 'CHARGING! Mash B';
+    B.phaseUntil = now + (B.order === 'guard' ? 900 : 2000);
+    B.log = B.order === 'guard' ? 'GUARDING...' : 'MASH B! POWER UP';
     return;
   }
   if (B.phase === 'charge') {
-    // Resolve player action vs enemy (enemy picks attack/guard by "AI")
     const enGuard = Math.random() < (0.25 + (B.enPower > B.myPower ? 0.1 : 0));
     let dmg = 0;
     if (B.order === 'guard') {
-      // Reduce incoming later; small counter
-      dmg = Math.random() < 0.35 ? 1 : 0;
-      B.log = dmg ? 'COUNTER!' : 'SOLID GUARD';
+      // Guard: recover a little stamina, small counter chance
+      B.myStamina = Math.min(B.myStaminaMax, (B.myStamina || 0) + 2);
+      dmg = Math.random() < 0.3 ? 1 : 0;
+      B.log = dmg ? 'COUNTER!' : 'GUARD +STA';
     } else {
-      // Attack power = base + charge + discipline luck
+      // Power attack costs stamina; low STA = weak hit
+      const sta = B.myStamina || 0;
       const chargeBonus = Math.floor((B.charge || 0) / 3);
       const discBonus = S.disc >= 70 ? 1 : 0;
-      const happyBonus = S.happy >= 3 ? 1 : 0;
-      let raw = 1 + chargeBonus + discBonus + Math.floor(Math.random() * Math.max(1, Math.floor(B.myPower / 2)));
-      if (B.myPower > B.enPower) raw += 1;
+      // Uncharged hits are weak; must mash B for real damage
+      let raw = (B.charge || 0) >= 2 ? 1 : 0;
+      raw += chargeBonus + (discBonus ? 1 : 0);
+      if ((B.charge || 0) >= 6) raw += 1;
+      if (B.myPower > B.enPower && (B.charge || 0) >= 3) raw += 1;
+      if (battleLevel(S.battleXP) >= 10 && (B.charge || 0) >= 4) raw += 1;
+      if (sta <= 0) { raw = Math.max(0, raw - 2); B.log = 'TIRED...'; }
+      else if (sta <= 3) { raw = Math.max(0, raw - 1); }
       if (enGuard) raw = Math.max(0, raw - 2);
-      dmg = Math.min(4, raw);
-      B.log = dmg >= 3 ? 'CRITICAL!' : (dmg > 0 ? 'HIT!' : 'MISS...');
+      // STA: basic hit costs 1; charged hits cost more (power attacks need stamina)
+      const cost = 1 + Math.floor((B.charge || 0) / 3);
+      B.myStamina = Math.max(0, sta - cost);
+      dmg = Math.min(3, Math.max(0, raw));
+      if (sta > 0) B.log = dmg >= 3 ? 'CRITICAL!' : (dmg > 0 ? 'HIT!' : 'WEAK...');
     }
     B.pendingDmg = dmg;
     B.enHP = Math.max(0, B.enHP - dmg);
@@ -2318,6 +2899,7 @@ function advanceBattle(now) {
     B.phaseUntil = now + 2800;
     B.order = null;
     B.charge = 0;
+    B.myStamina = Math.min(B.myStaminaMax, (B.myStamina || 0) + 2);
     B.log = 'ROUND ' + B.round + ' — ORDER!';
     return;
   }
@@ -2329,31 +2911,48 @@ function finishBattle(won) {
   S.battle = false;
   const B = S.bat;
   S.bat = null;
+  S.playResult = null;
+  const now = Date.now();
   if (won) {
     S.battleWins = (S.battleWins || 0) + 1;
     S.battleXP = (S.battleXP || 0) + 2 + (B && B.kind === 'friend' ? 1 : 0);
     S.happy = Math.min(4, S.happy + 1);
     S.weight = Math.max(5, S.weight - 1);
+    S.injured = false;
     S.anim = 'dance';
-    S.animTimer = Date.now() + 2000;
+    S.animTimer = now + 1600;
     toast('Victory! +Happy +XP');
     melWin();
   } else {
     S.battleLosses = (S.battleLosses || 0) + 1;
-    S.battleXP = (S.battleXP || 0) + 1; // still learn
+    S.battleXP = (S.battleXP || 0) + 1;
     S.happy = Math.max(0, S.happy - 1);
-    S.anim = 'sulk';
-    S.animTimer = Date.now() + 1800;
-    // Possible injury
-    if (Math.random() < 0.35) {
+    // Injury chance
+    if (Math.random() < 0.4) {
       S.sick = true;
-      toast('Defeated... injured! Need medicine');
-      careNotify('sick', 'Your PocketPal was hurt in battle.');
+      S.sickSince = now;
+      S.injured = true;
+      S.anim = 'sick';
+      S.animTimer = now + 2200;
+      toast('Injured! Give medicine');
+      careNotify('sick', 'INJURED in battle — open PocketPal and give medicine!');
     } else {
+      S.injured = false;
+      S.anim = 'sulk';
+      S.animTimer = now + 1400;
       toast('Defeated... +1 XP');
     }
     melLose();
   }
+  // Safety: never leave a forever anim after battle
+  setTimeout(() => {
+    if (S.anim === 'dance' || S.anim === 'sulk' || (S.anim === 'sick' && !S.sick)) {
+      if (S.animTimer && Date.now() >= S.animTimer - 50) {
+        S.anim = null;
+        S.animTimer = 0;
+      }
+    }
+  }, 2500);
   save();
 }
 function cancelBattle() {
@@ -2364,55 +2963,197 @@ function cancelBattle() {
   beep(200, 0.08);
   save();
 }
+// Battle uses REAL pet sprites (same graphics as main game) — crisp 1:1 pixels
+function battleRivalForm(stage) {
+  // Rival = alternate evolution of same stage tier (real PocketPal forms, not blobs)
+  if (stage === 'adult' || stage === 'secret') return 'adult2';
+  if (stage === 'teen') return 'teenBad';
+  if (stage === 'child') return 'child';
+  return 'baby';
+}
+function drawBattlePet(cx, cy, form, f, expression) {
+  // expression: 'neutral' | 'happy' | 'sad' | 'charge' | 'hurt'
+  const bob = expression === 'charge' ? ((Math.floor(f / 6) % 2)) : ((Math.floor(f / 12) % 2));
+  const x = Math.round(cx);
+  const y = Math.round(cy + bob);
+  const saved = {
+    anim: S.anim, sleep: S.sleep, sick: S.sick, poop: S.poop,
+    playResult: S.playResult, call: S.call, form: S.form
+  };
+  S.anim = null;
+  S.sleep = false;
+  S.sick = (expression === 'hurt');
+  S.poop = false;
+  S.call = false;
+  if (expression === 'happy' || expression === 'charge') S.playResult = 'happy';
+  else if (expression === 'sad' || expression === 'hurt') S.playResult = 'sad';
+  else S.playResult = null;
+  // Draw real sprite at integer coords — no canvas scale
+  drawPet(x, y, form, f);
+  S.anim = saved.anim; S.sleep = saved.sleep; S.sick = saved.sick;
+  S.poop = saved.poop; S.playResult = saved.playResult; S.call = saved.call;
+}
+function drawMyFighter(cx, cy, f) {
+  const B = S.bat;
+  let expr = 'neutral';
+  if (B) {
+    if (B.phase === 'clash' && (B.pendingDmg || 0) > 0) expr = 'happy';
+    else if (B.phase === 'enemy' && (B.pendingDmg || 0) >= 2) expr = 'hurt';
+    else if (B.phase === 'charge' && B.order === 'attack') expr = 'charge';
+    else if (B.phase === 'end') expr = B.won ? 'happy' : 'sad';
+    else if (B.phase === 'order') expr = 'neutral';
+  }
+  drawBattlePet(cx, cy, S.form, f, expr);
+}
+function drawRivalFighter(cx, cy, stage, f) {
+  const B = S.bat;
+  const form = (B && B.enemyForm) || battleRivalForm(stage);
+  let expr = 'neutral';
+  if (B) {
+    if (B.phase === 'clash' && (B.pendingDmg || 0) >= 2) expr = 'hurt';
+    else if (B.phase === 'enemy') expr = 'charge';
+    else if (B.phase === 'end') expr = B.won ? 'sad' : 'happy';
+  }
+  drawBattlePet(cx, cy, form, f, expr);
+}
 function drawBattle() {
   const B = S.bat;
   ctx.fillStyle = '#9bbc0f';
   ctx.fillRect(0, 0, W, H);
   if (!B) return;
   const INK = '#0f380f';
-  drawText('BATTLE', 95, 4, INK);
-  drawText('R' + B.round + '/' + B.maxRounds, 175, 4, INK);
-  // Names + HP hearts (max 6 shown)
-  drawText((NAMES[S.form] || 'PAL').slice(0, 6), 8, 18, INK);
-  drawText(String(B.enemyName).slice(0, 8), 150, 18, INK);
-  // HP bars as blocks
-  const myH = Math.ceil((B.myHP / B.myMax) * 6);
-  const enH = Math.ceil((B.enHP / B.enMax) * 6);
+  drawTextCentered((B.kind === 'friend' ? 'FRIEND BATTLE' : 'TRAIN BATTLE') + ' R' + B.round + '/' + B.maxRounds, 2, INK);
+  // Names + battle level (from XP) under compact HP
+  // You = top-left; foe = top-right (mirrored layout)
+  const enName = String(B.enemyName).slice(0, 6);
+  drawText((NAMES[S.form] || 'YOU').slice(0, 6), 4, 14, INK);
+  drawText(enName, W - 4 - enName.length * 6, 14, INK);
+  const myH = Math.ceil((B.myHP / Math.max(1, B.myMax)) * 6);
+  const enH = Math.ceil((B.enHP / Math.max(1, B.enMax)) * 6);
   for (let i = 0; i < 6; i++) {
-    fillRect(8 + i * 10, 30, 8, 6, i < myH ? INK : '#8fad0e');
-    fillRect(150 + i * 10, 30, 8, 6, i < enH ? INK : '#8fad0e');
+    fillRect(4 + i * 7, 24, 6, 4, i < myH ? INK : '#8fad0e');
+    fillRect(W - 4 - 6 * 7 + i * 7, 24, 6, 4, i < enH ? INK : '#8fad0e');
   }
-  drawText('HP ' + B.myHP + '/' + B.myMax, 8, 40, INK);
-  drawText('HP ' + B.enHP + '/' + B.enMax, 150, 40, INK);
+  const hpL = 'HP' + B.myHP + '/' + B.myMax;
+  const hpR = 'HP' + B.enHP + '/' + B.enMax;
+  drawText(hpL, 4, 32, INK);
+  drawText(hpR, W - 4 - hpR.length * 6, 32, INK);
+  const lvL = 'LV' + battleLevel(S.battleXP);
+  const lvR = 'LV' + (B.enemyLevel || battleLevel(B.enemyXP));
+  drawText(lvL, 4, 42, INK);
+  drawText(lvR, W - 4 - lvR.length * 6, 42, INK);
+  const wlL = (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L';
+  const wlR = (B.enemyWins||0) + 'W-' + (B.enemyLosses||0) + 'L';
+  drawText(wlL, 4, 52, INK);
+  drawText(wlR, W - 4 - wlR.length * 6, 52, INK);
+  // POW / STA centered top-middle
+  const pow = Math.min(10, B.charge || 0);
+  const sta = Math.min(10, B.myStamina || 0);
+  drawText('POW', 88, 14, INK);
+  for (let i = 0; i < 10; i++) fillRect(110 + i * 5, 14, 4, 5, i < pow ? INK : '#8fad0e');
+  drawText('STA', 88, 24, INK);
+  for (let i = 0; i < 10; i++) fillRect(110 + i * 5, 24, 4, 5, i < sta ? INK : '#8fad0e');
 
-  // Pets
-  drawPet(70, 100, S.form, S.frame);
-  // Enemy as simple silhouette using adult1 or teen
-  const eForm = B.enemyStage === 'adult' || B.enemyStage === 'secret' ? 'adult2' : (B.enemyStage === 'teen' ? 'teenBad' : 'child');
-  drawPet(175, 100, eForm, S.frame + 10);
+  // Arena floor
+  for (let x = 30; x < 210; x += 3) px(x, 130, INK);
 
-  // Phase text
-  drawText(String(B.log).slice(0, 22), 40, 140, INK);
+  // Fight field (open middle)
+  let myX = 78, enX = 162, myY = 100, enY = 100;
+  if (B.phase === 'clash') { myX = 100; enX = 140; }
+  else if (B.phase === 'enemy') { myX = 88; enX = 148; }
+  else if (B.phase === 'charge') { myX = 82; enX = 158; }
+  else if (B.phase === 'intro') { myX = 74; enX = 166; }
 
-  if (B.phase === 'order' || B.phase === 'charge') {
-    drawText('A=GUARD  B=ATTACK', 45, 154, INK);
-    if (B.phase === 'charge' && B.order === 'attack') {
-      const bars = Math.min(10, B.charge || 0);
-      let bar = '';
-      for (let i = 0; i < 10; i++) bar += i < bars ? '█' : '·';
-      drawText(bar, 50, 166, INK);
-    } else {
-      drawText('C=FORFEIT', 80, 166, INK);
-    }
+  drawMyFighter(myX, myY, S.frame);
+  drawRivalFighter(enX, enY, B.enemyStage || 'teen', S.frame + 11);
+
+  if (B.phase === 'intro') drawTextCentered('VS', 88, INK);
+  if (B.phase === 'clash' || B.phase === 'enemy') {
+    const ix = 120, iy = 88;
+    px(ix, iy - 5, INK); px(ix, iy + 5, INK); px(ix - 5, iy, INK); px(ix + 5, iy, INK);
+    if ((B.pendingDmg || 0) >= 3) drawText('POW!', 100, 72, INK);
+    else if ((B.pendingDmg || 0) > 0) drawText('HIT', 105, 72, INK);
+  }
+
+  // Log + controls
+  drawText(String(B.log || '').slice(0, 24), 30, 140, INK);
+  if (B.phase === 'order') {
+    drawText('A=GUARD(+STA) B=ATTACK', 25, 154, INK);
+    drawText('C=FORFEIT', 80, 166, INK);
+  } else if (B.phase === 'charge') {
+    drawText('MASH B — USES STA', 40, 154, INK);
+    drawText('POW ' + pow + '  STA ' + sta, 70, 166, INK);
   } else if (B.phase === 'end') {
-    drawText(B.won ? '★ VICTORY ★' : 'DEFEAT...', 70, 158, INK);
-  } else {
-    drawText('...', 110, 166, INK);
+    drawText(B.won ? 'VICTORY!' : 'DEFEAT...', 80, 156, INK);
+  } else if (B.phase === 'intro') {
+    drawText('GET READY...', 75, 156, INK);
   }
 }
 
+
+function shareFriendLink() {
+  const code = generateCode();
+  const link = (typeof location !== 'undefined' ? location.href.split('?')[0].split('#')[0] : '') + '?friend=' + code;
+  const text = 'Battle my PocketPal! Code: ' + code + ' — ' + link;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast('Link copied!')).catch(() => toast('Code: ' + code));
+  } else {
+    toast('Code: ' + code);
+  }
+  try {
+    if (navigator.share) {
+      navigator.share({ title: 'PocketPal', text: text, url: link }).catch(() => {});
+    }
+  } catch(e) {}
+}
+window.shareFriendLink = shareFriendLink;
+function tryAcceptFriendFromUrl() {
+  try {
+    const q = new URLSearchParams(location.search || '');
+    const fc = (q.get('friend') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (fc && isValidFriendCode(fc) && fc !== S.myCode) {
+      if (!S.friends.find(f => f.code === fc)) {
+        const friend = friendFromCode(fc);
+        S.friends.push(friend);
+        toast('Added friend ' + friend.name + ' from link!');
+        save();
+      }
+    }
+  } catch(e) {}
+}
+
+
+function showFamilyAlbum() {
+  const extra = document.getElementById('overlay-extra');
+  const list = S.petFamily || [];
+  let html = '<p style="font-size:12px">Forms you raised (evo + returned home). Care path unlocks different adults.</p>';
+  if (!list.length) {
+    html += '<p style="opacity:0.8">Empty — evolve or complete a life to collect forms.</p>';
+  } else {
+    html += '<div class="friend-list">';
+    list.forEach((e, i) => {
+      html += '<div class="friend-item">' + (e.name || e.form) + ' · ' + (e.trait || '') +
+        ' · G' + (e.gen||1) + ' age' + (e.age||0) +
+        ' · ' + (e.wins||0) + 'W-' + (e.losses||0) + 'L' +
+        ' · ' + (e.reason || '') + '</div>';
+    });
+    html += '</div>';
+  }
+  const unlocked = {};
+  list.forEach(e => { unlocked[e.form] = true; });
+  const all = ['teenGood','teenBad','adult1','adult2','adult3','adult4','adult5','adult6','adult7','adult8','adult9','adult10','secret'];
+  const have = all.filter(f => unlocked[f]).length;
+  html += '<p style="margin-top:8px;font-size:11px">Album ' + have + '/' + all.length + ' major forms · C = back</p>';
+  html += '<div class="btn-row"><button onclick="window.showConnectMenu()">Back to Connect</button></div>';
+  extra.innerHTML = html;
+  show('Family', 'Your PocketPal lineage');
+  document.getElementById('obtn').style.display = 'none';
+}
+window.showFamilyAlbum = showFamilyAlbum;
+
 function showConnectMenu() {
   const code = generateCode();
+  publishBattleCard();
   const extra = document.getElementById('overlay-extra');
   let friendHtml = '';
   if (S.friends.length === 0) {
@@ -2442,7 +3183,9 @@ function showConnectMenu() {
       '<button onclick="window.startTrainingBattle()">Training Battle</button>' +
       '<button onclick="window.startFriendBattle()">Battle Friend</button>' +
     '</div>' +
-    '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Add a friend code to fight them</p>' +
+    '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Teen+ to battle</p>' +
+    '<div class="btn-row"><button onclick="window.shareFriendLink()">Share my code / battle link</button></div>' +
+    '<div class="btn-row"><button onclick="window.showFamilyAlbum()">Pet Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
     '<p style="margin-top:8px;font-size:11px">Friends: ' + S.friends.length + ' · Gen ' + S.generation + ' · Record ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
   show('Connect', 'Friends · Breed · Battle');
   // No separate Close button needed — C or overlay dismiss
@@ -2480,10 +3223,55 @@ function startTrainingBattle() {
   }
   startBattle('train');
 }
-function startFriendBattle() {
+
+function workerBaseUrl() {
+  const u = window.POCKETPAL_PUSH_URL || window.POCKETPAL_WORKER_URL || '';
+  if (!u) return '';
+  return u.replace(/\/push\/?$/, '').replace(/\/$/, '');
+}
+function myBattleCard() {
+  return {
+    code: generateCode(),
+    name: NAMES[S.form] || 'Pal',
+    form: S.form,
+    stage: S.stage,
+    age: S.age || 0,
+    xp: S.battleXP || 0,
+    wins: S.battleWins || 0,
+    losses: S.battleLosses || 0,
+    wt: S.weight || 10,
+    disc: S.disc || 0,
+    growth: S.growthPhase || 0,
+    quality: Math.min(0.95, 0.3 + (S.disc || 0) / 150 + (S.battleWins || 0) / 40),
+    updated: Date.now()
+  };
+}
+async function publishBattleCard() {
+  const base = workerBaseUrl();
+  if (!base) return false;
+  try {
+    await fetch(base + '/battle/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(myBattleCard())
+    });
+    return true;
+  } catch (e) { return false; }
+}
+async function fetchLiveBattleCard(code) {
+  const base = workerBaseUrl();
+  if (!base) return null;
+  try {
+    const r = await fetch(base + '/battle/' + encodeURIComponent(code));
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
+async function startFriendBattle() {
   hide();
   if (!S.friends.length) {
-    toast('Add a friend code first');
+    toast('Add a friend code first (Connect menu)');
     beep(160, 0.08);
     return;
   }
@@ -2493,7 +3281,31 @@ function startFriendBattle() {
     beep(160, 0.08);
     return;
   }
-  const f = S.friends[S.selectedFriend] || S.friends[0];
+  let f = S.friends[S.selectedFriend] || S.friends[0];
+  // Publish our card, then try live snapshot of friend from Cloudflare Worker
+  toast('Linking...');
+  await publishBattleCard();
+  const live = await fetchLiveBattleCard(f.code);
+  if (live && live.form) {
+    f = {
+      code: f.code,
+      name: live.name || f.name,
+      form: live.form,
+      stage: live.stage,
+      age: live.age,
+      xp: live.xp,
+      wins: live.wins,
+      losses: live.losses,
+      wt: live.wt,
+      disc: live.disc,
+      growth: live.growth,
+      quality: live.quality,
+      tier: live.tier
+    };
+    toast('Live card: ' + (f.name || 'Friend'));
+  } else {
+    toast('Snapshot battle (friend offline)');
+  }
   startBattle('friend', f);
 }
 window.startTrainingBattle = startTrainingBattle;
@@ -2506,23 +3318,32 @@ function startStatTraining() {
   if (S.sleep) { toast('Sleeping...'); return; }
   if (S.sick) { toast('Too sick to train'); return; }
   if (S.hunger <= 0) { toast('Too hungry'); return; }
+  S.battle = false; S.bat = null;
   S.game = true;
   S.gameType = 'train';
   S.gRound = 1;
   S.gScore = 0;
   S.trainPhase = 'wait';
-  S.trainUntil = Date.now() + 800 + Math.random() * 1200;
+  S.trainUntil = Date.now() + 500 + Math.random() * 2200;
   S.menu = null;
-  toast('Training! Wait for GO — press B');
+  toast('TRAIN XP: wait, then press the letter shown!');
   beep(400, 0.05);
 }
 window.startStatTraining = startStatTraining;
 
-function trainPress() {
+function trainPress(btn) {
+  // btn: 'A' or 'B' — must match S.trainBtn during GO phase
   if (!S.game || S.gameType !== 'train') return;
   const now = Date.now();
   if (S.trainPhase === 'go') {
-    // Success
+    const need = S.trainBtn || 'B';
+    if (btn !== need) {
+      S.playResult = 'sad';
+      beep(160, 0.08);
+      toast('Wrong button! Needed ' + need);
+      endTraining(S.gScore >= 2);
+      return;
+    }
     S.gScore++;
     S.playResult = 'happy';
     beep(700, 0.05);
@@ -2531,7 +3352,8 @@ function trainPress() {
       endTraining(true);
     } else {
       S.trainPhase = 'wait';
-      S.trainUntil = now + 700 + Math.random() * 1000;
+      S.trainBtn = null;
+      S.trainUntil = now + 400 + Math.random() * 2000;
       S.playResult = null;
       toast('Good! Round ' + S.gRound);
     }
@@ -2539,6 +3361,7 @@ function trainPress() {
     // Too early
     S.playResult = 'sad';
     beep(160, 0.08);
+    toast('Too early!');
     endTraining(false);
   }
 }
@@ -2547,18 +3370,21 @@ function endTraining(ok) {
   S.gameType = null;
   S.trainPhase = null;
   if (ok) {
-    S.battleXP = (S.battleXP || 0) + 2;
+    const bonus = S.gScore >= 4 ? 3 : 2;
+    S.battleXP = (S.battleXP || 0) + bonus;
     S.weight = Math.max(5, S.weight - 1);
     S.happy = Math.min(4, S.happy + (S.gScore >= 3 ? 1 : 0));
     S.anim = 'happy';
-    S.animTimer = Date.now() + 1200;
-    toast('Trained! +' + 2 + ' XP');
+    S.animTimer = Date.now() + 1400;
+    spawnFx('star', S.petX || 120, 70, 4);
+    spawnFx('heart', S.petX || 120, 85, 2);
+    toast(S.gScore >= 4 ? 'Perfect train! +' + bonus + ' XP' : 'Trained! +' + bonus + ' XP');
     melTrain();
   } else {
     S.battleXP = (S.battleXP || 0) + 1;
     S.anim = 'sulk';
     S.animTimer = Date.now() + 900;
-    toast('Missed timing +1 XP');
+    toast('Missed — still +1 XP');
     melLose();
   }
   save();
@@ -2664,6 +3490,12 @@ function updateIconHighlight() {
 
 function selectIcon(dir) {
   if (S.paused || S.game || S.battle || S.stage === 'egg' || S.stage === 'dead') return;
+  // Changing mode with A closes open menus (status / connect / feed pick)
+  // C remains Cancel for explicit close without changing icon
+  if (S.menu === 'status' || S.menu === 'feed' || S.menu === 'playpick') {
+    S.menu = null;
+  }
+  try { hide(); } catch(e) {}
   S.sel = (S.sel + dir + ICONS.length) % ICONS.length;
   updateIconHighlight();
   const name = ICON_LABELS[ICONS[S.sel]] || ICONS[S.sel];
@@ -2678,11 +3510,11 @@ function confirm() {
     return;
   }
   if (S.game && S.gameType === 'train') {
-    trainPress();
+    trainPress('B');
     return;
   }
   if (S.game) {
-    resolve(1); // B = Right during play
+    resolve(1); // B = Right for Look/Memory
     return;
   }
   if (S.menu === 'feed') {
@@ -2759,8 +3591,10 @@ document.getElementById('btnA').onclick = () => {
   press('btnA');
   if (S.battle) {
     battleOrder('guard');
+  } else if (S.game && S.gameType === 'train') {
+    trainPress('A');
   } else if (S.game) {
-    resolve(0); // A = Left
+    resolve(0); // Look/Memory: A = Left
   } else if (S.menu === 'feed') {
     feed('meal');
     S.menu = null;
@@ -2793,7 +3627,7 @@ document.getElementById('btnB').addEventListener('pointerup', () => {
     if (S.battle) {
       battleOrder('attack');
     } else if (S.game && S.gameType === 'train') {
-      trainPress();
+      trainPress('B');
     } else if (S.game) {
       resolve(1);
     } else if (S.menu === 'feed') {
@@ -2848,6 +3682,7 @@ document.addEventListener('keydown', e => {
 (function bindShellControls() {
   const nbtn = document.getElementById('notifyBtn');
   const sbtn = document.getElementById('soundBtn');
+  const cbtn = document.getElementById('shellColorBtn');
   if (nbtn) {
     nbtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); requestNotifications(); };
   }
@@ -2864,9 +3699,13 @@ document.addEventListener('keydown', e => {
       save();
     };
   }
+  if (cbtn) {
+    cbtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); cycleShellColor(); };
+  }
 })();
 
 function updateUI() {
+  try { updateAppBadge(); } catch(e) {}
   document.getElementById('h-hearts').textContent = '♥'.repeat(S.hunger) + '♡'.repeat(4 - S.hunger);
   document.getElementById('y-hearts').textContent = '♥'.repeat(S.happy) + '♡'.repeat(4 - S.happy);
   document.getElementById('wt').textContent = S.weight + 'g';
@@ -2908,6 +3747,22 @@ function activeMinutesBetween(start, end) {
   }
   return active;
 }
+
+function updateCareStreak() {
+  const day = new Date().toDateString();
+  if (S.lastCareDay === day) return;
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  if (S.lastCareDay === yest.toDateString()) {
+    S.careStreak = (S.careStreak || 0) + 1;
+  } else if (!S.lastCareDay) {
+    S.careStreak = 1;
+  } else {
+    S.careStreak = 1; // broken streak resets to 1 for today
+  }
+  S.lastCareDay = day;
+}
+
 function applyOfflineCatchup(now) {
   if (S.stage === 'egg' || S.stage === 'dead' || S.paused) return 0;
   const last = Number(S.lastSave) || now;
@@ -2926,16 +3781,16 @@ function applyOfflineCatchup(now) {
     S.hunger = Math.max(0, S.hunger - Math.min(hLoss, 4)); // cap offline drain
     // Care miss grows slowly offline — player gets a chance to recover on return
     S.careMiss += Math.min(3, Math.max(0, hLoss - 1)) * d.care;
-    if (S.hunger === 0) { S.call = true; careNotify('hunger', 'Your PocketPal is hungry.'); }
+    if (S.hunger === 0) { S.call = true; careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!'); }
   }
   if (yLoss > 0) {
     S.happy = Math.max(0, S.happy - Math.min(yLoss, 4));
     S.careMiss += Math.min(3, Math.max(0, yLoss - 1)) * d.care;
-    if (S.happy === 0) { S.call = true; careNotify('happy', 'Your PocketPal wants attention.'); }
+    if (S.happy === 0) { S.call = true; careNotify('happy', 'Needs PLAY — open PocketPal and play with me!'); }
   }
   if (!S.poop && activeMin >= poopStep) {
     S.poop = true; S.call = true; S.poopX = Math.round(S.petX || 120) + 16; S.poopY = 145; S.poopSince = now;
-    careNotify('poop', 'PocketPal made a mess.');
+    careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
   }
   // Classic aging: +1 age per night/morning crossed while away
   // (plus a very slow awake-time fallback so long daytime absences still progress)
@@ -2965,6 +3820,14 @@ function applyOfflineCatchup(now) {
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
   const ageGain = Math.max(nights, awakeAgeGain);
+  const stageBefore = S.stage;
+  const formBefore = S.form;
+  // Catch up within-stage growth (hours awake-equivalent while away)
+  const growthHours = Math.floor(activeMin / 60);
+  if (growthHours > 0 && S.stage !== 'egg' && S.stage !== 'dead') {
+    S.growthPhase = Math.min(3, (S.growthPhase || 0) + growthHours);
+    S.lastGrowthAt = now;
+  }
   if (ageGain > 0) {
     S.age += ageGain;
     S.lastAge = now;
@@ -2985,7 +3848,18 @@ function applyOfflineCatchup(now) {
   S.lastY = now;
   S.lastP = now;
   S.lastVirtTick = now;
-  if (activeMin > 0) S.anim = null;
+  // Show evo anim if stage/form changed while away; else soft grow if phase jumped
+  if (S.stage !== stageBefore || S.form !== formBefore) {
+    S.anim = 'evo';
+    S.animTimer = now + 2200;
+    toast('While you were away → ' + (NAMES[S.form] || S.form) + '!');
+    melEvolve();
+  } else if (growthHours > 0) {
+    S.anim = 'grow';
+    S.animTimer = now + 1000;
+  } else if (activeMin > 0) {
+    S.anim = null;
+  }
   if (elapsed >= 2 * 60000) toast('Welcome back · ' + Math.floor(elapsed / 60000) + ' min passed');
   // Grace: do not die immediately after offline catch-up / app update
   S.loadGraceUntil = now + 3 * 60000; // 3 minutes to care for pet
@@ -2996,6 +3870,13 @@ function applyOfflineCatchup(now) {
 function save() {
   S.lastSave = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
+  // Keep live battle card fresh when worker configured
+  if (workerBaseUrl() && S.stage !== 'egg' && S.stage !== 'dead') {
+    if (!S._lastPublish || Date.now() - S._lastPublish > 60000) {
+      S._lastPublish = Date.now();
+      publishBattleCard();
+    }
+  }
 }
 function load() {
   try {
@@ -3082,11 +3963,15 @@ function load() {
     if (!isNightTime()) S.lightsMissPending = false;
     // Never kill the moment the app/update loads
     S.loadGraceUntil = Date.now() + 3 * 60000;
+    if (S.shellTheme === undefined) S.shellTheme = 0;
+    applyShellTheme(S.shellTheme || 0);
 
     // If was paused, stay paused (true freeze). Otherwise simulate care while
     // the PWA was closed/backgrounded, including the night sleep window.
     if (S.paused) toast('Still paused · Hold B to resume');
     else applyOfflineCatchup(Date.now());
+    updateCareStreak();
+    tryAcceptFriendFromUrl();
     return true;
   } catch(e) { return false; }
 }
@@ -3117,6 +4002,10 @@ function restart() {
   const battleWins = S.battleWins || 0;
   const battleLosses = S.battleLosses || 0;
   const battleXP = S.battleXP || 0;
+  const petFamily = S.petFamily || [];
+  const careStreak = S.careStreak || 0;
+  const lastCareDay = S.lastCareDay || '';
+  const myCode = S.myCode;
   Object.assign(S, {
     stage: 'egg', form: 'egg', age: 0, weight: 5,
     hunger: 4, happy: 4, disc: 0, careMiss: 0, discMiss: 0,
@@ -3126,7 +4015,7 @@ function restart() {
     lastP: Date.now(), lastAge: Date.now(),
     game: false, menu: null, deaths, frame: 0, gameDir: 0,
     friends, married: false, anim: null, selectedFriend: 0,
-    generation, difficulty, sound, notifications, lastNotifyAt: 0, lastNotifyType: '', musicStep: 0, musicTimer: 0, musicPlaying: false, inheritedBonus: 0,
+    generation, difficulty, sound, notifications, petFamily, careStreak, lastCareDay, myCode, lastNotifyAt: 0, lastNotifyType: '', musicStep: 0, musicTimer: 0, musicPlaying: false, inheritedBonus: 0,
     battleWins, battleLosses, battleXP, battle: false, bat: null,
     petX: 120, petTargetX: 120, playResult: null,
     paused: false, pauseStarted: 0, sleepStart: 0, lightsMissPending: false,
@@ -3198,14 +4087,15 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  navigator.serviceWorker.register('./service-worker.js?v=2.36', { updateViaCache: 'none' })
+  try { applyShellTheme(S.shellTheme || 0); } catch(e) {}
+navigator.serviceWorker.register('./service-worker.js?v=2.66', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.36.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.47.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
