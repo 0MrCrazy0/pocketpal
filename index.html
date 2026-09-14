@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#e85a71">
+<meta name="theme-color" content="#e85a71" id="themeColorMeta">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.66 -->
+<!-- Public Release - POCKETPAL v2.90 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -234,6 +234,31 @@
     border-color: var(--lcd);
     background: #0a2a0a;
   }
+  /* LCD-green scrollbars — never the OS default chrome */
+  .overlay,
+  .overlay .friend-list,
+  #overlay-extra {
+    scrollbar-width: thin;
+    scrollbar-color: #8bac0f #0a280a;
+  }
+  .overlay::-webkit-scrollbar,
+  .overlay .friend-list::-webkit-scrollbar,
+  #overlay-extra::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .overlay::-webkit-scrollbar-track,
+  .overlay .friend-list::-webkit-scrollbar-track,
+  #overlay-extra::-webkit-scrollbar-track {
+    background: #0a280a;
+  }
+  .overlay::-webkit-scrollbar-thumb,
+  .overlay .friend-list::-webkit-scrollbar-thumb,
+  #overlay-extra::-webkit-scrollbar-thumb {
+    background: #8bac0f;
+    border-radius: 6px;
+    border: 1px solid #0f380f;
+  }
   .hidden { display: none !important; }
   /* Toast on the pink shell, centered just above the LCD — never covers game prompts */
   .toast {
@@ -322,6 +347,7 @@
 
 <script>
 
+
 /* ============================================================
    POCKETPAL — GAME RULES & MECHANICS (dev notes)
    ------------------------------------------------------------
@@ -329,9 +355,9 @@
    - Hunger 0-4: drains while awake; meal fills more than snack
    - Happy 0-4: drains while awake; play/snack/train/win/clean raise
      Unhappy stages: 4 joy · 3 content · 2 ok · 1 low · 0 miserable
-   - Discipline 0-100%: only rises on correct false-call scold
+   - Discipline 0-100%: UP on correct false-call scold; DOWN on mistakes / neglect / nights unused
    - Weight: +meal/snack, -play/train/battle; evo path + battle power
-   - Care miss: empty meters, ignored lights, piled poop, long sick
+   - Care miss: empty meters, ignored lights, piled poop, long sick, wrong medicine
    - Poop: stacks up to 4 piles; pet avoids piles; full screen → unhappy/sick/death risk
    - Sick: neglect, max filth, battle injury; medicine or slow heal
    - Injury: battle loss flag → sick + needs medicine
@@ -347,30 +373,34 @@
 
    GROWTH
    - Stages: egg → baby → child → teen → adult (+ secret Elder)
-   - Forms: Pip→Nib→Lumi/Grub→Momo/Kiko/Taro/Poko/Nori/Zuzu/Nova/Bibi/Rin/Bolt
+   - 256 Pal species (8 ears × 8 tails × 4 patterns) on 12 body lines
+   - Forms: Pip→Nib→Lumi/Grub→Momo/Kiko/Taro/Poko/Nori/Zuzu/Nova/Bibi/Rin/Bolt + unique morph #
    - growthPhase 0-3: body visibly fills out each ~1h awake (and offline catch-up)
    - Morning/age evo changes stage form; growthPhase resets on evo
    - Offline: growth + age applied; evo animation plays on return if form changed
-   - Discipline does not drain from unhappiness; false-calls rise when bored/sad
+   - Discipline UP: correct false-call scold (+12)
+   - Discipline DOWN: wrong scold (−8), scold-for-nothing (−5), ignored false-call (−6),
+     wrong medicine (−3), woken at night (−4), neglect/filth (−1..4), unused overnight (−4),
+     breed (halved)
 
    PLAY
-   - Look: guess left/right from pet lean/eyes (no arrow spoilers)
+   - Look: watch pupils lock left/right (body may fake-lean the other way)
    - Memory: watch sequence then repeat; grows longer
    - Train XP: timing GO → Battle XP
 
    BATTLE (Teen+)
-   - Training: roster of named PocketPals with age/XP/W-L/WT/DISC
+   - Training: rotating roster of weak/mid/hard pals (never the same twice)
    - Friend: code snapshot opponent
-   - Stats: HP from stage+XP; power from stage/disc/happy/XP
-   - POW charge (mash B); STA costs on attack; Guard recovers STA
+   - Fresh foes ~3 HP; mid ~6; hard ~8. Mash B to charge; Guard recovers STA
+   - Uncharged hits still tap for 1 if you have stamina (pets fight with autonomy)
    - Level = 1 + floor(XP/5) — shown on LCD + Status + battle
 
    LIFE
    - Death: long neglect or adult old-age after age ~12+
-   - Restart → Gen+1; friends/XP preferences kept where saved
+   - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v2.66
+//  POCKETPAL v2.90
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -391,9 +421,17 @@ const S = {
   loadGraceUntil: 0,
   injured: false,
   shellTheme: 0,
+  petId: '',
+  morphId: null,
+  petName: '',
+  lastDiscTick: 0,
+  _discPracticed: false,
+  speciesSeen: {},
   growthPhase: 0,
   careStreak: 0,
   petFamily: [],
+  petMemory: [],
+  activeSlot: null,
   lastCareDay: '',
   lastGrowthAt: 0,
   sickSince: 0,
@@ -411,6 +449,7 @@ const S = {
   battleLosses: 0,
   battleXP: 0,
   bat: null, // active battle state object
+  battleLocked: false,
   menu: null, sel: 0,
   sound: true,
   notifications: false,
@@ -451,6 +490,56 @@ const S = {
 };
 
 
+// v2.79 real-time P2P battle runtime (socket is intentionally not saved to localStorage)
+const P2P = { socket:null, room:'', slot:0, connected:false, peer:null, ready:false, peerReady:false, peerLocked:false, locked:false, peerAction:null, sentAction:false };
+function p2pWorkerBase(){ return workerBaseUrl(); }
+function p2pWsUrl(room){ const base=p2pWorkerBase(); if(!base) return ''; return base.replace(/^https:/,'wss:').replace(/^http:/,'ws:') + '/room?code=' + encodeURIComponent(room); }
+function randomRoomCode(){ const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let out=''; for(let i=0;i<6;i++) out+=chars[Math.floor(Math.random()*chars.length)]; return out; }
+function closeP2P(){ try{ if(P2P.socket) P2P.socket.close(); }catch(e){} P2P.socket=null; P2P.connected=false; P2P.peer=null; P2P.room=''; P2P.slot=0; P2P.ready=false; P2P.peerReady=false; P2P.locked=false; P2P.peerLocked=false; P2P.peerAction=null; P2P.sentAction=false; }
+function p2pSend(obj){ try{ if(P2P.socket && P2P.socket.readyState===1) P2P.socket.send(JSON.stringify(obj)); else return false; return true; }catch(e){return false;} }
+function p2pPetCard(){ ensureMorph(S); return {name:displayName(S),form:S.form,stage:S.stage,age:S.age||0,xp:S.battleXP||0,wins:S.battleWins||0,losses:S.battleLosses||0,wt:S.weight||10,disc:S.disc||0,power:battlePower(),maxHP:battleMaxHP(S.stage==='adult'&&S.form==='secret'?'secret':S.stage,S.battleXP),level:battleLevel(S.battleXP),morph:S.morphId||0,petName:S.petName||displayName(S)}; }
+function openP2PRoom(room, create){
+  const block=canBattle();
+  if(block){toast(block);return false;}
+  const code=(room||randomRoomCode()).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+  const url=p2pWsUrl(code); if(!url){toast('Cloudflare Worker not configured');return false;}
+  closeP2P(); P2P.room=code; P2P.socket=new WebSocket(url);
+  P2P.socket.onopen=()=>{P2P.connected=true; p2pSend({type:'hello',pet:p2pPetCard()}); showP2PRoom();};
+  P2P.socket.onmessage=(ev)=>{ let m; try{m=JSON.parse(ev.data)}catch(e){return;}
+    if(m.type==='joined'){P2P.slot=m.slot||1; showP2PRoom();}
+    else if(m.type==='players'){showP2PRoom();}
+    else if(m.type==='peer'){P2P.peer=m.pet||null; if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.enemyName=P2P.peer.name||'Rival';S.bat.enemyForm=P2P.peer.form;S.bat.enemyStage=P2P.peer.stage;S.bat.enemyXP=P2P.peer.xp||0;S.bat.enemyWins=P2P.peer.wins||0;S.bat.enemyLosses=P2P.peer.losses||0;S.bat.enemyDisc=P2P.peer.disc||0;S.bat.enemyLevel=P2P.peer.level||1;S.bat.enPower=P2P.peer.power||1;S.bat.enMax=P2P.peer.maxHP||6;S.bat.enHP=S.bat.enMax;} showP2PRoom();}
+    else if(m.type==='ready'){P2P.peerReady=true; if(!S.battle) { toast('Opponent ready'); }}
+    else if(m.type==='lock'){P2P.peerLocked=true; if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.peerLocked=true; S.bat.log='OPPONENT LOCKED';}}
+    else if(m.type==='start'){if(!S.battle) startP2PBattle(); if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.phase='inspect';S.bat.phaseUntil=Date.now()+2800;S.bat.order=null;S.bat.charge=0;S.bat.peerAction=null;S.bat.sentAction=false;S.bat.log='ROUND 1 — ORDER!';}}
+    else if(m.type==='action'){if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.peerAction=m.action||{order:'attack',charge:0}; S.bat.log='OPPONENT READY';}}
+    else if(m.type==='forfeit'){if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.won=true; S.bat.phase='end'; S.bat.phaseUntil=Date.now()+900; S.bat.log='OPPONENT FORFEIT!';}}
+    else if(m.type==='room_full'){toast('Room is full');closeP2P();}
+    else if(m.type==='opponent_left'){toast('Opponent left the room'); if(S.battle&&S.bat&&S.bat.kind==='p2p'){closeP2PBattle(true);} else closeP2P();}
+  };
+  P2P.socket.onerror=()=>{toast('P2P connection failed');closeP2P();};
+  P2P.socket.onclose=()=>{P2P.connected=false;};
+  return true;
+}
+function showP2PRoom(){
+  const extra=document.getElementById('overlay-extra'); if(!extra)return;
+  const waiting=!P2P.peer;
+  extra.innerHTML='<p><strong>ROOM '+P2P.room+'</strong></p>' + (waiting?'<p style="font-size:12px">Share this 6-character room code. Waiting for your opponent...</p>':'<p style="font-size:12px">Opponent connected: <strong>'+String(P2P.peer.name||'Rival')+'</strong></p>') + '<div class="btn-row"><button onclick="window.startP2PMatch()">'+(waiting?'WAITING...':'START P2P BATTLE')+'</button><button onclick="window.leaveP2PRoom()">LEAVE</button></div>';
+  show('P2P BATTLE','Real-time friend room'); document.getElementById('obtn').style.display='none';
+}
+function createP2PRoom(){ toast('P2P rooms are off — use Battle Friend with a code'); }
+function joinP2PRoom(){ toast('P2P rooms are off — use Battle Friend with a code'); }
+function leaveP2PRoom(){ closeP2P(); if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.battle=false;S.bat=null;S.battleLocked=false;} showConnectMenu(); }
+function startP2PMatch(){ if(!P2P.peer){toast('Waiting for opponent');return;} const block=canBattle(); if(block){toast(block);beep(160,0.08);return;} P2P.ready=true; p2pSend({type:'ready'}); showP2PRoom(); toast('Ready — waiting for your opponent'); }
+function startP2PBattle(){
+  hide(); const me=p2pPetCard(), en=P2P.peer; if(!en){toast('Waiting for opponent');return;}
+  S.battle=true; S.game=false; S.menu=null; S.sleep=false; S.anim=null; S.battleLocked=false;
+  S.bat={kind:'p2p',phase:'inspect',phaseUntil:Date.now()+1200,round:1,maxRounds:5,myHP:me.maxHP,myMax:me.maxHP,enHP:en.maxHP||6,enMax:en.maxHP||6,myPower:me.power,enPower:en.power||1,enemyName:en.name||'Rival',enemyStage:en.stage||'teen',enemyForm:en.form||'teenGood',enemyMorph:en.morph||0,enemyXP:en.xp||0,enemyWins:en.wins||0,enemyLosses:en.losses||0,enemyDisc:en.disc||0,enemyLevel:en.level||1,order:null,charge:0,myStamina:8,myStaminaMax:10,enStamina:10,log:'CHECK STATS — B=LOCK IN',pendingDmg:0,won:null,peerLocked:false,sentAction:false,peerAction:null};
+  P2P.locked=false;P2P.ready=true;P2P.peerLocked=false;P2P.sentAction=false;P2P.peerAction=null; toast('P2P battle — inspect stats, then B to lock in');
+}
+function closeP2PBattle(opponentLeft){ closeP2P(); S.battle=false;S.bat=null;S.battleLocked=false;S.menu=null; if(opponentLeft) toast('P2P battle ended — opponent left before completion'); save(); }
+
+
 const FORM_TRAITS = {
   egg: 'Waiting',
   baby: 'Curious',
@@ -477,7 +566,8 @@ function recordFamilyMember(reason) {
   if (!S.petFamily) S.petFamily = [];
   const entry = {
     form: S.form,
-    name: NAMES[S.form] || S.form,
+    name: displayName(S),
+    morphId: S.morphId || 0,
     trait: formTrait(S.form),
     stage: S.stage,
     age: S.age,
@@ -495,6 +585,305 @@ function recordFamilyMember(reason) {
   S.petFamily = S.petFamily.filter(e => (e.form + '-G' + e.gen) !== key);
   S.petFamily.unshift(entry);
   if (S.petFamily.length > 24) S.petFamily.pop();
+}
+
+
+// ---- 256 unique Pal species: 8 ears × 8 tails × 4 patterns (guaranteed unique IDs) ----
+const SPECIES_COUNT = 256;
+const NAME_A = ['Vel','Nim','Zar','Oka','Lum','Pex','Qui','Iri','Bos','Tep','Myn','Ara','Sho','Gri','Wib','Cai','Neo','Fay','Rux','Dai','Kel','Yuu','Plo','Hex','Siv','Ora','Jin','Taz','Mew','Vyn','Azu','Rel'];
+const NAME_B = ['ko','mi','ra','zu','bit','chi','do','nx','lo','qi','va','no','shi','el','um','ak'];
+function hash32(s) {
+  let h = 2166136261;
+  s = String(s || '');
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+function morphParts(id) {
+  id = ((Number(id) || 0) % SPECIES_COUNT + SPECIES_COUNT) % SPECIES_COUNT;
+  return {
+    id: id,
+    ears: id % 8,
+    tail: Math.floor(id / 8) % 8,
+    pattern: Math.floor(id / 64) % 4,
+    accent: (id * 5 + 3) % 8
+  };
+}
+function generatePetName(id) {
+  id = ((Number(id) || 0) % SPECIES_COUNT + SPECIES_COUNT) % SPECIES_COUNT;
+  return NAME_A[id % NAME_A.length] + NAME_B[Math.floor(id / NAME_A.length) % NAME_B.length];
+}
+function speciesTag(id) {
+  const n = ((Number(id) || 0) % SPECIES_COUNT) + 1;
+  return '#' + String(1000 + n).slice(1);
+}
+function markSpeciesSeen(id) {
+  if (id == null || id < 0) return;
+  if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
+  S.speciesSeen[String(((Number(id) || 0) % SPECIES_COUNT))] = 1;
+}
+function speciesSeenCount() {
+  if (!S.speciesSeen || typeof S.speciesSeen !== 'object') return 0;
+  return Object.keys(S.speciesSeen).length;
+}
+function assignNewMorph(p, parent, partner) {
+  const t = p || S;
+  let id;
+  const r = Math.random();
+  const pId = parent && parent.morphId != null ? Number(parent.morphId) : null;
+  const qId = partner
+    ? (partner.morph != null ? Number(partner.morph)
+      : (hash32(partner.code || partner.name || partner.petName || 'x') % SPECIES_COUNT))
+    : null;
+  if (pId != null && qId != null && r < 0.35) {
+    const a = morphParts(pId), b = morphParts(qId);
+    id = (a.ears + (b.tail * 8) + (a.pattern * 64)) % SPECIES_COUNT;
+  } else if (pId != null && r < 0.62) {
+    id = ((pId % SPECIES_COUNT) + SPECIES_COUNT) % SPECIES_COUNT;
+  } else {
+    id = hash32((t.petId || newPetId()) + '|' + Date.now() + '|' + Math.random()) % SPECIES_COUNT;
+  }
+  t.morphId = id;
+  t.petName = generatePetName(id);
+  markSpeciesSeen(id);
+  return id;
+}
+function ensureMorph(p) {
+  const t = p || S;
+  if (!t || t.form === 'egg' || t.stage === 'egg') return 0;
+  if (t.morphId == null || t.morphId < 0 || t.morphId >= SPECIES_COUNT) {
+    t.morphId = hash32((t.petId || 'PAL') + '|' + (t.generation || 1) + '|' + (t.born || 0)) % SPECIES_COUNT;
+  }
+  if (!t.petName) t.petName = generatePetName(t.morphId);
+  markSpeciesSeen(t.morphId);
+  return t.morphId;
+}
+function displayName(p) {
+  const t = p || S;
+  if (!t || t.form === 'egg' || t.stage === 'egg') return 'Egg';
+  if (t.form === 'dead' || t.stage === 'dead') return 'Spirit';
+  ensureMorph(t);
+  return t.petName || generatePetName(t.morphId || 0);
+}
+function rustDisc(n, why) {
+  n = Math.max(0, n | 0);
+  if (!n) return false;
+  const before = S.disc || 0;
+  if (!before) return false;
+  S.disc = Math.max(0, before - n);
+  if (S.disc !== before && why) toast(why);
+  return S.disc !== before;
+}
+function formMetrics(form, g) {
+  g = g || 0;
+  let r = 15, cy = 1;
+  if (form === 'baby') { r = 10 + g; cy = 2; }
+  else if (form === 'child') { r = 13 + g; cy = 1; }
+  else if (form === 'teenGood') { r = 14 + g; cy = 0; }
+  else if (form === 'teenBad') { r = 12 + g; cy = 1; }
+  else if (form === 'adult1' || form === 'adult3') { r = 16; cy = 1; }
+  else if (form === 'adult4') { r = 18; cy = 2; }
+  else if (form === 'adult5') { r = 12; cy = 10; }
+  else if (form === 'adult6') { r = 17; cy = 4; }
+  else if (form === 'adult7') { r = 15; cy = 2; }
+  else if (form === 'adult8') { r = 14; cy = 2; }
+  else if (form === 'adult9') { r = 14; cy = 0; }
+  else if (form === 'adult10') { r = 15; cy = 1; }
+  else if (form === 'secret') { r = 16; cy = 0; }
+  else if (form === 'adult2') { r = 15; cy = 1; }
+  return {
+    r: r,
+    cy: cy,
+    crown: cy - r + 1,
+    cheekY: cy,
+    // Interior root so the tail grows OUT of the body (not beside it)
+    tailX: Math.max(3, Math.floor(r * 0.38)),
+    tailY: cy + Math.max(3, Math.floor(r * 0.48)),
+    earX: Math.max(6, r - 3),
+    armY: cy + 1,
+    armX: r,
+    faceY: cy - Math.max(3, Math.floor(r * 0.42)),
+    mouthY: cy + Math.max(3, Math.floor(r * 0.28))
+  };
+}
+function onPetBody(x, y, met) {
+  const dx = x, dy = y - met.cy;
+  return dx * dx + dy * dy <= (met.r - 1) * (met.r - 1);
+}
+function tailAnchor(form, g) {
+  const met = formMetrics(form, g);
+  let cx = 0, cy = met.cy, r = met.r;
+  if (form === 'teenBad') { cx = 5; cy = 3; r = 10 + (g || 0); }
+  if (form === 'adult5') { cx = 0; cy = 10; r = 11; }
+  // Down-right unit on the silhouette, then step inside so the stem overlaps the body
+  const ux = 0.70, uy = 0.72;
+  return {
+    x: cx + Math.round(ux * (r - 5)),
+    y: cy + Math.round(uy * (r - 5)),
+    ex: cx + Math.round(ux * r),
+    ey: cy + Math.round(uy * r)
+  };
+}
+function drawMorphTail(form, morphId, g, INK) {
+  if (form === 'egg' || form === 'dead') return;
+  const m = morphParts(morphId);
+  const a = tailAnchor(form, g);
+  // 3px-wide stem from INSIDE the body, through the edge — this is the attach
+  for (let i = 0; i <= 6; i++) {
+    const x = a.x + Math.round((a.ex - a.x) * i / 6);
+    const y = a.y + Math.round((a.ey - a.y) * i / 6);
+    fillRect(x, y, 3, 3, INK);
+  }
+  const tx = a.ex;
+  const ty = a.ey;
+
+  if (m.tail === 0) {
+    fillRect(tx, ty, 4, 4, INK);
+    px(tx + 4, ty + 3, INK);
+  } else if (m.tail === 1) {
+    for (let i = 0; i < 8; i++) {
+      fillRect(tx + Math.floor(i / 3), ty + i, 3, 2, INK);
+    }
+  } else if (m.tail === 2) {
+    fillRect(tx, ty, 3, 6, INK);
+    fillRect(tx + 1, ty + 5, 5, 3, INK);
+    fillRect(tx + 4, ty + 2, 3, 6, INK);
+  } else if (m.tail === 3) {
+    fillRect(tx, ty, 3, 3, INK);
+    fillRect(tx - 2, ty + 2, 2, 5, INK);
+    fillRect(tx + 3, ty + 2, 2, 5, INK);
+    px(tx - 3, ty + 6, INK); px(tx + 5, ty + 6, INK);
+  } else if (m.tail === 4) {
+    fillRect(tx, ty, 3, 3, INK);
+    fillRect(tx + 2, ty - 1, 3, 3, INK);
+    px(tx + 5, ty - 2, INK); px(tx + 6, ty - 4, INK);
+  } else if (m.tail === 5) {
+    fillRect(tx, ty, 3, 3, INK);
+    fillCirc(tx + 3, ty + 4, 4, INK);
+  } else if (m.tail === 6) {
+    for (let i = 0; i < 9; i++) {
+      fillRect(tx + Math.floor(i / 4), ty + i, 3, 2, INK);
+    }
+  } else {
+    fillRect(tx, ty, 3, 3, INK);
+    fillRect(tx + 2, ty + 1, 3, 6, INK);
+    px(tx + 5, ty + 1, INK); px(tx + 6, ty, INK);
+    px(tx + 5, ty + 6, INK); px(tx + 6, ty + 7, INK);
+  }
+}
+function drawMorphHead(form, morphId, g, INK, BG) {
+  if (form === 'egg' || form === 'dead') return;
+  const m = morphParts(morphId);
+  const met = formMetrics(form, g);
+  const top = met.crown;
+  const earX = met.earX;
+  const rootL = -earX, rootR = earX;
+  px(rootL, top + 2, INK); px(rootL + 1, top + 2, INK);
+  px(rootR - 1, top + 2, INK); px(rootR, top + 2, INK);
+
+  if (m.ears === 0) {
+    fillCirc(rootL - 1, top + 3, 4, INK);
+    fillCirc(rootR + 1, top + 3, 4, INK);
+  } else if (m.ears === 1) {
+    for (let i = 0; i < 8; i++) {
+      px(rootL + 2 + Math.floor(i / 3), top + 1 - i, INK);
+      px(rootL + 3 + Math.floor(i / 3), top + 1 - i, INK);
+      px(rootR - 2 - Math.floor(i / 3), top + 1 - i, INK);
+      px(rootR - 3 - Math.floor(i / 3), top + 1 - i, INK);
+    }
+  } else if (m.ears === 2) {
+    fillRect(rootL - 3, top + 1, 5, 8, INK);
+    fillRect(rootR - 1, top + 1, 5, 8, INK);
+    px(rootL - 4, top + 8, INK); px(rootR + 4, top + 8, INK);
+  } else if (m.ears === 3) {
+    fillCirc(rootL - 2, top + 3, 4, INK);
+    fillCirc(rootR + 2, top + 3, 4, INK);
+  } else if (m.ears === 4) {
+    fillRect(-2, top - 1, 2, 5, INK); fillCirc(-1, top - 3, 2, INK);
+    fillRect(1, top, 2, 4, INK); fillCirc(2, top - 2, 2, INK);
+  } else if (m.ears === 5) {
+    fillRect(rootL + 1, top - 8, 4, 12, INK);
+    fillRect(rootR - 4, top - 8, 4, 12, INK);
+    px(rootL + 2, top - 9, INK); px(rootR - 3, top - 9, INK);
+  } else if (m.ears === 6) {
+    fillRect(rootL, top + 1, 3, 3, INK);
+    fillRect(rootR - 2, top + 1, 3, 3, INK);
+  } else {
+    for (let i = 0; i < 7; i++) {
+      px(rootL - i, top + 2 + Math.floor(i / 2), INK);
+      px(rootL - i, top + 3 + Math.floor(i / 2), INK);
+      px(rootR + i, top + 2 + Math.floor(i / 2), INK);
+      px(rootR + i, top + 3 + Math.floor(i / 2), INK);
+    }
+  }
+
+  if (m.pattern === 1) {
+    const spots = [[-5, met.cy], [4, met.cy + 2], [-2, met.cy + 5], [3, met.cy - 2], [6, met.cy + 4]];
+    for (let i = 0; i < spots.length; i++) {
+      if (onPetBody(spots[i][0], spots[i][1], met)) px(spots[i][0], spots[i][1], BG);
+    }
+  } else if (m.pattern === 2) {
+    const by = met.cy + Math.min(6, Math.floor(met.r * 0.4));
+    fillCirc(0, by, Math.min(5, met.r - 6), BG);
+  } else if (m.pattern === 3) {
+    const bw = Math.max(8, met.r * 2 - 8);
+    fillRect(-Math.floor(bw / 2), met.cy + 2, bw, 2, BG);
+  }
+
+  if (m.accent === 1) {
+    const wx = Math.max(8, met.r - 2);
+    px(-wx, met.cheekY, INK); px(-wx - 2, met.cheekY, INK); px(-wx - 1, met.cheekY + 1, INK);
+    px(wx, met.cheekY, INK); px(wx + 2, met.cheekY, INK); px(wx + 1, met.cheekY + 1, INK);
+  } else if (m.accent === 2) {
+    fillRect(-4, top + 1, 8, 3, BG);
+    px(-5, top + 2, INK); px(4, top + 2, INK);
+  } else if (m.accent === 3) {
+    const cw = Math.max(10, met.r * 2 - 6);
+    fillRect(-Math.floor(cw / 2), met.cy + 5, cw, 2, BG);
+  } else if (m.accent === 4) {
+    px(0, top, INK); px(0, top - 2, INK); px(0, top - 4, INK);
+    px(-1, top - 1, INK); px(1, top - 1, INK);
+  } else if (m.accent === 5) {
+    const bx = Math.max(5, Math.floor(met.r * 0.45));
+    if (onPetBody(-bx, met.cy + 1, met)) { px(-bx, met.cy + 1, BG); px(-bx + 1, met.cy + 1, BG); }
+    if (onPetBody(bx, met.cy + 1, met)) { px(bx, met.cy + 1, BG); px(bx - 1, met.cy + 1, BG); }
+  } else if (m.accent === 6) {
+    px(0, top + 3, BG); px(-1, top + 4, BG); px(1, top + 4, BG);
+  } else if (m.accent === 7) {
+    const sy = met.cy - 3;
+    const sx = met.r - 1;
+    fillRect(-sx - 4, sy, 5, 3, INK); px(-sx - 5, sy - 1, INK);
+    fillRect(sx - 1, sy, 5, 3, INK); px(sx + 4, sy - 1, INK);
+  }
+
+  const drawingSelf = !(S.battle && S.bat && form === S.bat.enemyForm && form !== S.form);
+  if (drawingSelf && ((S.careMiss || 0) >= 5 || form === 'teenBad' || form === 'adult5' || form === 'adult6')) {
+    px(-2, top, INK); px(-1, top - 1, INK); px(0, top, INK);
+  } else if (drawingSelf && (S.disc || 0) >= 70 && (S.careMiss || 0) <= 1) {
+    const gx = Math.max(4, Math.floor(met.r * 0.3));
+    if (onPetBody(-gx, met.cy - 2, met)) px(-gx, met.cy - 2, BG);
+    if (onPetBody(gx, met.cy - 3, met)) px(gx, met.cy - 3, BG);
+  }
+}
+function drawPetArms(form, g, f, INK) {
+  if (form === 'egg' || form === 'dead') return;
+  if (form === 'baby' && (g || 0) < 2) return;
+  if (form === 'adult1' || form === 'adult9') return;
+  const met = formMetrics(form, g);
+  const ax = met.armX;
+  const ay = met.armY;
+  const waving = S.anim === 'wave' && (f % 10 < 5);
+  fillRect(-ax - 3, ay, 4, 2, INK);
+  px(-ax - 3, ay + 2, INK);
+  px(-ax - 4, ay + 2, INK);
+  if (waving) {
+    fillRect(ax - 1, ay - 4, 2, 5, INK);
+    px(ax + 1, ay - 5, INK);
+    px(ax + 2, ay - 6, INK);
+  } else {
+    fillRect(ax - 1, ay, 4, 2, INK);
+    px(ax + 2, ay + 2, INK);
+    px(ax + 3, ay + 2, INK);
+  }
 }
 
 const NAMES = {
@@ -539,6 +928,8 @@ function applyShellTheme(idx) {
   const root = document.documentElement;
   root.style.setProperty('--shell', t.shell);
   root.style.setProperty('--shell-dark', t.dark);
+  const meta = document.getElementById('themeColorMeta');
+  if (meta) meta.setAttribute('content', t.shell);
   const dev = document.getElementById('device');
   if (dev) {
     dev.style.background = 'linear-gradient(165deg, ' + t.light + ' 0%, ' + t.shell + ' 45%, ' + t.dark + ' 100%)';
@@ -601,7 +992,6 @@ function melDeath()  { melody([[392,0.12],[349,0.12],[311,0.15],[277,0.18],[220,
 function melWin()    { melody([[523,0.06],[659,0.06],[784,0.06],[1047,0.08],[784,0.06],[1047,0.14]]); }
 function melLose()   { melody([[330,0.1],[294,0.12],[247,0.2]]); }
 function melHappy()  { melody([[523,0.05],[659,0.06],[784,0.08],[880,0.1]]); }
-function melEat()    { melody([[280,0.04],[240,0.04],[280,0.04],[320,0.05]]); }
 function melPoop()   { melody([[180,0.08],[140,0.12]]); }
 function melCall()   { melody([[600,0.06],[600,0.06],[450,0.1]]); }
 function melSick()   { melody([[220,0.1],[200,0.1],[180,0.15]]); }
@@ -609,19 +999,6 @@ function melTrain()  { melody([[400,0.05],[500,0.05],[600,0.05],[800,0.1]]); }
 
 // Small looping LCD-era chiptune. It starts only after a real user gesture,
 // which keeps mobile browser autoplay rules happy.
-const MUSIC = []; // no background loop — event melodies only
-function musicNote(f) {
-  if (!S.sound || S.paused || S.sleep || document.visibilityState === 'hidden') return;
-  try {
-    wakeAudio();
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = 'triangle'; o.frequency.value = f;
-    g.gain.setValueAtTime(0.0001, actx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.018, actx.currentTime + 0.025);
-    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.25);
-    o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + 0.27);
-  } catch(e) {}
-}
 function startMusic() {
   // Background music disabled by design — only event melodies (evolve/wake/win/etc.)
   stopMusic();
@@ -654,10 +1031,51 @@ if (typeof window !== 'undefined') {
   if (!window.POCKETPAL_WORKER_URL) {
     window.POCKETPAL_WORKER_URL = 'https://pocketpal.crzymn05.workers.dev';
   }
+  if (!window.POCKETPAL_VAPID_PUBLIC) {
+    window.POCKETPAL_VAPID_PUBLIC = 'BFyP6Wf3D7LDF6zfmBRyRX2p4CMT_wM-uz9y9sV9eQxb4R-CK1FUw4acz7HcPOmfGTnUcAFNoeM6wMEvMk6yeXk';
+  }
 }
 
 // Override: window.POCKETPAL_PUSH_URL = 'https://YOUR_WORKER.workers.dev/push'
 // 3) Set window.POCKETPAL_VAPID_PUBLIC = 'your-vapid-public-key'
+function careSnapshotBody(sub, enabled) {
+  const baby = (S.age || 0) < 1;
+  return {
+    petId: S.myCode || 'local',
+    enabled: !!enabled,
+    subscription: sub ? (typeof sub.toJSON === 'function' ? sub.toJSON() : sub) : null,
+    care: {
+      hunger: S.hunger,
+      happy: S.happy,
+      poop: !!S.poop,
+      sick: !!(S.sick || S.injured),
+      sleep: !!S.sleep,
+      paused: !!S.paused,
+      lastH: S.lastH || Date.now(),
+      lastY: S.lastY || Date.now(),
+      lastP: S.lastP || Date.now(),
+      hungerMs: (baby ? 3.2 : 2.5) * 60000,
+      happyMs: (baby ? 4.0 : 3.2) * 60000
+    }
+  };
+}
+async function publishCareCard(forceOff) {
+  const base = workerBaseUrl();
+  if (!base) return false;
+  try {
+    let sub = null;
+    if (navigator.serviceWorker) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg.pushManager) sub = await reg.pushManager.getSubscription();
+    }
+    await fetch(base + '/care', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(careSnapshotBody(sub, !forceOff && !!S.notifications))
+    });
+    return true;
+  } catch (e) { return false; }
+}
 async function subscribeWebPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
   if (!window.POCKETPAL_VAPID_PUBLIC) return null;
@@ -668,11 +1086,12 @@ async function subscribeWebPush() {
       const key = urlBase64ToUint8Array(window.POCKETPAL_VAPID_PUBLIC);
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
     }
-    if (window.POCKETPAL_PUSH_URL) {
-      await fetch(window.POCKETPAL_PUSH_URL.replace(/\/push$/, '/subscribe'), {
+    const base = workerBaseUrl();
+    if (base) {
+      await fetch(base + '/care', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: sub, petId: S.myCode || 'local' })
+        body: JSON.stringify(careSnapshotBody(sub, true))
       }).catch(() => {});
     }
     return sub;
@@ -695,6 +1114,38 @@ function updateAppBadge() {
     }
   } catch (e) {}
 }
+const CARE_ALERTS = {
+  hunger:     { title: 'PocketPal is hungry',     body: 'Feed me when you can.' },
+  happy:      { title: 'PocketPal wants to play', body: 'Got a minute for a game?' },
+  poop:       { title: 'PocketPal made a mess',   body: 'Clean me up, please.' },
+  sick:       { title: 'PocketPal feels sick',    body: 'I need medicine.' },
+  lights:     { title: 'PocketPal is sleepy',     body: 'Lights out so I can sleep.' },
+  discipline: { title: 'PocketPal is acting up',  body: 'That call was fake — use Discipline.' }
+};
+function careAlertIcon(file) {
+  try { return new URL(file, window.location.href).href; } catch (e) { return './' + file; }
+}
+function dismissCareAlert(type) {
+  if (!navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then(reg => {
+    if (!reg.getNotifications) return;
+    const opts = type ? { tag: 'pocketpal-' + type } : {};
+    return reg.getNotifications(opts).then(list => {
+      list.forEach(n => n.close());
+    });
+  }).catch(() => {});
+}
+function clearResolvedCareAlerts() {
+  if (S.hunger > 0) dismissCareAlert('hunger');
+  if (S.happy > 1) dismissCareAlert('happy');
+  if (!S.poop) dismissCareAlert('poop');
+  if (!S.sick && !S.injured) dismissCareAlert('sick');
+  if (!S.lightsMissPending) dismissCareAlert('lights');
+}
+function hintOpenedCare(type) {
+  const copy = CARE_ALERTS[type];
+  if (copy) toast(copy.body);
+}
 function careNotify(type, message) {
   if (!S.notifications) return;
   if (!('Notification' in window)) return;
@@ -705,27 +1156,19 @@ function careNotify(type, message) {
   S.lastNotifyAt = now;
   updateAppBadge();
   const opts = {
-    body: message,
+    body: (CARE_ALERTS[type] && CARE_ALERTS[type].body) || message,
     tag: 'pocketpal-' + type,
     renotify: true,
-    icon: './icon-512.png',
-    badge: './icon-192.png',
-    image: './icon-512.png',
-    vibrate: [120, 60, 120],
+    icon: careAlertIcon('icon-512.png'),
+    badge: careAlertIcon('icon-192.png'),
+    vibrate: [80, 40, 80],
     silent: false,
     requireInteraction: false,
-    data: { url: './index.html', type: type, care: true }
+    data: { url: './index.html?care=' + type, type: type, care: true }
   };
   try {
-    const titleMap = {
-      hunger: 'PocketPal — Hungry',
-      happy: 'PocketPal — Wants Play',
-      poop: 'PocketPal — Needs Clean',
-      sick: 'PocketPal — Needs Medicine',
-      lights: 'PocketPal — Bedtime',
-      discipline: 'PocketPal — Discipline'
-    };
-    const title = titleMap[type] || 'PocketPal';
+    const copy = CARE_ALERTS[type] || { title: 'PocketPal', body: message };
+    const title = copy.title;
     // Optional Cloudflare Worker relay (set window.POCKETPAL_PUSH_URL to enable)
     try {
       if (window.POCKETPAL_PUSH_URL && navigator.serviceWorker) {
@@ -765,7 +1208,15 @@ function requestNotifications() {
     const btn = document.getElementById('notifyBtn');
     if (btn) btn.textContent = S.notifications ? '🔔' : '🔕';
     if (S.notifications) {
-      toast('Care alerts ON — install PWA for best delivery'); subscribeWebPush();
+      toast('Care alerts ON — closed-app pings armed');
+      subscribeWebPush();
+      publishCareCard();
+      pushCareSnapshotToSW();
+      try {
+        navigator.serviceWorker.ready.then(reg => {
+          if (reg.periodicSync) reg.periodicSync.register('pocketpal-care', { minInterval: 15 * 60 * 1000 }).catch(() => {});
+        }).catch(() => {});
+      } catch (e) {}
       try {
         new Notification('PocketPal', {
           body: 'Alerts on. Install to Home Screen for closed-app care pings.',
@@ -775,7 +1226,9 @@ function requestNotifications() {
         });
       } catch(e) {}
     } else {
-      toast('Care alerts OFF');
+      toast('Care alerts OFF — no closed-app pings');
+      publishCareCard(true);
+      pushCareSnapshotToSW(true);
     }
     save();
     return;
@@ -791,7 +1244,10 @@ function requestNotifications() {
       S.notifications = true;
       const btn = document.getElementById('notifyBtn');
       if (btn) btn.textContent = '🔔';
-      toast('Alerts ON — Add to Home Screen for best results'); subscribeWebPush();
+      toast('Care alerts ON — closed-app pings armed');
+      subscribeWebPush();
+      publishCareCard();
+      pushCareSnapshotToSW();
       try {
         new Notification('PocketPal', {
           body: 'Care alerts enabled. Install to Home Screen for closed-app pings.',
@@ -866,7 +1322,8 @@ const FONT = {
   '6':[0x06,0x08,0x10,0x1E,0x11,0x11,0x0E],'7':[0x1F,0x01,0x02,0x04,0x08,0x08,0x08],
   '8':[0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E],'9':[0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C],
   ' ':[0,0,0,0,0,0,0],':':[0,0,0x04,0,0,0x04,0],'.':[0,0,0,0,0,0x04,0x04],
-  '-':[0,0,0,0x1F,0,0,0],'!':[0x04,0x04,0x04,0x04,0x04,0,0x04]
+  '-':[0,0,0,0x1F,0,0,0],'!':[0x04,0x04,0x04,0x04,0x04,0,0x04],
+  '#':[0x0A,0x0A,0x1F,0x0A,0x1F,0x0A,0x0A]
 };
 function drawText(str, x, y, color) {
   ctx.fillStyle = color || '#0f380f';
@@ -935,7 +1392,7 @@ function drawFx() {
 function drawPet(cx, cy, form, f) {
   const INK = '#0f380f';
   const BG  = '#9bbc0f';
-  const blink = S.game || S.battle ? (f % 120 < 3) : (f % 90 < 5);
+  const blink = S.game || S.battle ? ((f % 120 < 3) && (!S._gameEyeOpenUntil || Date.now() >= S._gameEyeOpenUntil)) : (f % 90 < 5);
   const a = S.anim;
   // Eyes closed during sleep (unless game), yawn, or death rise
   const eyesClosed = !S.battle && !S.game && ((S.sleep) || a === 'yawn') && a !== 'wake' && a !== 'poop';
@@ -948,7 +1405,13 @@ function drawPet(cx, cy, form, f) {
   let scaleX = 1;
   let rotHint = 0;
   // Stage personality in idle — breathe, sit, wave, hop (life-like)
-  if (!S.battle && !S.game && !S.anim && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
+  if (!S.battle && !S.anim && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
+    if (S.game) {
+      // Keep pets alive in mini-games: hop + sway (look/memory/train override shift after)
+      bob = (Math.sin(f * 0.14) > 0) ? 1 : 0;
+      if (f % 48 < 5) bob = 2;
+      shift = (Math.floor(f / 20) % 2 === 0) ? 1 : -1;
+    } else {
     bob = (Math.sin(f * 0.08) > 0) ? 1 : 0;
     const cycle = Math.floor(f / 40) % 12;
     // Sit pose (lower bob) every few cycles
@@ -988,6 +1451,12 @@ function drawPet(cx, cy, form, f) {
       }
     }
     if (S.happy >= 3 && S.hunger >= 3 && f % 160 < 5) bob = 2;
+    }
+  } else if (S.battle && !S.sleep && S.stage !== 'egg' && S.stage !== 'dead') {
+    // Fighting stance — hop + sidestep so neither pal looks frozen
+    bob = (Math.sin(f * 0.2) > 0) ? 1 : 0;
+    if (f % 28 < 4) bob = 2;
+    shift = (Math.floor(f / 16) % 2 === 0) ? 2 : -2;
   }
 
   // Low energy slump when hearts low
@@ -1004,10 +1473,16 @@ function drawPet(cx, cy, form, f) {
   }
 
   if (S.game && S.gameType === 'look') {
-    // After eyes settle, lean toward TRUE answer (clearer than body-trick confusion)
+    // Wander, then lock. Body may lean the WRONG way — trust the pupils.
     const settled = !S._lookSettleAt || Date.now() >= S._lookSettleAt;
-    if (settled) shift = S.gameDir === 0 ? -10 : 10;
-    bob = (Math.sin(f * 0.15) > 0) ? 1 : 0;
+    if (!settled) {
+      shift = (Math.sin(f * 0.28) > 0) ? 6 : -6;
+      bob = (f % 8 < 4) ? 1 : 0;
+    } else {
+      const bd = (S._lookBodyDir != null) ? S._lookBodyDir : S.gameDir;
+      shift = bd === 0 ? -10 : 10;
+      bob = (Math.sin(f * 0.16) > 0) ? 1 : 0;
+    }
   } else if (S.game && S.gameType === 'memory') {
     // Memory: pet stays mostly center; side labels teach the sequence
     bob = (Math.sin(f * 0.15) > 0) ? 1 : 0;
@@ -1152,10 +1627,10 @@ function drawPet(cx, cy, form, f) {
   else if (form === 'dead') {
     // Angel spirit with halo
     fillCirc(0, 4, 13, INK);
-    // wings
-    for (let i = 0; i < 5; i++) {
-      px(-18-i, -2+i, INK); px(-17-i, -1+i, INK);
-      px(18+i, -2+i, INK); px(17+i, -1+i, INK);
+    // wings grow from the shoulders
+    for (let i = 0; i < 6; i++) {
+      px(-13 - i, 2 - i, INK); px(-12 - i, 3 - i, INK);
+      px(13 + i, 2 - i, INK); px(12 + i, 3 - i, INK);
     }
     // halo
     for (let a = 0; a < 12; a++) {
@@ -1169,44 +1644,45 @@ function drawPet(cx, cy, form, f) {
     // Keep YOUR pet's growth in battles; rivals use their stored growth
     let g = 0;
     if (form !== 'egg' && form !== 'dead') {
-      if (S.battle && S.bat && form === S.bat.enemyForm && form !== S.form) {
+      if (S._rivalDraw && S.bat) {
         g = Math.min(3, S.bat.enemyGrowth || 0);
       } else {
         g = Math.min(3, S.growthPhase || 0);
       }
     }
+    let mid = S.morphId || 0;
+    if (S._morphDraw != null) mid = S._morphDraw;
+    else if (S.battle && S.bat && form === S.bat.enemyForm && form !== S.form && S.bat.enemyMorph != null) mid = S.bat.enemyMorph;
     if (form === 'baby') {
       // Nugget → chubby baby with feet/arms as it grows
       const r = 10 + g;
       fillCirc(0, 2, r, INK);
-      px(-12 - g, 4, INK); px(12 + g, 4, INK);
-      if (g >= 1) { px(-13 - g, 5, INK); px(13 + g, 5, INK); }
-      if (g >= 2) { fillRect(-5, 10 + g, 3, 2, INK); fillRect(3, 10 + g, 3, 2, INK); }
+      if (g >= 2) { fillRect(-5, r + 1, 3, 3, INK); fillRect(3, r + 1, 3, 3, INK); }
       if (g >= 3) { px(-2, -r + 2, BG); px(2, -r + 2, BG); } // tiny brow nubs
     } else if (form === 'child') {
       const r = 13 + g;
       fillCirc(0, 1, r, INK);
-      fillCirc(-8 - g, -12 - Math.floor(g/2), 3 + (g > 1 ? 1 : 0), INK);
-      fillCirc(8 + g, -12 - Math.floor(g/2), 3 + (g > 1 ? 1 : 0), INK);
-      if (g >= 1) { fillRect(-6, 12 + Math.floor(g/2), 4, 2, INK); fillRect(3, 12 + Math.floor(g/2), 4, 2, INK); }
-      if (g >= 2) { px(-r + 2, 2, INK); px(r - 2, 2, INK); } // stub arms
+      fillCirc(-r + 5, -r + 2, 3 + (g > 1 ? 1 : 0), INK);
+      fillCirc(r - 5, -r + 2, 3 + (g > 1 ? 1 : 0), INK);
+      if (g >= 1) { fillRect(-6, r, 4, 3, INK); fillRect(3, r, 4, 3, INK); }
       if (g >= 3) { px(0, -r - 1, INK); px(-1, -r, INK); px(1, -r, INK); } // little tuft
     } else if (form === 'teenGood') {
       const r = 14 + g;
       fillCirc(0, 0, r, INK);
-      for (let i = -7; i <= 7; i += 2) px(i, -17 - g, INK);
-      px(0, -19 - g, INK); px(-2, -18 - g, INK); px(2, -18 - g, INK);
-      if (g >= 1) { fillRect(-7, 13 + g, 4, 2, INK); fillRect(4, 13 + g, 4, 2, INK); }
-      if (g >= 2) { px(-r, -2, INK); px(r, -2, INK); px(-r - 1, 0, INK); px(r + 1, 0, INK); }
+      // Hair tuft grows from the crown (not floating above)
+      const crown = -r + 1;
+      for (let i = -6; i <= 6; i += 2) px(i, crown, INK);
+      px(0, crown - 2, INK); px(-2, crown - 1, INK); px(2, crown - 1, INK);
+      if (g >= 1) { fillRect(-7, r - 1, 4, 3, INK); fillRect(4, r - 1, 4, 3, INK); }
       if (g >= 3) { px(-3, -r + 4, BG); px(3, -r + 4, BG); } // cheek shine
     } else if (form === 'teenBad') {
       const r1 = 12 + g, r2 = 10 + g;
       fillCirc(-3, 1, r1, INK);
       fillCirc(5, 3, r2, INK);
-      px(-12 - g, -12, INK); px(12 + g, -10, INK);
-      px(-10 - g, -14, INK); px(10 + g, -13, INK);
-      if (g >= 1) { fillRect(-8, 14, 4, 2, INK); fillRect(5, 14, 4, 2, INK); }
-      if (g >= 2) { px(-14 - g, 2, INK); px(14 + g, 4, INK); }
+      // Horns grow from the head, not floating above
+      px(-3 - r1 + 2, 1 - r1 + 1, INK); px(-3 - r1 + 1, 1 - r1, INK); px(-3 - r1, 1 - r1 - 1, INK);
+      px(5 + r2 - 2, 3 - r2 + 1, INK); px(5 + r2 - 1, 3 - r2, INK); px(5 + r2, 3 - r2 - 1, INK);
+      if (g >= 1) { fillRect(-8, r1 + 2, 4, 3, INK); fillRect(5, r1 + 2, 4, 3, INK); }
       if (g >= 3) { px(-5, -2, BG); px(6, 0, BG); }
       fillRect(-5, 8, 10, 3, BG);
     } else if (form === 'adult1') {
@@ -1218,10 +1694,10 @@ function drawPet(cx, cy, form, f) {
     } else if (form === 'adult2') {
       // Kiko — pointed ears, leaner
       fillCirc(0, 1, 15, INK);
-      // triangle ears
+      // triangle ears rooted on the crown (integer pixels)
       for (let i = 0; i < 8; i++) {
-        px(-12+i/2, -12-i, INK); px(-11+i/2, -12-i, INK);
-        px(12-i/2, -12-i, INK); px(11-i/2, -12-i, INK);
+        px(-11 + Math.floor(i / 2), -13 - i, INK); px(-10 + Math.floor(i / 2), -13 - i, INK);
+        px(11 - Math.floor(i / 2), -13 - i, INK); px(10 - Math.floor(i / 2), -13 - i, INK);
       }
       fillRect(-7, 15, 4, 3, INK); fillRect(4, 15, 4, 3, INK);
     } else if (form === 'adult3') {
@@ -1241,7 +1717,7 @@ function drawPet(cx, cy, form, f) {
       fillCirc(0, -10, 10, INK);
       fillCirc(0, 0, 12, INK);
       fillCirc(0, 10, 11, INK);
-      px(-14, 2, INK); px(14, 2, INK);
+      fillRect(-6, 20, 4, 3, INK); fillRect(3, 20, 4, 3, INK);
     } else if (form === 'adult6') {
       // Zuzu — neglected, flat wide + heavy brow
       fillCirc(0, 4, 17, INK);
@@ -1250,9 +1726,14 @@ function drawPet(cx, cy, form, f) {
     } else if (form === 'adult7') {
       // Nova — rare perfect-care star form
       fillCirc(0, 2, 15, INK);
+      // Short spikes grow from the body surface (not floating points)
       for (let i = 0; i < 8; i++) {
         const ang = i * Math.PI / 4;
-        px(Math.round(Math.cos(ang) * 20), Math.round(2 + Math.sin(ang) * 20), INK);
+        const x0 = Math.round(Math.cos(ang) * 15);
+        const y0 = Math.round(2 + Math.sin(ang) * 15);
+        const x1 = Math.round(Math.cos(ang) * 18);
+        const y1 = Math.round(2 + Math.sin(ang) * 18);
+        px(x0, y0, INK); px(x1, y1, INK);
       }
       fillRect(-7, 16, 4, 3, INK); fillRect(4, 16, 4, 3, INK);
     } else if (form === 'adult8') {
@@ -1265,14 +1746,14 @@ function drawPet(cx, cy, form, f) {
     } else if (form === 'adult9') {
       // Rin — sleek athletic (good care + play/train heavy)
       fillCirc(0, 0, 14, INK);
-      fillRect(-18, -2, 8, 4, INK); fillRect(10, -2, 8, 4, INK);
+      fillRect(-18, 0, 6, 3, INK); px(-19, 3, INK);
+      fillRect(12, 0, 6, 3, INK); px(18, 3, INK);
       px(-8, -14, INK); px(8, -14, INK);
       fillRect(-6, 14, 4, 3, INK); fillRect(3, 14, 4, 3, INK);
     } else if (form === 'adult10') {
       // Bolt — battle-hardened spiky adult
       fillCirc(0, 1, 15, INK);
-      px(0, -18, INK); px(-2, -16, INK); px(2, -16, INK);
-      px(-16, 0, INK); px(16, 0, INK); px(-15, -4, INK); px(15, -4, INK);
+      px(0, -15, INK); px(0, -17, INK); px(-1, -16, INK); px(1, -16, INK);
       fillRect(-8, 15, 5, 3, INK); fillRect(4, 15, 5, 3, INK);
     } else if (form === 'secret') {
       // Elder — dignified with staff-like marks and beard
@@ -1280,94 +1761,116 @@ function drawPet(cx, cy, form, f) {
       fillRect(-6, 8, 12, 6, INK); // beard
       px(-12, -12, INK); px(12, -12, INK);
       px(-14, -8, INK); px(14, -8, INK);
-      // tiny crown
-      px(-4, -18, INK); px(0, -20, INK); px(4, -18, INK);
-      fillRect(-5, -17, 11, 2, INK);
+      // tiny crown sitting on the head
+      fillRect(-5, -16, 11, 2, INK);
+      px(-4, -17, INK); px(0, -18, INK); px(4, -17, INK);
     } else {
       fillCirc(0, 0, 16, INK);
     }
 
-    // Eyes — fixed sockets, pupils look around together (real eye feel)
+    drawMorphTail(form, mid, g, INK);
+    drawMorphHead(form, mid, g, INK, BG);
+    drawPetArms(form, g, f, INK);
+
+    // Face — sockets + pupils + a thick readable mouth, placed on THIS body
     if (form !== 'dead') {
-      const ey = form === 'baby' ? -1 : -3; // socket vertical position
+      const metF = formMetrics(form, g);
+      const ey = metF.faceY;
+      const sockW = form === 'baby' ? 6 : 7;
+      const sockH = form === 'baby' ? 5 : 6;
+      const eyeL = -sockW - 1;
+      const eyeR = 2;
       if (eyesClosed) {
-        px(-7, ey+1, BG); px(-6, ey+1, BG); px(-5, ey+1, BG); px(-4, ey+1, BG);
-        px(4, ey+1, BG); px(5, ey+1, BG); px(6, ey+1, BG); px(7, ey+1, BG);
+        fillRect(eyeL, ey + 2, sockW, 2, BG);
+        fillRect(eyeR, ey + 2, sockW, 2, BG);
       } else if (!blink) {
-        // Cute larger sockets + tiny pupil dots
-        fillRect(-8, ey - 1, 6, 6, BG);
-        fillRect(3, ey - 1, 6, 6, BG);
+        fillRect(eyeL, ey, sockW, sockH, BG);
+        fillRect(eyeR, ey, sockW, sockH, BG);
 
         let lookX = 0, lookY = 0;
-        // Fast life-like glance cycle (everywhere including minigames)
-        const lookCycle = Math.floor(f / 22) % 12;
+        const glanceSeed = ((form || '').length * 5 + (S._morphDraw || 0) * 3) | 0;
+        const lookCycle = Math.floor((f + glanceSeed) / 16) % 16;
 
         if (S.game && S.gameType === 'look') {
-          // First ~0.7s glance around, then lock onto true answer (gameDir)
           const settled = !S._lookSettleAt || Date.now() >= S._lookSettleAt;
           if (!settled) {
-            if (lookCycle % 4 === 0) lookX = -1;
-            else if (lookCycle % 4 === 1) lookX = 1;
-            else if (lookCycle % 4 === 2) lookY = -1;
-            else lookX = 0;
+            const t = Math.floor(f / 7) % 6;
+            if (t === 0) lookX = -2;
+            else if (t === 1) lookX = 2;
+            else if (t === 2) { lookX = 0; lookY = -1; }
+            else if (t === 3) lookX = -2;
+            else if (t === 4) lookX = 1;
+            else { lookX = 0; lookY = 1; }
           } else {
-            lookX = (S.gameDir === 0) ? -1 : 1;
+            lookX = (S.gameDir === 0) ? -2 : 2;
             lookY = 0;
           }
         } else if (S.game && S.gameType === 'memory' && S.memPhase === 'show') {
-          lookX = (S.gameDir === 0) ? -1 : 1;
+          lookX = (S.gameDir === 0) ? -2 : 2;
         } else if (S.game || S.battle) {
-          // Still lively in other games/battles
-          if (lookCycle === 2 || lookCycle === 3) lookX = -1;
-          else if (lookCycle === 6 || lookCycle === 7) lookX = 1;
-          else if (lookCycle === 4) lookY = -1;
-          else if (lookCycle === 9) lookY = 1;
+          if (lookCycle <= 2) lookX = -2;
+          else if (lookCycle <= 4) lookX = -1;
+          else if (lookCycle <= 6) lookX = 0;
+          else if (lookCycle <= 8) lookX = 2;
+          else if (lookCycle <= 10) lookX = 1;
+          else if (lookCycle === 11) { lookX = 0; lookY = -1; }
+          else if (lookCycle === 12) { lookX = -1; lookY = 1; }
+          else if (lookCycle === 13) lookX = 2;
+          else lookX = 0;
         } else if (S.poop) {
-          lookX = (S.poopX > (S.petX || 120)) ? 1 : -1;
+          lookX = (S.poopX > (S.petX || 120)) ? 2 : -2;
           lookY = 1;
         } else if (S.call || S.lightsMissPending) {
-          lookX = 1; lookY = -1;
+          lookX = 2; lookY = -1;
         } else if (S.hunger <= 1 || S.happy <= 1) {
-          lookY = -1;
-          lookX = (lookCycle < 6) ? -1 : 1;
+          lookY = 1;
+          lookX = (lookCycle < 8) ? -2 : 2;
         } else {
-          if (lookCycle === 2 || lookCycle === 3) lookX = -1;
-          else if (lookCycle === 6 || lookCycle === 7) lookX = 1;
-          if (lookCycle === 4) lookY = -1;
-          if (lookCycle === 8 || lookCycle === 9) lookY = 1;
+          if (lookCycle <= 3) lookX = -2;
+          else if (lookCycle <= 5) lookX = 0;
+          else if (lookCycle <= 9) lookX = 2;
+          else if (lookCycle === 10) lookY = -1;
+          else if (lookCycle === 11) { lookX = 1; lookY = 1; }
+          else lookX = 0;
         }
 
-        // Single dark pupil dot per eye (reads clearly in sockets)
-        const lx = lookX;
-        const ly = lookY;
-        px(-6 + lx, ey + 1 + ly, INK);
-        px(-5 + lx, ey + 1 + ly, INK);
-        px(5 + lx, ey + 1 + ly, INK);
-        px(6 + lx, ey + 1 + ly, INK);
+        const maxLX = sockW - 4;
+        const lx = Math.max(-2, Math.min(maxLX, lookX));
+        const ly = Math.max(0, Math.min(sockH - 3, lookY + 1));
+        fillRect(eyeL + 2 + lx, ey + ly, 2, 2, INK);
+        fillRect(eyeR + 2 + lx, ey + ly, 2, 2, INK);
       }
-    }
 
-    // Mouth
-    if (form !== 'dead') {
-      const my = form === 'baby' ? 6 : 5;
-      if (S.anim === 'yawn') {
-        // Big open yawn
+      // Tiny nose cut-out between the eyes
+      px(0, ey + sockH, BG);
+
+      const my = metF.mouthY;
+      if (S.anim === 'yawn' || S.anim === 'eat') {
         fillRect(-3, my, 7, 5, BG);
-        px(-2, my+1, INK); px(0, my+2, INK); px(2, my+1, INK);
+        px(-2, my + 1, INK); px(0, my + 2, INK); px(2, my + 1, INK);
+      } else if (eyesClosed && S.sleep) {
+        fillRect(-3, my + 1, 7, 2, BG);
       } else if (!eyesClosed) {
         if (faceSick) {
-          // Wavy sick mouth
-          px(-3, my+1, BG); px(-2, my, BG); px(-1, my+1, BG); px(0, my+2, BG); px(1, my+1, BG); px(2, my, BG); px(3, my+1, BG);
+          fillRect(-4, my + 1, 3, 2, BG);
+          fillRect(-1, my + 3, 3, 2, BG);
+          fillRect(2, my + 1, 3, 2, BG);
         } else if (happyMouth) {
-          px(-3, my, BG); px(-2, my+1, BG); px(-1, my+2, BG); px(0, my+2, BG); px(1, my+2, BG); px(2, my+1, BG); px(3, my, BG);
+          fillRect(-4, my, 2, 2, BG);
+          fillRect(-2, my + 2, 5, 2, BG);
+          fillRect(3, my, 2, 2, BG);
         } else if (faceHungry) {
-          // Open hungry frown
-          px(-3, my+1, BG); px(-2, my+2, BG); px(-1, my+3, BG); px(0, my+3, BG); px(1, my+3, BG); px(2, my+2, BG); px(3, my+1, BG);
-          px(-1, my+1, BG); px(1, my+1, BG);
+          // Hungry = small pleading frown, not a giant open hole
+          fillRect(-4, my + 2, 2, 2, BG);
+          fillRect(-2, my, 5, 2, BG);
+          fillRect(3, my + 2, 2, 2, BG);
+          fillRect(-1, my + 3, 3, 2, BG);
         } else if (sadMouth || faceDirty || S.anim === 'sulk') {
-          px(-3, my+2, BG); px(-2, my+1, BG); px(-1, my, BG); px(0, my, BG); px(1, my, BG); px(2, my+1, BG); px(3, my+2, BG);
+          fillRect(-4, my + 2, 2, 2, BG);
+          fillRect(-2, my, 5, 2, BG);
+          fillRect(3, my + 2, 2, 2, BG);
         } else {
-          px(-2, my, BG); px(-1, my+1, BG); px(0, my+1, BG); px(1, my+1, BG); px(2, my, BG);
+          fillRect(-3, my + 1, 7, 2, BG);
         }
       }
     }
@@ -1388,9 +1891,7 @@ function drawPet(cx, cy, form, f) {
     px(20, -14, BG);
     px(18, -11, INK); px(22, -11, INK);
   }
-  if (S.anim === 'wave' && (f % 10 < 5)) {
-    px(18, -6, INK); px(20, -8, INK); px(22, -10, INK); px(23, -9, INK);
-  }
+  // Wave is drawn as a raised right arm in drawPetArms — no extra floating pixels
   // Call ! beside head (not a long streak)
   if (S.anim === 'call' || (S.call && !S.sleep && !S.anim)) {
     px(15, -16, INK); px(15, -14, INK); px(15, -12, INK);
@@ -1465,7 +1966,7 @@ function drawMain() {
 
   // Under Happy: evolution stage + name + mood
   const stageLabel = (S.stage || '').toUpperCase();
-  const nm = (NAMES[S.form] || 'PAL').toUpperCase().slice(0, 6);
+  const nm = displayName(S).toUpperCase().slice(0, 6);
   drawText(stageLabel + ' ' + nm, 4, 26, INK);
   // One-line mood
   let mood = 'OK';
@@ -1488,7 +1989,7 @@ function drawMain() {
   drawText('WT ' + (S.weight || 0) + 'G', 100, 3, INK);
   drawText('DISC ' + (S.disc || 0) + '%', 100, 14, INK);
   drawText('AGE ' + S.age, 100, 26, INK);
-  drawText('XP ' + (S.battleXP || 0) + ' LV' + battleLevel(S.battleXP), 100, 37, INK);
+  drawText('LV ' + battleLevel(S.battleXP) + '  PWR ' + battlePower(), 100, 37, INK);
 
   // --- TOP RIGHT: Gen above Friends, then clock, sun/moon ---
   let h12 = S.virtualHour % 12;
@@ -1569,16 +2070,16 @@ function drawStatus() {
     S.battle ? 'IN BATTLE' : null
   ].filter(Boolean).join(' ') || 'OK';
   const lines = [
-    (NAMES[S.form] || S.form) + ' · ' + formTrait(S.form),
-    (S.stage||'').toUpperCase() + ' GEN' + S.generation + '  POW ' + battlePower(),
+    displayName(S) + ' ' + speciesTag(ensureMorph(S)) + ' · ' + formTrait(S.form),
+    (S.stage||'').toUpperCase() + ' ' + (NAMES[S.form]||'') + ' GEN' + S.generation,
     'AGE ' + S.age + '  WT ' + S.weight + 'G  LV ' + battleLevel(S.battleXP),
-    'HUN ' + S.hunger + '/4  HAP ' + S.happy + '/4  DISC ' + S.disc + '%',
-    'STREAK ' + (S.careStreak || 0) + 'D  FAMILY ' + ((S.petFamily&&S.petFamily.length)||0),
-    'BATTLE ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L  XP ' + (S.battleXP||0),
+    'HUN ' + S.hunger + '/4  HAP ' + S.happy + '/4  DISC ' + (S.disc || 0) + '%',
+    'PALS ' + speciesSeenCount() + '/' + SPECIES_COUNT + '  FAMILY ' + ((S.petFamily&&S.petFamily.length)||0),
+    'STREAK ' + (S.careStreak || 0) + 'D  BATTLE ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L',
     'NEXT ' + nextEvoHint(),
     'CODE ' + (S.myCode || '---') + '  FR ' + ((S.friends && S.friends.length)||0),
     'TIME ' + timeStr + '  8PM-8AM',
-    'PACE REAL-PET  ALERT ' + (S.notifications?'ON':'OFF'),
+    'ALERTS ' + (S.notifications?'ON':'OFF') + '  LIGHTS ' + (S.lights?'ON':'OFF'),
     state + (flags && flags !== 'OK' ? ' ' + flags : '')
   ];
   lines.forEach((l, i) => drawText(String(l).slice(0, 38), 4, 3 + i * 16, '#0f380f'));
@@ -1592,19 +2093,18 @@ function drawGame() {
   // ========== TRAIN XP (timing skill — Digimon training vibe) ==========
   if (S.gameType === 'train') {
     drawTextCentered('TRAIN XP', 4, INK);
-    drawTextCentered('PRESS THE LETTER', 16, INK);
-    drawTextCentered(S.gScore + ' OK / R' + S.gRound + '/4', 28, INK);
+    drawTextCentered('WAIT THEN TAP', 16, INK);
+    drawTextCentered(S.gScore + ' HIT  R' + S.gRound + '/3', 28, INK);
     drawPet(120, 100, S.form, S.frame);
     if (S.trainPhase === 'go') {
-      // Always show a concrete letter (never blank)
       if (S.trainBtn !== 'A' && S.trainBtn !== 'B') S.trainBtn = 'B';
       const letter = S.trainBtn;
       drawTextCentered('*** GO ***', 44, INK);
-      drawTextCentered('PRESS ' + letter + ' NOW', 56, INK);
-      drawTextCentered('HURRY!', 150, INK);
+      drawTextCentered('PRESS ' + letter, 56, INK);
+      drawTextCentered('A OR B', 150, INK);
     } else {
-      drawTextCentered('WAIT FOR IT...', 48, INK);
-      drawTextCentered('DONT PRESS YET', 150, INK);
+      drawTextCentered('WAIT FOR GO', 48, INK);
+      drawTextCentered('GET READY', 150, INK);
     }
     drawTextCentered('C CANCEL', 166, INK);
     return;
@@ -1701,14 +2201,22 @@ function update() {
   if (S.game && S.gameType === 'train') {
     if (S.trainPhase === 'wait' && now >= (S.trainUntil || 0)) {
       S.trainPhase = 'go';
-      S.trainBtn = (Math.random() < 0.5) ? 'A' : 'B';
-      S.trainUntil = now + 750;
+      // First cue is always B (the confirm button). Later rounds mix A/B.
+      S.trainBtn = (S.gRound <= 1) ? 'B' : ((Math.random() < 0.5) ? 'A' : 'B');
+      S.trainUntil = now + 2000; // 2s window — readable on a phone
       toast('PRESS ' + S.trainBtn + '!');
       beep(880, 0.06);
     } else if (S.trainPhase === 'go' && now >= (S.trainUntil || 0)) {
-      // Too slow
       S.playResult = 'sad';
-      endTraining(false);
+      if ((S.trainOops || 0) > 0) {
+        S.trainOops--;
+        toast('Missed it — 1 more chance');
+        S.gRound++;
+        if (S.gRound > 3) endTraining(S.gScore >= 2);
+        else trainNextWait(now);
+      } else {
+        endTraining(S.gScore >= 2);
+      }
     }
   }
 
@@ -1745,6 +2253,9 @@ function update() {
         S._falseCall = false;
         S._pendingPoop = false;
         S.poopSince = now;
+        S.poopCount = Math.min(4, (S.poopCount || 0) + 1);
+        if (!S.poopSpots) S.poopSpots = [];
+        S.poopSpots.push(Math.round(S.poopX || S.petX || 180));
       }
       S.anim = null;
       S.playResult = null;
@@ -1783,7 +2294,7 @@ function update() {
       beep(300, 0.12);
     } else if (now - S.sleepStart > (S.difficulty === 'realtime' ? 12*60000 : 55*1000)) {
       // realtime keeps closer to classic 15 min grace; others use short web-friendly window
-      S.careMiss += d.care;
+      S.careMiss += d.care; rustDisc(2);
       S.lightsMissPending = false;
       S.sleep = true; // falls asleep anyway (but grumpy / lights still on)
       S.call = false;
@@ -1805,6 +2316,11 @@ function update() {
     const dayKey = new Date(now).toDateString();
     // Also age if last age-up was more than 10 hours ago (covers edge cases)
     const longEnough = !S.lastAge || (now - S.lastAge > 10 * 3600000);
+    let faded = false;
+    if (S.lastAgeDay !== dayKey && (S.disc || 0) >= 35 && !S._discPracticed) {
+      faded = rustDisc(4);
+    }
+    if (S.lastAgeDay !== dayKey) S._discPracticed = false;
     if (S.lastAgeDay !== dayKey && longEnough) {
       S.age++;
       S.lastAgeDay = dayKey;
@@ -1812,12 +2328,12 @@ function update() {
       S.anim = 'grow';
       S.animTimer = now + 1200;
       checkEvo();
-      toast('Good morning! Age ' + S.age);
+      toast(faded ? ('Good morning! Age ' + S.age + ' · disc faded') : ('Good morning! Age ' + S.age));
       melWake();
     } else if (S.lastAgeDay !== dayKey) {
       // Same morning re-wake: still mark the day, soft toast
       S.lastAgeDay = dayKey;
-      toast('Good morning!');
+      toast(faded ? 'Good morning · disc faded' : 'Good morning!');
       melWake();
     } else {
       toast('Good morning!');
@@ -1864,7 +2380,7 @@ function update() {
           S.anim = 'call'; S.animTimer = now + 1200;
         }
       } else {
-        S.careMiss += d.care;
+        S.careMiss += d.care; rustDisc(2);
         S.call = true;
         S._falseCall = false;
         S.anim = 'call'; S.animTimer = now + 1200;
@@ -1890,7 +2406,7 @@ function update() {
           S.anim = 'call'; S.animTimer = now + 1200;
         }
       } else {
-        S.careMiss += d.care;
+        S.careMiss += d.care; rustDisc(2);
         S.call = true;
         S._falseCall = false;
         S.anim = 'call'; S.animTimer = now + 1200;
@@ -1964,7 +2480,7 @@ function update() {
     // Filth escalation (classic: piles fill screen → misery → sick → death risk)
     if (S.poop && S.poopSince && now - S.poopSince > 6 * 60000 / sp) {
       const stacks = Math.max(1, S.poopCount || 1);
-      S.careMiss += d.care * stacks;
+      S.careMiss += d.care * stacks; rustDisc(1 + Math.min(3, stacks));
       if (S.happy > 0) S.happy = Math.max(0, S.happy - 1);
       // Screen full of poop (4) — pet trapped, gets sick
       if (stacks >= 4 && !S.sick && Math.random() < 0.35) {
@@ -1985,15 +2501,13 @@ function update() {
     }
 
     // Classic false call — pet seeks attention for no real need (teach discipline)
-    // Well-trained pets (high disc) almost never false-call; at 100% they stop.
+    // High disc almost never false-calls, but 100% is not a permanent lock (rare tests remain).
     const fcCooldown = 8 * 60000;
     const disc = S.disc || 0;
-    if (disc < 100 &&
-        !S.call && !S.poop && !S.sick && !S.lightsMissPending &&
+    if (!S.call && !S.poop && !S.sick && !S.lightsMissPending &&
         S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep &&
         (now - (S.lastFalseCall || 0)) > fcCooldown / Math.max(0.5, (DIFF[S.difficulty]||DIFF.realtime).timeScale || 0.15)) {
-      // Unhappy pets false-call more; disc does NOT passively drain (classic scold-based)
-      let chance = disc >= 80 ? 0.000008 : disc >= 50 ? 0.000015 : 0.000025;
+      let chance = disc >= 100 ? 0.000003 : disc >= 80 ? 0.000008 : disc >= 50 ? 0.000015 : 0.000025;
       if (S.happy <= 1) chance *= 2.5;
       if (S.hunger <= 1) chance *= 0.5; // real need prefers hunger call
       if (Math.random() < chance) {
@@ -2002,11 +2516,18 @@ function update() {
         S.lastFalseCall = now;
         S.anim = 'call';
         S.animTimer = now + 1500;
-        toast('Calling... (try Discipline)');
+        toast(disc >= 90 ? 'Rare attitude call — Discipline?' : 'Calling... (try Discipline)');
         melCall();
         careNotify('discipline', 'False call — open PocketPal and use Discipline!');
         save();
       }
+    }
+    // Ignored false call rusts training (classic: spoiling / no scold)
+    if (S._falseCall && S.call && S.disc > 0 &&
+        (now - (S.lastFalseCall || 0)) > 10 * 60000 / sp) {
+      rustDisc(6, 'Spoiled — ignored call, discipline down');
+      S.lastFalseCall = now;
+      save();
     }
   }
 
@@ -2117,7 +2638,8 @@ function evo(st, fm) {
   S.animTimer = Date.now() + 2200;
   S.playResult = null;
   melEvolve();
-  toast('Evolved → ' + (NAMES[fm] || fm) + ' · ' + formTrait(fm));
+  ensureMorph(S);
+  toast('Evolved → ' + displayName(S) + ' ' + speciesTag(S.morphId||0) + ' · ' + (NAMES[fm]||fm));
   if (st === 'adult' || st === 'teen') recordFamilyMember('evolved');
   save();
 }
@@ -2236,11 +2758,12 @@ function startLookGame() {
   S.sleep = false; S.anim = null;
   S.gRound = 1;
   S.gScore = 0;
-  S.gameDir = fairBit(); // TRUE direction (eyes)
+  S.gameDir = fairBit(); // TRUE direction (pupils lock here)
   S._lastLookDir = S.gameDir;
-  // ~40% of rounds: body leans OPPOSITE (confuse player — trust the eyes)
-  S._lookBodyDir = S.gameDir; // classic: body and eyes agree
-  S._lookSettleAt = Date.now() + 500;
+  // ~45% of rounds: body leans OPPOSITE — player must watch the eyes
+  S._lookBodyDir = (Math.random() < 0.45) ? (1 - S.gameDir) : S.gameDir;
+  S._lookSettleAt = Date.now() + 750;
+  S._gameEyeOpenUntil = Date.now() + 1100;
   S.menu = null;
   S.anim = null;
   S.playResult = null;
@@ -2259,6 +2782,7 @@ function startMemoryGame() {
   S.memIdx = 0;
   S.memPhase = 'show';
   S.memTimer = Date.now() + 800;
+  S._gameEyeOpenUntil = Date.now() + 900;
   S.menu = null;
   S.anim = null;
   S.playResult = null;
@@ -2340,6 +2864,10 @@ function resolve(choice) {
     return;
   }
   // ---- LOOK LEFT/RIGHT GAME ----
+  if (S._lookSettleAt && Date.now() < S._lookSettleAt) {
+    toast('Watch the eyes...');
+    return;
+  }
   if (choice === S.gameDir) {
     S.gScore++;
     S.playResult = 'happy';
@@ -2359,6 +2887,9 @@ function resolve(choice) {
       if (!S.game || S.gameType !== 'look') return;
       S.gameDir = fairBit(S._lastLookDir);
       S._lastLookDir = S.gameDir;
+      S._lookBodyDir = (Math.random() < 0.45) ? (1 - S.gameDir) : S.gameDir;
+      S._lookSettleAt = Date.now() + 750;
+      S._gameEyeOpenUntil = Date.now() + 1100;
       S.playResult = null;
     }, 500);
   }
@@ -2380,7 +2911,6 @@ function clean() {
     spawnFx('heart', (S.petX || 120) - 8, 85, 2);
     beep(260, 0.06); beep(520, 0.05);
     toast('Cleaned!');
-    if (Math.random() < 0.15) S.disc = Math.min(100, S.disc + 5);
     save();
   } else toast('Nothing to clean');
 }
@@ -2399,7 +2929,9 @@ function med() {
   } else {
     S.anim = 'refuse';
     S.animTimer = Date.now() + 900;
-    toast('Not sick');
+    S.careMiss = (S.careMiss || 0) + 1;
+    rustDisc(3);
+    toast('Did not need medicine — trust faded');
     beep(160, 0.08);
   }
 }
@@ -2467,6 +2999,10 @@ function light() {
       S.animTimer = Date.now() + 1000;
       toast(wasNap ? 'Nap over' : 'Woken early');
       beep(400, 0.05);
+      if (!wasNap && isNightTime()) {
+        S.careMiss = (S.careMiss || 0) + 1;
+        rustDisc(4, 'Roused at night — discipline down');
+      }
     } else {
       toast('Lights on');
       beep(280, 0.05);
@@ -2515,16 +3051,18 @@ function disc() {
   if (S.paused) { toast('Paused'); return; }
   // Classic: only discipline a FALSE call (pet cried for no real need)
   if (S._falseCall && S.call) {
-    S.disc = Math.min(100, S.disc + 12);
+    S.disc = Math.min(100, (S.disc || 0) + 12);
     S.call = false;
     S._falseCall = false;
+    S._discPracticed = true;
     S.anim = 'disc';
     S.animTimer = Date.now() + 900;
     beep(210, 0.1); beep(280, 0.08);
-    toast(S.disc >= 100 ? 'Fully trained! (no more false calls)' : 'Disciplined! Disc ' + S.disc + '%');
+    toast(S.disc >= 100 ? 'Fully trained! Rare tests may still happen' : 'Disciplined! Disc ' + S.disc + '%');
   } else if (S.call || S.lightsMissPending || S.poop || S.sick || S.hunger <= 0 || S.happy <= 0) {
     // Pet actually needs care — scolding is the wrong response
     S.discMiss++;
+    rustDisc(8);
     S.anim = 'sad';
     S.animTimer = Date.now() + 800;
     let hint = 'Needs care';
@@ -2533,10 +3071,15 @@ function disc() {
     else if (S.sick) hint = 'Medicine first';
     else if (S.hunger <= 0) hint = 'Feed first';
     else if (S.happy <= 0) hint = 'Play first';
-    toast('Bad timing — ' + hint);
+    toast('Bad timing — ' + hint + ' · disc ' + (S.disc || 0) + '%');
     beep(140, 0.1);
   } else {
-    toast('No false call right now');
+    S.discMiss++;
+    rustDisc(5);
+    S.anim = 'sad';
+    S.animTimer = Date.now() + 800;
+    toast('Scolded for nothing — disc ' + (S.disc || 0) + '%');
+    beep(140, 0.1);
   }
   save();
 }
@@ -2568,6 +3111,7 @@ function friendFromCode(code) {
   const names = ['Momo','Kiko','Taro','Poko','Nori','Zuzu','Lumi','Grub','Nova','Bibi','Rin','Bolt'];
   const form = forms[Math.floor(rnd() * forms.length)];
   const stage = form.startsWith('teen') ? 'teen' : 'adult';
+  const morph = Math.floor(rnd() * SPECIES_COUNT);
   return {
     code,
     name: names[Math.floor(rnd() * names.length)] + '-' + code.slice(0, 2),
@@ -2580,6 +3124,8 @@ function friendFromCode(code) {
     wt: 10 + Math.floor(rnd() * 12),
     disc: Math.floor(30 + rnd() * 70),
     growth: Math.floor(rnd() * 4),
+    morph,
+    petName: generatePetName(morph),
     quality: 0.25 + rnd() * 0.7
   };
 }
@@ -2640,86 +3186,146 @@ function canBattle() {
   return null;
 }
 function makeEnemy(kind, friend) {
-  // Player-like opponents using real PocketPal names/forms + visible stats
+  // Bot roster = real PocketPal forms/sprites (same drawPet forms players can grow)
   const ROSTER = [
-    // Fresh teens (many options — avoid always Grub)
     { name: 'Lumi', form: 'teenGood', stage: 'teen', age: 2, xp: 2, wins: 0, losses: 1, wt: 12, disc: 40, tier: 'fresh' },
     { name: 'Spark', form: 'teenGood', stage: 'teen', age: 1, xp: 3, wins: 1, losses: 1, wt: 11, disc: 35, tier: 'fresh' },
     { name: 'Mint', form: 'teenGood', stage: 'teen', age: 2, xp: 4, wins: 2, losses: 0, wt: 10, disc: 50, tier: 'fresh' },
     { name: 'Grub', form: 'teenBad', stage: 'teen', age: 2, xp: 1, wins: 0, losses: 3, wt: 16, disc: 15, tier: 'fresh' },
     { name: 'Dust', form: 'teenBad', stage: 'teen', age: 3, xp: 2, wins: 1, losses: 4, wt: 15, disc: 20, tier: 'fresh' },
     { name: 'Pebble', form: 'teenBad', stage: 'teen', age: 1, xp: 0, wins: 0, losses: 2, wt: 14, disc: 10, tier: 'fresh' },
-    // Mid
+    { name: 'Momo', form: 'adult1', stage: 'adult', age: 9, xp: 22, wins: 14, losses: 3, wt: 13, disc: 85, tier: 'hard' },
     { name: 'Kiko', form: 'adult2', stage: 'adult', age: 5, xp: 8, wins: 4, losses: 3, wt: 14, disc: 55, tier: 'mid' },
     { name: 'Taro', form: 'adult3', stage: 'adult', age: 6, xp: 10, wins: 5, losses: 4, wt: 15, disc: 50, tier: 'mid' },
-    // Hardened
-    { name: 'Momo', form: 'adult1', stage: 'adult', age: 9, xp: 22, wins: 14, losses: 3, wt: 13, disc: 85, tier: 'hard' },
+    { name: 'Poko', form: 'adult4', stage: 'adult', age: 6, xp: 9, wins: 4, losses: 5, wt: 18, disc: 45, tier: 'mid' },
+    { name: 'Nori', form: 'adult5', stage: 'adult', age: 7, xp: 6, wins: 2, losses: 6, wt: 22, disc: 30, tier: 'fresh' },
+    { name: 'Zuzu', form: 'adult6', stage: 'adult', age: 5, xp: 3, wins: 1, losses: 8, wt: 20, disc: 15, tier: 'fresh' },
     { name: 'Nova', form: 'adult7', stage: 'adult', age: 11, xp: 30, wins: 18, losses: 2, wt: 12, disc: 95, tier: 'hard' },
     { name: 'Bibi', form: 'adult8', stage: 'adult', age: 8, xp: 16, wins: 9, losses: 5, wt: 14, disc: 80, tier: 'hard' },
     { name: 'Rin', form: 'adult9', stage: 'adult', age: 7, xp: 18, wins: 10, losses: 4, wt: 12, disc: 70, tier: 'mid' },
     { name: 'Bolt', form: 'adult10', stage: 'adult', age: 10, xp: 28, wins: 20, losses: 3, wt: 13, disc: 88, tier: 'hard' },
-    // Same-stage peers
-    { name: 'Pip', form: 'child', stage: 'child', age: 1, xp: 0, wins: 0, losses: 0, wt: 8, disc: 20, tier: 'fresh' },
-    { name: 'Nib', form: 'baby', stage: 'baby', age: 0, xp: 0, wins: 0, losses: 0, wt: 5, disc: 0, tier: 'fresh' }
+    { name: 'Elder', form: 'secret', stage: 'adult', age: 14, xp: 35, wins: 22, losses: 4, wt: 14, disc: 90, tier: 'hard' },
+    { name: 'Nib', form: 'child', stage: 'child', age: 1, xp: 0, wins: 0, losses: 1, wt: 8, disc: 20, tier: 'fresh' },
+    { name: 'Pip', form: 'baby', stage: 'baby', age: 0, xp: 0, wins: 0, losses: 0, wt: 5, disc: 0, tier: 'fresh' }
   ];
   let pick;
-  if (kind === 'friend' && friend) {
-    const a = friend.age || 1;
-    const st = a >= 3 ? 'adult' : a >= 1 ? 'teen' : 'child';
-    const form = st === 'adult' ? 'adult2' : st === 'teen' ? 'teenGood' : 'child';
+  if (kind === 'friend' || kind === 'p2p') {
+    const a = (friend && friend.age) || 1;
+    const st = (friend && friend.stage) || (a >= 3 ? 'adult' : a >= 1 ? 'teen' : 'child');
+    const form = (friend && friend.form) || (st === 'adult' ? 'adult2' : st === 'teen' ? 'teenGood' : 'child');
     pick = {
-      name: friend.name || 'Friend',
-      form: friend.form || form,
-      stage: friend.stage || st,
-      age: friend.age != null ? friend.age : a,
-      xp: friend.xp != null ? friend.xp : Math.floor((friend.quality || 0.5) * 20),
-      wins: friend.wins != null ? friend.wins : Math.floor((friend.quality || 0.5) * 10),
-      losses: friend.losses != null ? friend.losses : Math.floor((1 - (friend.quality || 0.5)) * 6),
-      wt: friend.wt != null ? friend.wt : 10 + Math.floor((friend.quality || 0.5) * 8),
-      disc: friend.disc != null ? friend.disc : Math.floor((friend.quality || 0.5) * 90),
-      tier: friend.tier || ((friend.quality || 0) > 0.7 ? 'hard' : 'mid'),
-      growth: friend.growth != null ? friend.growth : 2
+    name: (friend && (friend.petName || friend.name || NAMES[form])) || 'Friend',
+      form: form,
+      stage: st,
+      age: friend && friend.age != null ? friend.age : a,
+      xp: friend && friend.xp != null ? friend.xp : Math.floor(((friend && friend.quality) || 0.5) * 20),
+      wins: friend && friend.wins != null ? friend.wins : 0,
+      losses: friend && friend.losses != null ? friend.losses : 0,
+      wt: friend && friend.wt != null ? friend.wt : 12,
+      disc: friend && friend.disc != null ? friend.disc : 50,
+      power: friend && friend.power != null ? friend.power : null,
+      level: friend && friend.level != null ? friend.level : null,
+      morph: friend && friend.morph != null ? friend.morph : (hash32((friend && (friend.code || friend.name)) || 'F') % SPECIES_COUNT),
+      petName: friend && friend.petName,
+      tier: (friend && friend.tier) || 'mid',
+      growth: friend && friend.growth != null ? friend.growth : 2
     };
   } else {
-    // Training: rotate a MIX of weak → strong (never always Grub)
-    const mySt = S.stage === 'adult' || S.stage === 'secret' ? 'adult' : (S.stage === 'teen' ? 'teen' : S.stage);
-    let pool = ROSTER.slice();
-    // Weight pool: more fresh/mid than hard
-    const weighted = [];
-    pool.forEach(r => {
-      // Prefer same stage but allow others for variety
-      const same = r.stage === mySt || (mySt === 'teen' && r.stage === 'teen');
-      const n = r.tier === 'fresh' ? (same ? 5 : 2) : r.tier === 'mid' ? (same ? 3 : 2) : (same ? 1 : 1);
-      for (let i = 0; i < n; i++) weighted.push(r);
-    });
-    // Exclude last 2 fought names
+    // Training bots: rotating deck of weak / mid / hard — never the same pal twice
+    const myLv = battleLevel(S.battleXP);
+    const mySt = (S.stage === 'adult' || S.stage === 'secret') ? 'adult' : 'teen';
     if (!S._recentEnemies) S._recentEnemies = [];
-    let filtered = weighted.filter(r => S._recentEnemies.indexOf(r.name) < 0);
-    if (filtered.length < 3) filtered = weighted;
-    pick = filtered[Math.floor(Math.random() * filtered.length)] || ROSTER[0];
-    S._recentEnemies.push(pick.name);
-    if (S._recentEnemies.length > 3) S._recentEnemies.shift();
+    if (!S._trainDeck) S._trainDeck = [];
+    const shuf = (arr) => {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      return a;
+    };
+    if (S._trainDeck.length === 0) {
+      const fresh = ROSTER.filter(r => r.tier === 'fresh' && r.stage !== 'baby');
+      const mid = ROSTER.filter(r => r.tier === 'mid');
+      const hard = ROSTER.filter(r => r.tier === 'hard');
+      let mix;
+      if (mySt === 'teen' && myLv < 4) {
+        mix = shuf(fresh).slice(0, 5).concat(shuf(mid).slice(0, 2));
+      } else if (myLv < 8) {
+        mix = shuf(fresh).slice(0, 2).concat(shuf(mid).slice(0, 4)).concat(shuf(hard).slice(0, 2));
+      } else if (myLv < 14) {
+        mix = shuf(mid).slice(0, 3).concat(shuf(hard).slice(0, 5));
+      } else {
+        mix = shuf(mid).slice(0, 2).concat(shuf(hard));
+      }
+      mix = mix.filter(r => r.form !== S.form && S._recentEnemies.indexOf(r.name) < 0);
+      if (mix.length < 3) mix = shuf(ROSTER.filter(r => r.stage !== 'baby' && r.form !== S.form));
+      if (mix.length < 1) mix = shuf(ROSTER.filter(r => r.stage !== 'baby'));
+      S._trainDeck = shuf(mix);
+      // Never open a new deck on Grub (old "always Grub" feel)
+      for (let k = 0; k < 2 && S._trainDeck[0] && S._trainDeck[0].name === 'Grub'; k++) {
+        S._trainDeck.push(S._trainDeck.shift());
+      }
+    }
+    pick = Object.assign({}, S._trainDeck.shift());
+    if (!pick || !pick.form) pick = Object.assign({}, ROSTER.find(r => r.name === 'Spark') || ROSTER[0]);
+    pick.morph = Math.floor(Math.random() * SPECIES_COUNT);
+    if (S.morphId != null && pick.morph === S.morphId) pick.morph = (pick.morph + 17) % SPECIES_COUNT;
+    const rosterName = pick.name; // Lumi / Grub / Momo — used for anti-repeat
+    pick.petName = generatePetName(pick.morph);
+    markSpeciesSeen(pick.morph);
+    S._recentEnemies.push(rosterName);
+    if (S._recentEnemies.length > 5) S._recentEnemies.shift();
   }
-  // Fair stats from roster — DO NOT inflate HP to match player XP (that made everyone impossible)
+  const myLvNow = battleLevel(S.battleXP);
+  const myP = battlePower();
+  const myHP = battleMaxHP(S.stage === 'adult' && S.form === 'secret' ? 'secret' : S.stage, S.battleXP);
+  // Strong pets sometimes meet an ace so fights stay a contest
+  if (kind !== 'friend' && kind !== 'p2p' && myLvNow >= 6 && Math.random() < 0.34) {
+    const bosses = [
+      { name: 'Nova', form: 'adult7', stage: 'adult', age: 11, xp: 30, wins: 18, losses: 2, wt: 12, disc: 95, tier: 'ace' },
+      { name: 'Bolt', form: 'adult10', stage: 'adult', age: 10, xp: 28, wins: 20, losses: 3, wt: 13, disc: 88, tier: 'ace' },
+      { name: 'Elder', form: 'secret', stage: 'adult', age: 14, xp: 35, wins: 22, losses: 4, wt: 14, disc: 90, tier: 'ace' },
+      { name: 'Bibi', form: 'adult8', stage: 'adult', age: 8, xp: 16, wins: 9, losses: 5, wt: 14, disc: 80, tier: 'ace' },
+      { name: 'Momo', form: 'adult1', stage: 'adult', age: 9, xp: 22, wins: 14, losses: 3, wt: 13, disc: 85, tier: 'ace' }
+    ];
+    const ace = bosses[Math.floor(Math.random() * bosses.length)];
+    pick = Object.assign({}, pick, ace);
+    pick.morph = Math.floor(Math.random() * SPECIES_COUNT);
+    pick.petName = generatePetName(pick.morph);
+  }
   let xp = pick.xp || 0;
-  const myLv = battleLevel(S.battleXP);
-  // Mild bump only for hard tier vs high-level players
-  if (kind !== 'friend' && pick.tier === 'hard' && myLv > 10) {
-    xp = Math.min(xp + Math.floor(myLv * 0.8), xp + 15);
+  let power, hp;
+  if (pick.tier === 'fresh') {
+    hp = Math.max(4, 3 + Math.floor(myLvNow / 5));
+    power = Math.max(2, Math.round(myP * 0.5));
+  } else if (pick.tier === 'mid') {
+    hp = Math.max(6, Math.round(myHP * 0.75));
+    power = Math.max(4, Math.round(myP * 0.8));
+  } else if (pick.tier === 'hard') {
+    hp = Math.max(8, myHP);
+    power = Math.max(6, myP + 1);
+  } else if (pick.tier === 'ace') {
+    hp = Math.min(14, Math.max(10, myHP + 2));
+    power = Math.max(7, myP + 2);
+  } else {
+    hp = 5;
+    power = pick.power != null ? Number(pick.power) : Math.max(1, stageRank(pick.stage));
   }
-  let power = Math.max(1, stageRank(pick.stage) + Math.floor((pick.disc || 0) / 35) + Math.floor(xp / 10));
-  let hp = 3 + stageRank(pick.stage) + Math.floor(xp / 8);
-  if (pick.tier === 'fresh') hp = Math.max(3, Math.min(hp, 6));
-  if (pick.tier === 'mid') hp = Math.max(5, Math.min(hp, 9));
-  if (pick.tier === 'hard') hp = Math.max(7, Math.min(hp, 12));
-  // Player high level still wins more often vs fresh
-  if (pick.tier === 'fresh' && myLv >= 8) { power = Math.max(1, power - 1); hp = Math.max(3, hp - 1); }
+  hp = Math.min(14, hp);
+  if (pick.power != null && (kind === 'friend' || kind === 'p2p')) {
+    power = Number(pick.power);
+    hp = 3 + stageRank(pick.stage) + Math.floor((pick.xp || 0) / 8);
+    hp = Math.max(4, Math.min(12, hp));
+  }
   return {
     name: pick.name, stage: pick.stage, form: pick.form, power, hp, maxHP: hp,
     age: pick.age, xp, wins: pick.wins || 0, losses: pick.losses || 0,
     wt: pick.wt || 10, disc: pick.disc || 0, tier: pick.tier || 'mid',
-    level: battleLevel(xp),
-    growth: pick.growth != null ? pick.growth : Math.min(3, Math.floor(Math.random() * 4))
+    level: pick.level != null ? Number(pick.level) : battleLevel(xp),
+    growth: pick.growth != null ? pick.growth : Math.min(3, Math.floor(Math.random() * 4)),
+    morph: pick.morph != null ? pick.morph : Math.floor(Math.random() * SPECIES_COUNT),
+    petName: pick.petName
   };
 }
 function startBattle(kind, friend) {
@@ -2734,10 +3340,11 @@ function startBattle(kind, friend) {
   S.gameType = null;
   S.sleep = false;
   S.anim = null;
+  S.battleLocked = false;
   S.bat = {
     kind: kind,
-    phase: 'intro',
-    phaseUntil: Date.now() + 1400,
+    phase: 'inspect',
+    phaseUntil: Date.now() + 1200,
     round: 1,
     maxRounds: 5,
     myHP: meHP,
@@ -2758,22 +3365,34 @@ function startBattle(kind, friend) {
     enemyTier: en.tier || 'mid',
     enemyLevel: en.level || battleLevel(en.xp),
     enemyGrowth: en.growth != null ? en.growth : 0,
+    enemyMorph: en.morph != null ? en.morph : 0,
     order: null,
     charge: 0,
     myStamina: 8,        // Digimon-inspired stamina for power attacks
     myStaminaMax: 10,
     enStamina: 10,
-    log: 'YOUR PET VS RIVAL!',
+    log: (en.name || 'RIVAL').toUpperCase() + ' LV' + (en.level || 1),
     pendingDmg: 0,
     won: null
   };
   S.anim = 'call';
   S.animTimer = Date.now() + 1000;
   beep(500, 0.08); beep(700, 0.1);
-  toast('Battle! You vs Rival — A Guard B Attack');
+  toast('Battle! You vs ' + en.name + ' (LV' + (en.level || 1) + ')');
 }
 function battleOrder(choice) {
   if (!S.battle || !S.bat) return;
+  if (S.bat.phase === 'inspect') {
+    if (choice === 'attack') {
+      S.battleLocked = true;
+      S.bat.phase = 'order';
+      S.bat.phaseUntil = Date.now() + 2800;
+      S.bat.log = S.bat.kind === 'p2p' ? 'LOCKED — WAITING FOR OPPONENT' : 'LOCKED IN — ORDER!';
+      if (S.bat.kind === 'p2p') { P2P.locked=true; p2pSend({type:'lock'}); }
+      beep(700,0.08);
+    }
+    return;
+  }
   if (S.bat.phase !== 'order' && S.bat.phase !== 'charge') return;
   if (choice === 'attack' && (S.bat.myStamina || 0) <= 0) {
     toast('No stamina! Guard to recover');
@@ -2802,40 +3421,66 @@ function advanceBattle(now) {
     B.log = 'ORDER! A/B';
     return;
   }
+  if (B.kind === 'p2p' && B.phase === 'order') {
+    if (B.order) {
+      if (!B.sentAction && now >= B.phaseUntil) {
+        B.sentAction = true;
+        p2pSend({type:'action',action:{order:B.order,charge:B.charge||0}});
+        B.log = B.peerAction ? 'BOTH READY!' : 'WAITING FOR OPPONENT...';
+      }
+      if (B.sentAction && B.peerAction) {
+        const mine=B.order==='guard', theirs=B.peerAction.order==='guard';
+        const myCharge=B.charge||0, theirCharge=B.peerAction.charge||0;
+        let toEnemy = mine ? (theirs ? 0 : 0) : Math.min(3, Math.max(0, Math.floor(myCharge/3) + (myCharge>=6?1:0) + (B.myPower>B.enPower?1:0) - (theirs?2:0)));
+        let toMe = theirs ? (mine ? 0 : Math.min(3, Math.max(0, Math.floor(theirCharge/3) + (theirCharge>=6?1:0) + (B.enPower>B.myPower?1:0) - (mine?2:0)))) : 0;
+        if(mine) B.myStamina=Math.min(B.myStaminaMax,(B.myStamina||0)+2); else B.myStamina=Math.max(0,(B.myStamina||0)-(1+Math.floor(myCharge/3)));
+        B.enHP=Math.max(0,B.enHP-toEnemy); B.myHP=Math.max(0,B.myHP-toMe); B.pendingDmg=toMe;
+        B.log=(B.myHP<=0||B.enHP<=0)?'ROUND RESULT':(toEnemy>toMe?'YOUR PET HITS!':toMe>toEnemy?'OPPONENT HITS!':'DRAW!');
+        B.phase='result'; B.phaseUntil=now+1300; B.peerAction=null; B.sentAction=false; B.order=null; B.charge=0; return;
+      }
+      return;
+    }
+    // Never stall a real-time room if a player misses the order window.
+    if(now>=B.phaseUntil){
+      B.order='guard';
+      B.log='AUTO-GUARD — TIME!';
+      B.phaseUntil=now+1;
+    }
+    return;
+  }
   if (B.phase === 'order') {
-    // Default attack if no order (autonomy)
+    // Default attack if no order (pet autonomy — they still know how to fight)
     if (!B.order) B.order = 'attack';
+    if (B.order === 'attack' && (B.charge || 0) === 0) {
+      B.charge = Math.min(4, 2 + Math.floor((S.disc || 0) / 40));
+    }
     B.phase = 'charge';
     B.phaseUntil = now + (B.order === 'guard' ? 900 : 2000);
     B.log = B.order === 'guard' ? 'GUARDING...' : 'MASH B! POWER UP';
     return;
   }
   if (B.phase === 'charge') {
-    const enGuard = Math.random() < (0.25 + (B.enPower > B.myPower ? 0.1 : 0));
+    const enGuard = Math.random() < (0.18 + (B.enPower > B.myPower ? 0.1 : 0));
     let dmg = 0;
     if (B.order === 'guard') {
-      // Guard: recover a little stamina, small counter chance
       B.myStamina = Math.min(B.myStaminaMax, (B.myStamina || 0) + 2);
-      dmg = Math.random() < 0.3 ? 1 : 0;
+      dmg = Math.random() < 0.25 ? 1 : 0;
       B.log = dmg ? 'COUNTER!' : 'GUARD +STA';
     } else {
-      // Power attack costs stamina; low STA = weak hit
       const sta = B.myStamina || 0;
       const chargeBonus = Math.floor((B.charge || 0) / 3);
-      const discBonus = S.disc >= 70 ? 1 : 0;
-      // Uncharged hits are weak; must mash B for real damage
-      let raw = (B.charge || 0) >= 2 ? 1 : 0;
-      raw += chargeBonus + (discBonus ? 1 : 0);
+      // Always tap for 1 if you have stamina — mash B for real damage
+      let raw = sta > 0 ? 1 : 0;
+      raw += chargeBonus;
       if ((B.charge || 0) >= 6) raw += 1;
-      if (B.myPower > B.enPower && (B.charge || 0) >= 3) raw += 1;
-      if (battleLevel(S.battleXP) >= 10 && (B.charge || 0) >= 4) raw += 1;
-      if (sta <= 0) { raw = Math.max(0, raw - 2); B.log = 'TIRED...'; }
-      else if (sta <= 3) { raw = Math.max(0, raw - 1); }
-      if (enGuard) raw = Math.max(0, raw - 2);
-      // STA: basic hit costs 1; charged hits cost more (power attacks need stamina)
+      if (B.myPower > B.enPower) raw += 1;
+      if (S.disc >= 70 && (B.charge || 0) >= 2) raw += 1;
+      if (sta <= 0) { raw = 0; B.log = 'TIRED...'; }
+      else if (sta <= 2) raw = Math.max(1, raw - 1);
+      if (enGuard) raw = Math.max(0, raw - 1);
       const cost = 1 + Math.floor((B.charge || 0) / 3);
       B.myStamina = Math.max(0, sta - cost);
-      dmg = Math.min(3, Math.max(0, raw));
+      dmg = Math.min(4, Math.max(0, raw));
       if (sta > 0) B.log = dmg >= 3 ? 'CRITICAL!' : (dmg > 0 ? 'HIT!' : 'WEAK...');
     }
     B.pendingDmg = dmg;
@@ -2860,16 +3505,18 @@ function advanceBattle(now) {
     return;
   }
   if (B.phase === 'enemy') {
-    // Enemy damage; guard reduces
-    let raw = 1 + Math.floor(Math.random() * Math.max(1, Math.floor(B.enPower / 2)));
+    // Enemy damage scaled by TIER so fresh pals never melt a trained pet
+    const tier = B.enemyTier || 'mid';
+    let raw = 1;
+    if (tier === 'mid') raw = 1 + (Math.random() < 0.4 ? 1 : 0);
+    if (tier === 'hard') raw = 2 + (Math.random() < 0.35 ? 1 : 0);
     if (B.enPower > B.myPower) raw += 1;
     if (B.order === 'guard') raw = Math.max(0, raw - 2 - (S.disc >= 50 ? 1 : 0));
-    // Autonomy: high discipline sometimes auto-braces
     if (B.order !== 'guard' && S.disc >= 80 && Math.random() < 0.2) {
       raw = Math.max(0, raw - 1);
       B.log = 'AUTO-BRACE!';
     }
-    const dmg = Math.min(4, raw);
+    const dmg = Math.min(3, raw);
     B.myHP = Math.max(0, B.myHP - dmg);
     B.pendingDmg = dmg;
     B.log = dmg >= 3 ? 'OUCH!!' : (dmg > 0 ? '-' + dmg + ' HP' : 'BLOCKED!');
@@ -2879,6 +3526,13 @@ function advanceBattle(now) {
     return;
   }
   if (B.phase === 'result') {
+    if (B.kind === 'p2p') {
+      if (B.myHP<=0 || B.enHP<=0 || B.round>=B.maxRounds) {
+        B.won = B.enHP<=0 && B.myHP>0 ? true : (B.myHP<=0 && B.enHP>0 ? false : B.myHP>=B.enHP);
+        B.phase='end'; B.phaseUntil=now+1600; B.log=B.won?'YOU WIN!':'DEFEAT...'; return;
+      }
+      B.round++; B.phase='order'; B.phaseUntil=now+2800; B.order=null; B.charge=0; B.sentAction=false; B.peerAction=null; B.myStamina=Math.min(B.myStaminaMax,(B.myStamina||0)+2); B.log='ROUND '+B.round+' — ORDER!'; return;
+    }
     if (B.myHP <= 0) {
       B.phase = 'end';
       B.won = false;
@@ -2909,13 +3563,16 @@ function advanceBattle(now) {
 }
 function finishBattle(won) {
   S.battle = false;
+  S.battleLocked = false;
   const B = S.bat;
+  const wasP2P = !!(B && B.kind === 'p2p');
   S.bat = null;
+  if (wasP2P) closeP2P();
   S.playResult = null;
   const now = Date.now();
   if (won) {
     S.battleWins = (S.battleWins || 0) + 1;
-    S.battleXP = (S.battleXP || 0) + 2 + (B && B.kind === 'friend' ? 1 : 0);
+    S.battleXP = (S.battleXP || 0) + 2 + (B && B.kind === 'p2p' ? 3 : (B && B.kind === 'friend' ? 1 : 0));
     S.happy = Math.min(4, S.happy + 1);
     S.weight = Math.max(5, S.weight - 1);
     S.injured = false;
@@ -2957,11 +3614,12 @@ function finishBattle(won) {
 }
 function cancelBattle() {
   if (!S.battle) return;
-  S.battle = false;
-  S.bat = null;
-  toast('Battle cancelled');
-  beep(200, 0.08);
-  save();
+  const safe = !S.battleLocked;
+  if (safe) { S.battle = false; S.bat = null; S.battleLocked = false; toast('Left battle safely'); beep(200,0.08); save(); return; }
+  const B=S.bat; const isP2P=B && B.kind==='p2p'; if(isP2P) p2pSend({type:'forfeit'}); S.battle=false; S.bat=null; S.battleLocked=false;
+  S.battleLosses=(S.battleLosses||0)+1; S.battleXP=(S.battleXP||0)+1; S.happy=Math.max(0,S.happy-1);
+  if(isP2P) closeP2P();
+  toast('Forfeit — battle loss'); beep(150,0.08); save();
 }
 // Battle uses REAL pet sprites (same graphics as main game) — crisp 1:1 pixels
 function battleRivalForm(stage) {
@@ -3003,18 +3661,26 @@ function drawMyFighter(cx, cy, f) {
     else if (B.phase === 'end') expr = B.won ? 'happy' : 'sad';
     else if (B.phase === 'order') expr = 'neutral';
   }
+  S._morphDraw = S.morphId || 0;
   drawBattlePet(cx, cy, S.form, f, expr);
+  S._morphDraw = null;
 }
 function drawRivalFighter(cx, cy, stage, f) {
   const B = S.bat;
-  const form = (B && B.enemyForm) || battleRivalForm(stage);
+  // Always a real game form (roster / friend / P2P card) — never a blank blob
+  let form = (B && B.enemyForm) || battleRivalForm(stage);
+  if (!NAMES[form] && form !== 'baby' && form !== 'child') form = battleRivalForm(stage);
   let expr = 'neutral';
   if (B) {
     if (B.phase === 'clash' && (B.pendingDmg || 0) >= 2) expr = 'hurt';
     else if (B.phase === 'enemy') expr = 'charge';
     else if (B.phase === 'end') expr = B.won ? 'sad' : 'happy';
   }
+  S._morphDraw = (B && B.enemyMorph != null) ? B.enemyMorph : 0;
+  S._rivalDraw = true;
   drawBattlePet(cx, cy, form, f, expr);
+  S._morphDraw = null;
+  S._rivalDraw = false;
 }
 function drawBattle() {
   const B = S.bat;
@@ -3022,11 +3688,11 @@ function drawBattle() {
   ctx.fillRect(0, 0, W, H);
   if (!B) return;
   const INK = '#0f380f';
-  drawTextCentered((B.kind === 'friend' ? 'FRIEND BATTLE' : 'TRAIN BATTLE') + ' R' + B.round + '/' + B.maxRounds, 2, INK);
+  drawTextCentered((B.kind === 'p2p' ? 'P2P BATTLE' : (B.kind === 'friend' ? 'FRIEND BATTLE' : 'TRAIN BATTLE')) + ' R' + B.round + '/' + B.maxRounds, 2, INK);
   // Names + battle level (from XP) under compact HP
   // You = top-left; foe = top-right (mirrored layout)
-  const enName = String(B.enemyName).slice(0, 6);
-  drawText((NAMES[S.form] || 'YOU').slice(0, 6), 4, 14, INK);
+  const enName = String(B.enemyName || 'RIVAL').slice(0, 8);
+  drawText(displayName(S).slice(0, 8), 4, 14, INK);
   drawText(enName, W - 4 - enName.length * 6, 14, INK);
   const myH = Math.ceil((B.myHP / Math.max(1, B.myMax)) * 6);
   const enH = Math.ceil((B.enHP / Math.max(1, B.enMax)) * 6);
@@ -3046,13 +3712,17 @@ function drawBattle() {
   const wlR = (B.enemyWins||0) + 'W-' + (B.enemyLosses||0) + 'L';
   drawText(wlL, 4, 52, INK);
   drawText(wlR, W - 4 - wlR.length * 6, 52, INK);
-  // POW / STA centered top-middle
-  const pow = Math.min(10, B.charge || 0);
+  const pwrL = 'PWR' + (B.myPower || battlePower());
+  const pwrR = 'PWR' + (B.enPower || 1);
+  drawText(pwrL, 4, 62, INK);
+  drawText(pwrR, W - 4 - pwrR.length * 6, 62, INK);
+  const charge = Math.min(10, B.charge || 0);
   const sta = Math.min(10, B.myStamina || 0);
-  drawText('POW', 88, 14, INK);
-  for (let i = 0; i < 10; i++) fillRect(110 + i * 5, 14, 4, 5, i < pow ? INK : '#8fad0e');
+  drawText('CHG', 88, 14, INK);
+  for (let i = 0; i < 10; i++) fillRect(110 + i * 5, 14, 4, 5, i < charge ? INK : '#8fad0e');
   drawText('STA', 88, 24, INK);
   for (let i = 0; i < 10; i++) fillRect(110 + i * 5, 24, 4, 5, i < sta ? INK : '#8fad0e');
+  // STA is YOUR energy. Attack spends it. Guard restores +2. 0 STA = no attack.
 
   // Arena floor
   for (let x = 30; x < 210; x += 3) px(x, 130, INK);
@@ -3077,12 +3747,15 @@ function drawBattle() {
 
   // Log + controls
   drawText(String(B.log || '').slice(0, 24), 30, 140, INK);
-  if (B.phase === 'order') {
-    drawText('A=GUARD(+STA) B=ATTACK', 25, 154, INK);
-    drawText('C=FORFEIT', 80, 166, INK);
+  if (B.phase === 'inspect') {
+    drawText('B=LOCK  C=LEAVE', 58, 154, INK);
+    drawText('ATK uses STA  GRD +2', 42, 166, INK);
+  } else if (B.phase === 'order') {
+    drawText('A=GUARD +2STA  B=ATK', 28, 154, INK);
+    drawText('STA ' + sta + '/' + (B.myStaminaMax || 10), 78, 166, INK);
   } else if (B.phase === 'charge') {
-    drawText('MASH B — USES STA', 40, 154, INK);
-    drawText('POW ' + pow + '  STA ' + sta, 70, 166, INK);
+    drawText('MASH B — SPENDS STA', 34, 154, INK);
+    drawText('CHG ' + charge + '  STA ' + sta, 70, 166, INK);
   } else if (B.phase === 'end') {
     drawText(B.won ? 'VICTORY!' : 'DEFEAT...', 80, 156, INK);
   } else if (B.phase === 'intro') {
@@ -3123,6 +3796,324 @@ function tryAcceptFriendFromUrl() {
 }
 
 
+function newPetId(){
+  return 'PET' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,8).toUpperCase();
+}
+function ensurePetIds(){
+  if (!S.petId) S.petId = newPetId();
+  const seen = new Set();
+  if (typeof normalizePetMemory === 'function') normalizePetMemory();
+  const list = Array.isArray(S.petMemory) ? S.petMemory : [];
+  list.forEach(e => {
+    if (!e || !e.pet || typeof e.pet !== 'object') return;
+    if (!e.pet.petId || seen.has(e.pet.petId)) e.pet.petId = newPetId();
+    seen.add(e.pet.petId);
+  });
+}
+function memorySnapshot(){
+  const copy = JSON.parse(JSON.stringify(S));
+  copy.battle = false; copy.bat = null; copy.game = false; copy.menu = null;
+  copy.musicPlaying = false; copy.musicTimer = 0; copy.paused = false; copy.pauseStarted = 0;
+  copy._lastPublish = 0; copy.lastSave = Date.now();
+  // Device-global fields must NEVER ride inside a pet card (loading a card used to wipe memory)
+  delete copy.petMemory;
+  delete copy.activeSlot;
+  delete copy.friends;
+  delete copy.petFamily;
+  delete copy.shellTheme;
+  delete copy.myCode;
+  delete copy.careStreak;
+  delete copy.lastCareDay;
+  delete copy.notifications;
+  delete copy.sound;
+  delete copy.difficulty;
+  delete copy.speciesSeen;
+  if (!copy.petId) copy.petId = newPetId();
+  return copy;
+}
+function applyPetCard(card){
+  // Load a stored pet WITHOUT destroying device globals / other slots
+  const keep = {
+    petMemory: S.petMemory,
+    activeSlot: S.activeSlot,
+    friends: S.friends,
+    petFamily: S.petFamily,
+    shellTheme: S.shellTheme,
+    myCode: S.myCode,
+    careStreak: S.careStreak,
+    lastCareDay: S.lastCareDay,
+    notifications: S.notifications,
+    sound: S.sound,
+    difficulty: S.difficulty,
+    deaths: S.deaths,
+    speciesSeen: S.speciesSeen
+  };
+  Object.assign(S, card);
+  S.petMemory = keep.petMemory;
+  S.activeSlot = keep.activeSlot;
+  S.friends = keep.friends;
+  S.petFamily = keep.petFamily;
+  S.shellTheme = keep.shellTheme;
+  S.myCode = keep.myCode;
+  S.careStreak = keep.careStreak;
+  S.lastCareDay = keep.lastCareDay;
+  S.notifications = keep.notifications;
+  S.sound = keep.sound;
+  S.difficulty = keep.difficulty;
+  S.deaths = keep.deaths;
+  S.speciesSeen = keep.speciesSeen;
+  try { applyShellTheme(S.shellTheme || 0);
+    try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
+}
+function petMemoryName(p){ return p && (p.petName || NAMES[p.form] || p.form || 'PocketPal'); }
+function petMemoryId(p){
+  if(!p) return '------';
+  if(!p.petId) p.petId = newPetId();
+  return String(p.petId).slice(-6).toUpperCase();
+}
+function petMemoryDetails(p){
+  const stage=String(p.stage||'').toUpperCase();
+  const gen=p.generation||1;
+  const age=p.age||0;
+  const wins=p.battleWins||0;
+  const losses=p.battleLosses||0;
+  return 'ID '+petMemoryId(p)+' · '+stage+' · Age '+age+' · Gen '+gen+' · '+wins+'W-'+losses+'L'+(p.morphId!=null?' · '+speciesTag(p.morphId):'');
+}
+function normalizePetMemory(){
+  // Fixed 3 slots. Legacy dense lists are padded; null holes preserved.
+  let list = Array.isArray(S.petMemory) ? S.petMemory.slice(0, 3) : [];
+  // Recover if someone accidentally wiped to [] but slots exist as sparse
+  while (list.length < 3) list.push(null);
+  S.petMemory = [0,1,2].map(i => {
+    const e = list[i];
+    if (e && e.pet && typeof e.pet === 'object' && e.pet.stage) {
+      e.slot = i;
+      // Strip nested memory if old bugs embedded it
+      if (e.pet.petMemory) delete e.pet.petMemory;
+      if (e.pet.activeSlot != null) delete e.pet.activeSlot;
+      return e;
+    }
+    return null;
+  });
+  if (S.activeSlot != null && (S.activeSlot < 0 || S.activeSlot > 2 || !S.petMemory[S.activeSlot])) {
+    if (S.petId && S.stage !== 'egg' && S.stage !== 'dead') {
+      const idx = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === S.petId);
+      S.activeSlot = idx >= 0 ? idx : null;
+    } else {
+      S.activeSlot = null;
+    }
+  }
+  return S.petMemory;
+}
+function writePetToSlot(slot, petSnap, keepId) {
+  if (slot < 0 || slot > 2) return;
+  normalizePetMemory();
+  const prev = S.petMemory[slot];
+  S.petMemory[slot] = {
+    id: keepId || (prev && prev.id) || ('PM' + Date.now().toString(36) + Math.random().toString(36).slice(2,6)),
+    savedAt: Date.now(),
+    pet: petSnap,
+    slot: slot
+  };
+}
+function storeCurrentPet(){
+  if (S.stage === 'egg' || S.stage === 'dead') { toast('No living pet to store'); return false; }
+  if (S.battle || S.game) { toast('Finish the current activity first'); return false; }
+  ensurePetIds();
+  normalizePetMemory();
+  const snap = memorySnapshot();
+  // Prefer existing home slot for this petId
+  let slot = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
+  if (slot < 0 && S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot <= 2) {
+    // Home slot already claimed by activeSlot even if snapshot lagged
+    if (!S.petMemory[S.activeSlot] || !S.petMemory[S.activeSlot].pet || S.petMemory[S.activeSlot].pet.petId === snap.petId) {
+      slot = S.activeSlot;
+    }
+  }
+  if (slot < 0) {
+    slot = S.petMemory.findIndex(e => !e || !e.pet);
+  }
+  if (slot < 0) {
+    toast('Pet Memory is full — clear a slot first');
+    return false;
+  }
+  writePetToSlot(slot, snap);
+  S.activeSlot = slot;
+  save();
+  toast(petMemoryName(snap) + ' in Slot ' + (slot + 1));
+  return true;
+}
+function startFreshLife(){
+  if (S.battle || S.game) { toast('Finish the current activity first'); return; }
+  normalizePetMemory();
+  const filled = S.petMemory.filter(e => e && e.pet).length;
+  const activeInSlot = S.petId && S.petMemory.some(e => e && e.pet && e.pet.petId === S.petId);
+  // Max 3 pets total in slots. If 3 filled, block. If active isn't in a slot and no empty slot, block.
+  if (filled >= 3) {
+    toast('Memory full (3/3) — clear a slot first');
+    showPetMemory();
+    return;
+  }
+  if (S.stage !== 'egg' && S.stage !== 'dead') {
+    if (!activeInSlot && filled >= 3) {
+      toast('Memory full — clear a slot first');
+      showPetMemory();
+      return;
+    }
+    if (!storeCurrentPet()) {
+      showPetMemory();
+      return;
+    }
+  }
+  // After parking, still need a free slot philosophy: new egg isn't stored until next time
+  // but user asked max 3 — after storeCurrentPet, if still 3/3 and we're starting 4th life without clearing, the new egg isn't in memory until switch. That's OK as long as we can't store 4th.
+  restart();
+  S.activeSlot = null;
+  save();
+  toast('New PocketPal life started');
+}
+function useStoredPet(i){
+  ensurePetIds();
+  normalizePetMemory();
+  const entry = S.petMemory[i];
+  if (!entry || !entry.pet) { toast('Empty Slot ' + (i + 1)); return; }
+  if (S.battle || S.game) { toast('Finish the current activity first'); return; }
+
+  // Already playing this slot's pet
+  if (S.activeSlot === i && S.petId && entry.pet.petId === S.petId) {
+    showPetMemory();
+    toast(petMemoryName(S) + ' is already active in Slot ' + (i + 1));
+    return;
+  }
+
+  // 1) Write current living pet back into ITS home slot (never into the target slot)
+  if (S.stage !== 'egg' && S.stage !== 'dead') {
+    const snap = memorySnapshot();
+    let home = (S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot <= 2) ? S.activeSlot : -1;
+    if (home < 0) {
+      home = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
+    }
+    if (home < 0) {
+      home = S.petMemory.findIndex(e => !e || !e.pet);
+    }
+    if (home < 0) {
+      toast('Memory full — cannot park current pet');
+      return;
+    }
+    if (home === i) {
+      // Shouldn't happen if different pets; park in another empty if possible
+      const alt = S.petMemory.findIndex((e, idx) => idx !== i && (!e || !e.pet));
+      if (alt >= 0) home = alt;
+    }
+    writePetToSlot(home, snap);
+  }
+
+  // 2) Load chosen slot — pet STAYS in that slot; never wipe other slots
+  const selected = JSON.parse(JSON.stringify(S.petMemory[i].pet));
+  applyPetCard(selected);
+  S.activeSlot = i;
+  writePetToSlot(i, memorySnapshot(), entry.id);
+
+  S.battle=false; S.bat=null; S.battleLocked=false; S.game=false; S.menu=null; S.paused=false;
+  S.lastH=S.lastY=S.lastP=S.lastAge=Date.now();
+  S.lastVirtTick=Date.now();
+  ensurePetIds();
+  save();
+  hide(); updateUI();
+  try { applyShellTheme(S.shellTheme || 0);
+    try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
+  toast(petMemoryName(S) + ' active · Slot ' + (i + 1));
+}
+function discardStoredPet(i){
+  normalizePetMemory();
+  if (!S.petMemory[i] || !S.petMemory[i].pet) { toast('Empty Slot ' + (i + 1)); return; }
+  // Cannot clear the slot you are currently playing
+  if (S.activeSlot === i && S.stage !== 'egg' && S.stage !== 'dead') {
+    toast('Switch pets first — cannot clear the active slot');
+    return;
+  }
+  const name=petMemoryName(S.petMemory[i].pet);
+  const id=petMemoryId(S.petMemory[i].pet);
+  const extra=document.getElementById('overlay-extra');
+  extra.innerHTML='<p><strong>CLEAR SLOT '+(i+1)+'?</strong></p>'+
+    '<p style="font-size:12px">'+name+' · ID '+id+'</p>'+
+    '<p style="font-size:11px;opacity:.85">Removes this pet from Slot '+(i+1)+'. Other slots stay put.</p>'+
+    '<div class="btn-row"><button onclick="window.confirmDiscardStoredPet('+i+')" style="background:#5a3030">YES, CLEAR</button><button onclick="window.showPetMemory()">CANCEL</button></div>';
+  show('Clear Pet','Confirm permanent removal');
+  document.getElementById('obtn').style.display='none';
+}
+function confirmDiscardStoredPet(i){
+  normalizePetMemory();
+  if (!S.petMemory[i] || !S.petMemory[i].pet) { showPetMemory(); return; }
+  if (S.activeSlot === i && S.stage !== 'egg' && S.stage !== 'dead') {
+    toast('Switch pets first');
+    showPetMemory();
+    return;
+  }
+  const name=petMemoryName(S.petMemory[i].pet);
+  S.petMemory[i] = null;
+  if (S.activeSlot === i) S.activeSlot = null;
+  save();
+  showPetMemory();
+  toast(name + ' cleared from Slot ' + (i + 1));
+}
+function showPetMemory(){
+  ensurePetIds();
+  normalizePetMemory();
+  // If living pet has a home slot, mark it active for the UI
+  if (S.stage !== 'egg' && S.stage !== 'dead' && S.petId) {
+    const idx = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === S.petId);
+    if (idx >= 0) S.activeSlot = idx;
+  }
+  const extra=document.getElementById('overlay-extra');
+  let html='<p style="font-size:12px">Three fixed slots. Each pet stays in its slot. The active pet is marked on its slot — switching parks the other pet back in its own slot.</p>';
+  for (let i = 0; i < 3; i++) {
+    const e = S.petMemory[i];
+    const isActive = (S.activeSlot === i && S.stage !== 'egg' && S.stage !== 'dead');
+    if (e && e.pet) {
+      // Show live stats for active slot
+      const p = isActive ? S : e.pet;
+      const tag = isActive ? 'ACTIVE · SLOT ' + (i+1) : 'SLOT ' + (i+1);
+      html+='<div class="friend-item"><strong>'+tag+'</strong> · '+petMemoryName(p)+'<br><span style="font-size:11px;opacity:.85">'+petMemoryDetails(p)+'</span>';
+      if (!isActive) {
+        html+='<br><div class="btn-row"><button onclick="window.useStoredPet('+i+')">USE PET</button><button onclick="window.discardStoredPet('+i+')" style="background:#5a3030">CLEAR</button></div>';
+      } else {
+        html+='<br><span style="font-size:11px;opacity:.85">Currently playing — switch to another slot to park this pet here</span>';
+      }
+      html+='</div>';
+    } else {
+      html+='<div class="friend-item"><strong>SLOT '+(i+1)+'</strong> · <em>empty</em></div>';
+    }
+  }
+  const filled = S.petMemory.filter(e => e && e.pet).length;
+  const freeSlots = 3 - filled;
+  // Active living pet that is NOT already in a slot still needs a free slot to park
+  let activeNeedsSlot = false;
+  if (S.stage !== 'egg' && S.stage !== 'dead' && S.petId) {
+    activeNeedsSlot = !S.petMemory.some(e => e && e.pet && e.pet.petId === S.petId);
+  }
+  const canStartNew = freeSlots > 0 && !(activeNeedsSlot && freeSlots < 1);
+  // If active is already in a slot, need at least 1 empty slot for the new pet after parking
+  // Parking active into its slot doesn't consume an extra slot; new life needs one empty for later store OR we allow new life only when there's an empty slot after save
+  const canParkAndStart = (() => {
+    if (S.stage === 'egg' || S.stage === 'dead') return freeSlots > 0; // rare
+    // Living active will be saved into its home slot (or an empty one). Need room if not already stored.
+    if (!activeNeedsSlot) return freeSlots >= 1; // already in memory — need empty for... actually new egg doesn't take a slot until stored. User wanted max 3 pets total.
+    // Max 3 pets: active + 2 stored OR 3 stored with one active. If all 3 slots filled (active is one of them), no new pet.
+    return freeSlots >= 1 || !activeNeedsSlot && freeSlots >= 1;
+  })();
+  // Simpler rule: max 3 pets in memory slots. If all 3 slots occupied, cannot start new.
+  const memoryFull = filled >= 3;
+  if (!memoryFull) {
+    html+='<div class="btn-row"><button onclick="window.startFreshLife()">START NEW PET</button></div>';
+    html+='<p style="margin-top:8px;font-size:11px">START NEW PET parks the active pet in its slot first. Max 3 pets.</p>';
+  } else {
+    html+='<p style="margin-top:8px;font-size:12px"><strong>Memory full (3/3)</strong> — CLEAR a slot before starting a new pet.</p>';
+  }
+  extra.innerHTML=html; show('Pet Memory','Fixed slots · active stays in its slot'); document.getElementById('obtn').style.display='none';
+}
+window.storeCurrentPet=storeCurrentPet; window.startFreshLife=startFreshLife; window.useStoredPet=useStoredPet; window.discardStoredPet=discardStoredPet; window.confirmDiscardStoredPet=confirmDiscardStoredPet; window.showPetMemory=showPetMemory;
+
 function showFamilyAlbum() {
   const extra = document.getElementById('overlay-extra');
   const list = S.petFamily || [];
@@ -3132,7 +4123,7 @@ function showFamilyAlbum() {
   } else {
     html += '<div class="friend-list">';
     list.forEach((e, i) => {
-      html += '<div class="friend-item">' + (e.name || e.form) + ' · ' + (e.trait || '') +
+      html += '<div class="friend-item">' + (e.name || e.form) + (e.morphId!=null ? ' ' + speciesTag(e.morphId) : '') + ' · ' + (e.trait || '') +
         ' · G' + (e.gen||1) + ' age' + (e.age||0) +
         ' · ' + (e.wins||0) + 'W-' + (e.losses||0) + 'L' +
         ' · ' + (e.reason || '') + '</div>';
@@ -3150,6 +4141,57 @@ function showFamilyAlbum() {
   document.getElementById('obtn').style.display = 'none';
 }
 window.showFamilyAlbum = showFamilyAlbum;
+
+const EAR_LABEL = ['nubs','flops','perks','longs','horns','antenna','tufts','winglets'];
+const TAIL_LABEL = ['stub','long','curl','split','spike','puff','whip','fan'];
+const PATT_LABEL = ['plain','speckled','banded','starred'];
+function harvestSeenSpecies() {
+  if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
+  if (S.stage !== 'egg' && S.stage !== 'dead' && S.morphId != null) markSpeciesSeen(S.morphId);
+  (S.petMemory || []).forEach(e => {
+    if (e && e.pet && e.pet.morphId != null) markSpeciesSeen(e.pet.morphId);
+  });
+  (S.petFamily || []).forEach(e => {
+    if (e && e.morphId != null) markSpeciesSeen(e.morphId);
+  });
+}
+function showPaldex(page) {
+  ensureMorph(S);
+  harvestSeenSpecies();
+  const extra = document.getElementById('overlay-extra');
+  const ids = Object.keys(S.speciesSeen).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
+  const per = 6;
+  const pages = Math.max(1, Math.ceil(ids.length / per));
+  S._dexPage = Math.max(0, Math.min(pages - 1, page == null ? (S._dexPage || 0) : page));
+  const start = S._dexPage * per;
+  const slice = ids.slice(start, start + per);
+  let html = '<p><strong>' + ids.length + ' / ' + SPECIES_COUNT + ' seen</strong></p>';
+  if (S.stage !== 'egg' && S.stage !== 'dead') {
+    const m = morphParts(S.morphId);
+    html += '<p>Active ' + speciesTag(S.morphId) + ' ' + displayName(S) + ' · ' + EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern] + '</p>';
+  }
+  if (slice.length) {
+    html += '<div class="friend-list" style="max-height:88px">';
+    slice.forEach(id => {
+      const m = morphParts(id);
+      const you = (S.morphId === id) ? ' ★' : '';
+      html += '<div class="friend-item">' + speciesTag(id) + ' ' + generatePetName(id) + you + ' · ' + EAR_LABEL[m.ears] + ' · ' + TAIL_LABEL[m.tail] + '</div>';
+    });
+    html += '</div>';
+    html += '<p style="font-size:11px">Page ' + (S._dexPage + 1) + ' / ' + pages + '</p>';
+    html += '<div class="btn-row">';
+    if (S._dexPage > 0) html += '<button onclick="window.showPaldex(' + (S._dexPage - 1) + ')">Prev</button>';
+    if (S._dexPage < pages - 1) html += '<button onclick="window.showPaldex(' + (S._dexPage + 1) + ')">Next</button>';
+    html += '</div>';
+  } else {
+    html += '<p style="opacity:.8">Hatch a Pal to start the dex.</p>';
+  }
+  html += '<div class="btn-row"><button onclick="window.showConnectMenu()">Back to Connect</button></div>';
+  extra.innerHTML = html;
+  show('Paldex', 'Species you have met');
+  document.getElementById('obtn').style.display = 'none';
+}
+window.showPaldex = showPaldex;
 
 function showConnectMenu() {
   const code = generateCode();
@@ -3183,9 +4225,10 @@ function showConnectMenu() {
       '<button onclick="window.startTrainingBattle()">Training Battle</button>' +
       '<button onclick="window.startFriendBattle()">Battle Friend</button>' +
     '</div>' +
-    '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Teen+ to battle</p>' +
+    '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Teen+ to battle · friend-code fights only</p>' +
     '<div class="btn-row"><button onclick="window.shareFriendLink()">Share my code / battle link</button></div>' +
-    '<div class="btn-row"><button onclick="window.showFamilyAlbum()">Pet Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
+    '<div class="btn-row"><button onclick="window.showPetMemory()">Pet Memory (' + ((S.petMemory||[]).filter(e=>e&&e.pet).length) + '/3)</button><button onclick="window.showFamilyAlbum()">Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
+    '<div class="btn-row"><button onclick="window.showPaldex()">Paldex (' + speciesSeenCount() + '/' + SPECIES_COUNT + ')</button></div>' +
     '<p style="margin-top:8px;font-size:11px">Friends: ' + S.friends.length + ' · Gen ' + S.generation + ' · Record ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
   show('Connect', 'Friends · Breed · Battle');
   // No separate Close button needed — C or overlay dismiss
@@ -3243,6 +4286,10 @@ function myBattleCard() {
     disc: S.disc || 0,
     growth: S.growthPhase || 0,
     quality: Math.min(0.95, 0.3 + (S.disc || 0) / 150 + (S.battleWins || 0) / 40),
+    power: battlePower(),
+    level: battleLevel(S.battleXP),
+    morph: S.morphId || 0,
+    petName: S.petName || displayName(S),
     updated: Date.now()
   };
 }
@@ -3300,6 +4347,10 @@ async function startFriendBattle() {
       disc: live.disc,
       growth: live.growth,
       quality: live.quality,
+      power: live.power,
+      level: live.level,
+      morph: live.morph,
+      petName: live.petName,
       tier: live.tier
     };
     toast('Live card: ' + (f.name || 'Friend'));
@@ -3310,6 +4361,26 @@ async function startFriendBattle() {
 }
 window.startTrainingBattle = startTrainingBattle;
 window.startFriendBattle = startFriendBattle;
+window.createP2PRoom=createP2PRoom; window.joinP2PRoom=joinP2PRoom; window.leaveP2PRoom=leaveP2PRoom; window.startP2PMatch=startP2PMatch;
+async function testPocketWorker() {
+  const el = document.getElementById('worker-status');
+  const base = workerBaseUrl();
+  const say = (t) => { if (el) el.textContent = t; toast(t); };
+  if (!base) { say('No Worker URL set in this build'); return; }
+  try {
+    const r = await fetch(base + '/health');
+    const j = await r.json();
+    if (j && j.ok) {
+      const rooms = (j.features || []).indexOf('realtime-rooms') >= 0;
+      say(rooms
+        ? ('P2P server live · ' + base.replace(/^https?:\/\//,''))
+        : 'Worker live, but P2P rooms missing — redeploy cloudflare-worker.js');
+    } else say('Worker answered but is not ready');
+  } catch (e) {
+    say('Cannot reach Worker. Deploy cloudflare-worker.js with wrangler, then retry.');
+  }
+}
+window.testPocketWorker = testPocketWorker;
 
 // Light training mini-game → Battle XP (Digimon-inspired, simple timing)
 function startStatTraining() {
@@ -3323,14 +4394,22 @@ function startStatTraining() {
   S.gameType = 'train';
   S.gRound = 1;
   S.gScore = 0;
+  S.trainOops = 1; // one free miss so the game stays fair on a phone
   S.trainPhase = 'wait';
-  S.trainUntil = Date.now() + 500 + Math.random() * 2200;
+  S.trainBtn = 'B';
+  S.trainUntil = Date.now() + 800 + Math.random() * 600;
   S.menu = null;
-  toast('TRAIN XP: wait, then press the letter shown!');
+  toast('TRAIN XP: wait for GO, then tap the letter');
   beep(400, 0.05);
 }
 window.startStatTraining = startStatTraining;
 
+function trainNextWait(now) {
+  S.trainPhase = 'wait';
+  S.trainBtn = null;
+  S.trainUntil = (now || Date.now()) + 700 + Math.random() * 500;
+  S.playResult = null;
+}
 function trainPress(btn) {
   // btn: 'A' or 'B' — must match S.trainBtn during GO phase
   if (!S.game || S.gameType !== 'train') return;
@@ -3340,45 +4419,56 @@ function trainPress(btn) {
     if (btn !== need) {
       S.playResult = 'sad';
       beep(160, 0.08);
-      toast('Wrong button! Needed ' + need);
-      endTraining(S.gScore >= 2);
+      if ((S.trainOops || 0) > 0) {
+        S.trainOops--;
+        toast('Wrong — needed ' + need + '. 1 more chance');
+        S.gRound++;
+        if (S.gRound > 3) endTraining(S.gScore >= 2);
+        else trainNextWait(now);
+      } else {
+        toast('Wrong button! Needed ' + need);
+        endTraining(S.gScore >= 2);
+      }
       return;
     }
     S.gScore++;
     S.playResult = 'happy';
     beep(700, 0.05);
     S.gRound++;
-    if (S.gRound > 4) {
+    if (S.gRound > 3) {
       endTraining(true);
     } else {
-      S.trainPhase = 'wait';
-      S.trainBtn = null;
-      S.trainUntil = now + 400 + Math.random() * 2000;
-      S.playResult = null;
-      toast('Good! Round ' + S.gRound);
+      trainNextWait(now);
+      toast('Nice! Round ' + S.gRound + '/3');
     }
   } else {
-    // Too early
+    // Too early — first slip is forgiven
     S.playResult = 'sad';
     beep(160, 0.08);
-    toast('Too early!');
-    endTraining(false);
+    if ((S.trainOops || 0) > 0) {
+      S.trainOops--;
+      toast('Wait for GO! 1 more chance');
+    } else {
+      toast('Too early!');
+      endTraining(S.gScore >= 2);
+    }
   }
 }
 function endTraining(ok) {
   S.game = false;
   S.gameType = null;
   S.trainPhase = null;
-  if (ok) {
-    const bonus = S.gScore >= 4 ? 3 : 2;
+  const hits = S.gScore || 0;
+  if (ok || hits >= 2) {
+    const bonus = hits >= 3 ? 3 : 2;
     S.battleXP = (S.battleXP || 0) + bonus;
     S.weight = Math.max(5, S.weight - 1);
-    S.happy = Math.min(4, S.happy + (S.gScore >= 3 ? 1 : 0));
+    S.happy = Math.min(4, S.happy + (hits >= 2 ? 1 : 0));
     S.anim = 'happy';
     S.animTimer = Date.now() + 1400;
     spawnFx('star', S.petX || 120, 70, 4);
     spawnFx('heart', S.petX || 120, 85, 2);
-    toast(S.gScore >= 4 ? 'Perfect train! +' + bonus + ' XP' : 'Trained! +' + bonus + ' XP');
+    toast(hits >= 3 ? 'Perfect train! +' + bonus + ' XP' : 'Trained! +' + bonus + ' XP');
     melTrain();
   } else {
     S.battleXP = (S.battleXP || 0) + 1;
@@ -3416,11 +4506,14 @@ function addFriend() {
 }
 
 function tryBreed() {
+  if (S.sleep) { toast('Sleeping...'); return; }
   if (S.stage !== 'adult') { toast('Need to be Adult first'); return; }
   if (S.friends.length === 0) { toast('Add a friend first'); return; }
   if (S.married) { toast('Already has offspring'); return; }
 
   const partner = S.friends[S.selectedFriend] || S.friends[0];
+  recordFamilyMember('bred');
+  storeCurrentPet();
   S.married = true;
   S.happy = 4;
   // Parent care quality + partner quality → inherited bonus for next gen
@@ -3440,17 +4533,20 @@ function tryBreed() {
   }, 1800);
 
   setTimeout(() => {
+    S.petId = newPetId();
     S.stage = 'baby';
     S.form = 'baby';
     S.age = 0;
     S.weight = 5;
     S.hunger = 2 + (S.inheritedBonus > 0 ? 1 : 0);
     S.happy = 2 + (S.inheritedBonus > 1 ? 1 : 0);
-    S.disc = Math.min(40, Math.floor(S.disc / 2));
+    S.disc = Math.min(40, Math.floor((S.disc || 0) / 2));
     S.careMiss = 0;
     S.discMiss = 0;
     S.sick = false;
     S.poop = false;
+    S.poopCount = 0;
+    S.poopSpots = [];
     S.call = false;
     S.sleep = false;
     S.lights = true;
@@ -3458,9 +4554,16 @@ function tryBreed() {
     S.lightsMissPending = false;
     S.sleepStart = 0;
     S._falseCall = false;
+    S._discPracticed = false;
     S.born = Date.now();
     S.married = false;
-    S.generation++;
+    S.generation = (S.generation || 1) + 1;
+    S.growthPhase = 0;
+    S.lastGrowthAt = Date.now();
+    S.battleXP = 0;
+    S.battleWins = 0;
+    S.battleLosses = 0;
+    assignNewMorph(S, { morphId: S.morphId }, partner);
     S.lastH = Date.now();
     S.lastY = Date.now();
     S.lastP = Date.now();
@@ -3469,7 +4572,7 @@ function tryBreed() {
     S.anim = 'evo';
     S.animTimer = Date.now() + 1800;
     const geneTxt = S.inheritedBonus >= 2 ? ' (excellent genes!)' : S.inheritedBonus === 1 ? ' (good genes)' : '';
-    toast('Gen ' + S.generation + ' hatched!' + geneTxt);
+    toast('Gen ' + S.generation + ' · ' + displayName(S) + ' ' + speciesTag(S.morphId) + geneTxt);
     beep(620, 0.1); beep(820, 0.15);
     save();
     hide();
@@ -3523,7 +4626,7 @@ function confirm() {
     return;
   }
   if (S.stage === 'dead') {
-    restart();
+    restart({ fromDeath: true });
     return;
   }
   if (S.stage === 'egg') return;
@@ -3545,7 +4648,6 @@ function confirm() {
   } else if (a === 'light') {
     light();
   } else if (a === 'connect') {
-    if (S.sleep) { toast('Sleeping...'); return; }
     showConnectMenu();
   } else if (a === 'disc') {
     disc();
@@ -3669,7 +4771,7 @@ document.addEventListener('keydown', e => {
     if (S.paused) return;
     press('btnB');
     if (S.battle) battleOrder('attack');
-    else if (S.game && S.gameType === 'train') trainPress();
+    else if (S.game && S.gameType === 'train') trainPress('B');
     else if (S.game) resolve(1);
     else if (S.menu === 'feed') { feed('snack'); S.menu = null; }
     else if (S.menu === 'playpick') { S.menu = null; startMemoryGame(); }
@@ -3711,7 +4813,7 @@ function updateUI() {
   document.getElementById('wt').textContent = S.weight + 'g';
   document.getElementById('disc').textContent = S.disc + '%';
   document.getElementById('friends').textContent = S.friends.length;
-  document.getElementById('pet-name').textContent = NAMES[S.form] || 'PocketPal';
+  document.getElementById('pet-name').textContent = displayName(S) + (S.stage!=='egg' && S.stage!=='dead' ? ' ' + speciesTag(ensureMorph(S)) : '');
   document.getElementById('gen-line').textContent = 'Gen ' + S.generation;
   document.getElementById('soundBtn').textContent = S.sound ? '🔊' : '🔇';
   const nbtn = document.getElementById('notifyBtn');
@@ -3781,7 +4883,10 @@ function applyOfflineCatchup(now) {
     S.hunger = Math.max(0, S.hunger - Math.min(hLoss, 4)); // cap offline drain
     // Care miss grows slowly offline — player gets a chance to recover on return
     S.careMiss += Math.min(3, Math.max(0, hLoss - 1)) * d.care;
-    if (S.hunger === 0) { S.call = true; careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!'); }
+    if (S.hunger === 0) {
+      rustDisc(Math.min(8, 2 + hLoss));
+      S.call = true; careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!');
+    }
   }
   if (yLoss > 0) {
     S.happy = Math.max(0, S.happy - Math.min(yLoss, 4));
@@ -3816,6 +4921,10 @@ function applyOfflineCatchup(now) {
     if (a.getDate() !== b.getDate() || a.getMonth() !== b.getMonth() || a.getFullYear() !== b.getFullYear()) {
       nights = 1;
     }
+  }
+  if (nights > 0 && (S.disc || 0) >= 35 && !S._discPracticed) {
+    rustDisc(Math.min(12, nights * 3));
+    S._discPracticed = false;
   }
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
@@ -3867,10 +4976,41 @@ function applyOfflineCatchup(now) {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
   return elapsed;
 }
+function pushCareSnapshotToSW(clear) {
+  if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+  try {
+    if (clear || !S.notifications) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CARE_SNAPSHOT', enabled: false });
+      return;
+    }
+    const baby = (S.age || 0) < 1;
+    navigator.serviceWorker.controller.postMessage({
+      type: 'CARE_SNAPSHOT',
+      enabled: true,
+      paused: !!S.paused,
+      sleep: !!S.sleep,
+      hunger: S.hunger,
+      happy: S.happy,
+      poop: !!S.poop,
+      sick: !!S.sick,
+      lastH: S.lastH || Date.now(),
+      lastY: S.lastY || Date.now(),
+      lastP: S.lastP || Date.now(),
+      hungerMs: (baby ? 3.2 : 2.5) * 60000,
+      happyMs: (baby ? 4.0 : 3.2) * 60000,
+      poopMs: 8 * 60000
+    });
+  } catch (e) {}
+}
 function save() {
   S.lastSave = Date.now();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
-  // Keep live battle card fresh when worker configured
+  pushCareSnapshotToSW();
+  clearResolvedCareAlerts();
+  if (!S._lastCarePub || Date.now() - S._lastCarePub > 20000) {
+    S._lastCarePub = Date.now();
+    publishCareCard();
+  }
   if (workerBaseUrl() && S.stage !== 'egg' && S.stage !== 'dead') {
     if (!S._lastPublish || Date.now() - S._lastPublish > 60000) {
       S._lastPublish = Date.now();
@@ -3909,6 +5049,21 @@ function load() {
     if (S.battleXP === undefined) S.battleXP = 0;
     if (S.battle === undefined) S.battle = false;
     if (S.bat === undefined) S.bat = null;
+    if (!Array.isArray(S.petMemory)) S.petMemory = [];
+    S.petMemory = [0, 1, 2].map(i => {
+      const e = S.petMemory[i];
+      if (e && e.pet && typeof e.pet === 'object') {
+        if (e.pet.petMemory) delete e.pet.petMemory;
+        if (e.pet.activeSlot != null) delete e.pet.activeSlot;
+        if (e.pet.speciesSeen) delete e.pet.speciesSeen;
+        return e;
+      }
+      return null;
+    });
+    if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
+    if (!S.petId) S.petId = newPetId();
+    ensurePetIds();
+    if (S.battleLocked === undefined) S.battleLocked = false;
     if (S.lastFalseCall === undefined) S.lastFalseCall = 0;
     if (S.sleptProperly === undefined) S.sleptProperly = false;
     // Keep preference; if permission was revoked, force alerts off
@@ -3965,23 +5120,40 @@ function load() {
     S.loadGraceUntil = Date.now() + 3 * 60000;
     if (S.shellTheme === undefined) S.shellTheme = 0;
     applyShellTheme(S.shellTheme || 0);
+    try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {}
 
     // If was paused, stay paused (true freeze). Otherwise simulate care while
     // the PWA was closed/backgrounded, including the night sleep window.
     if (S.paused) toast('Still paused · Hold B to resume');
     else applyOfflineCatchup(Date.now());
+    normalizePetMemory();
     updateCareStreak();
     tryAcceptFriendFromUrl();
+    tryOpenCareFromUrl();
     return true;
   } catch(e) { return false; }
 }
 
+function tryOpenCareFromUrl() {
+  try {
+    const type = new URLSearchParams(window.location.search).get('care');
+    if (type && CARE_ALERTS[type]) {
+      setTimeout(() => hintOpenedCare(type), 600);
+    }
+  } catch (e) {}
+}
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener('message', ev => {
+    if (ev.data && ev.data.type === 'CARE_OPEN') hintOpenedCare(ev.data.care);
+  });
+}
 window.addEventListener('beforeunload', save);
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     hiddenAt = Date.now();
     save();
+    pushCareSnapshotToSW();
     stopMusic();
   } else {
     if (hiddenAt && !S.paused) applyOfflineCatchup(Date.now());
@@ -3992,41 +5164,48 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function restart() {
+function restart(opts) {
   const deaths = S.deaths;
   const friends = S.friends;
   const generation = S.generation;
   const difficulty = S.difficulty;
   const sound = S.sound;
   const notifications = S.notifications;
-  const battleWins = S.battleWins || 0;
-  const battleLosses = S.battleLosses || 0;
-  const battleXP = S.battleXP || 0;
+  const battleWins = 0;
+  const battleLosses = 0;
+  const battleXP = 0;
   const petFamily = S.petFamily || [];
+  const petMemory = S.petMemory || [];
   const careStreak = S.careStreak || 0;
   const lastCareDay = S.lastCareDay || '';
   const myCode = S.myCode;
+  const shellTheme = (S.shellTheme != null ? S.shellTheme : 0);
+  const speciesSeen = S.speciesSeen || {};
+  const fromDeath = (opts && opts.fromDeath) || S.stage === 'dead';
+  const petId = newPetId();
   Object.assign(S, {
-    stage: 'egg', form: 'egg', age: 0, weight: 5,
+    stage: 'egg', form: 'egg', age: 0, weight: 5, morphId: null, petName: '',
     hunger: 4, happy: 4, disc: 0, careMiss: 0, discMiss: 0,
     sick: false, sleep: false, lights: true, poop: false,
-    poopX: 180, poopY: 145, call: false,
+    poopX: 180, poopY: 145, poopCount: 0, poopSpots: [], call: false,
     born: Date.now(), lastH: Date.now(), lastY: Date.now(),
     lastP: Date.now(), lastAge: Date.now(),
     game: false, menu: null, deaths, frame: 0, gameDir: 0,
     friends, married: false, anim: null, selectedFriend: 0,
-    generation, difficulty, sound, notifications, petFamily, careStreak, lastCareDay, myCode, lastNotifyAt: 0, lastNotifyType: '', musicStep: 0, musicTimer: 0, musicPlaying: false, inheritedBonus: 0,
-    battleWins, battleLosses, battleXP, battle: false, bat: null,
+    generation: fromDeath ? ((generation || 1) + 1) : 1, petId, difficulty, sound, notifications, petFamily, petMemory, activeSlot: null, shellTheme, careStreak, lastCareDay, myCode, speciesSeen, lastNotifyAt: 0, lastNotifyType: '', musicStep: 0, musicTimer: 0, musicPlaying: false, inheritedBonus: 0,
+    battleWins, battleLosses, battleXP, battle: false, bat: null, battleLocked: false,
     petX: 120, petTargetX: 120, playResult: null,
     paused: false, pauseStarted: 0, sleepStart: 0, lightsMissPending: false,
     lastSleepCheck: Date.now(),
     virtualHour: new Date().getHours(),
     virtualMin: new Date().getMinutes(),
     lastVirtTick: Date.now(),
-    lastAgeDay: '', sleptProperly: false, _ageCatchupDone: true,
+    lastAgeDay: '', sleptProperly: false, _ageCatchupDone: true, _discPracticed: false,
     fx: [], hatchPhase: 0, deathPhase: 0, tiltTimer: 0
   });
   hide();
+  try { applyShellTheme(S.shellTheme || 0);
+    try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
   // Hatch sequence: shake + cracks then baby
   setTimeout(() => {
     if (S.stage === 'egg') {
@@ -4043,10 +5222,11 @@ function restart() {
       S.born = Date.now();
       S.hunger = 2;
       S.happy = 2;
+      assignNewMorph(S);
       S.anim = 'joy';
       S.animTimer = Date.now() + 1500;
       spawnFx('star', 120, 90, 5);
-      toast('It hatched! Pip is here');
+      toast('It hatched! ' + displayName(S) + ' ' + speciesTag(S.morphId));
       beep(600, 0.1); beep(800, 0.15);
       save();
     }
@@ -4066,7 +5246,8 @@ function hide() {
   btn.textContent = 'Close';
 }
 document.getElementById('obtn').onclick = () => {
-  if (S.stage === 'dead' || S.stage === 'egg') restart();
+  if (S.stage === 'dead') restart({ fromDeath: true });
+  else if (S.stage === 'egg') restart();
   else hide();
 };
 
@@ -4087,15 +5268,16 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  try { applyShellTheme(S.shellTheme || 0); } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=2.66', { updateViaCache: 'none' })
+  try { applyShellTheme(S.shellTheme || 0);
+    try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
+navigator.serviceWorker.register('./service-worker.js?v=2.81', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.47.1', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\nReal-time care · Grow with love!');
+    show('PocketPal v2.90', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
@@ -4105,6 +5287,7 @@ function init() {
   requestAnimationFrame(loop);
 }
 init();
+
 </script>
 </body>
 </html>

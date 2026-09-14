@@ -1,7 +1,7 @@
 {
   "name": "PocketPal",
   "short_name": "PocketPal",
-  "description": "A classic-style virtual pet you can care for, grow, and breed.",
+  "description": "Raise, train, and battle an original pixel pal. 256 species. Real-time care.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
