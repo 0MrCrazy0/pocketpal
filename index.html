@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v3.05 -->
+<!-- Public Release - POCKETPAL v3.06 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v3.05
+//  POCKETPAL v3.06
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -1170,7 +1170,7 @@ const CARE_ALERTS = {
   poop:       { title: 'PocketPal made a mess',   body: 'More than one pile — please clean.' },
   sick:       { title: 'PocketPal feels sick',    body: 'I need medicine.' },
   lights:     { title: 'PocketPal is sleepy',     body: 'Yawning — lights off for bed.' },
-  discipline: { title: 'False call',              body: 'No real need. Use Discipline, not food.' }
+  discipline: { title: 'PocketPal is being naughty', body: 'No real need. Discipline to train them — or ignore and spoil them.' }
 };
 function careAlertIcon(file) {
   try { return new URL(file, window.location.href).href; } catch (e) { return './' + file; }
@@ -2560,7 +2560,7 @@ function update() {
         S.lastFalseCall = now;
         S.anim = 'call';
         S.animTimer = now + 1500;
-        toast(disc >= 90 ? 'Rare attitude call — Discipline?' : 'Calling... (try Discipline)');
+        toast(disc >= 90 ? 'Rare naughty call — Discipline?' : 'Being naughty — Discipline?');
         melCall();
         careNotify('discipline', 'False call — open PocketPal and use Discipline!');
         save();
@@ -5401,7 +5401,7 @@ navigator.serviceWorker.register('./service-worker.js?v=3.00', { updateViaCache:
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v3.05', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v3.06', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
