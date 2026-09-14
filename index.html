@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.92 -->
+<!-- Public Release - POCKETPAL v2.93 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v2.92
+//  POCKETPAL v2.93
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -816,20 +816,22 @@ function drawMorphHead(form, morphId, g, INK, BG) {
     }
   }
 
-  const faceFloor = met.mouthY + 3;
+  const bellyY = met.cy + Math.max(8, Math.floor(met.r * 0.55));
   if (m.pattern === 1) {
-    const spots = [[-5, met.cy + 6], [4, met.cy + 7], [-3, met.cy + 8], [5, met.cy + 5], [2, met.cy + 9]];
+    const spots = [[-4, bellyY], [3, bellyY + 1], [-2, bellyY + 2], [5, bellyY], [1, bellyY + 3]];
     for (let i = 0; i < spots.length; i++) {
-      if (spots[i][1] >= faceFloor && onPetBody(spots[i][0], spots[i][1], met)) px(spots[i][0], spots[i][1], BG);
+      if (spots[i][1] > met.mouthY + 5 && onPetBody(spots[i][0], spots[i][1], met)) px(spots[i][0], spots[i][1], BG);
     }
   } else if (m.pattern === 2) {
-    const by = Math.max(faceFloor + 2, met.cy + Math.min(7, Math.floor(met.r * 0.5)));
-    const br = Math.min(4, Math.max(2, met.r - 8));
-    if (by - br >= faceFloor) fillCirc(0, by, br, BG);
+    if (bellyY > met.mouthY + 6 && onPetBody(0, bellyY, met)) {
+      px(-1, bellyY, BG); px(0, bellyY, BG); px(1, bellyY, BG);
+      px(0, bellyY + 1, BG);
+    }
   } else if (m.pattern === 3) {
-    const by = Math.max(faceFloor, met.cy + 6);
-    const bw = Math.max(6, met.r);
-    fillRect(-Math.floor(bw / 2), by, bw, 2, BG);
+    if (bellyY > met.mouthY + 6) {
+      if (onPetBody(-4, bellyY, met)) px(-4, bellyY, BG);
+      if (onPetBody(4, bellyY, met)) px(4, bellyY, BG);
+    }
   }
 
   if (m.accent === 1) {
@@ -840,8 +842,11 @@ function drawMorphHead(form, morphId, g, INK, BG) {
     fillRect(-4, top + 1, 8, 3, BG);
     px(-5, top + 2, INK); px(4, top + 2, INK);
   } else if (m.accent === 3) {
-    const cw = Math.max(8, met.r);
-    fillRect(-Math.floor(cw / 2), Math.max(met.mouthY + 4, met.cy + 7), cw, 2, BG);
+    const by = met.cy + Math.max(8, Math.floor(met.r * 0.55));
+    if (by > met.mouthY + 6) {
+      if (onPetBody(-3, by, met)) px(-3, by, BG);
+      if (onPetBody(3, by, met)) px(3, by, BG);
+    }
   } else if (m.accent === 4) {
     px(0, top, INK); px(0, top - 2, INK); px(0, top - 4, INK);
     px(-1, top - 1, INK); px(1, top - 1, INK);
@@ -1438,8 +1443,7 @@ function drawPet(cx, cy, form, f) {
     } else {
     bob = (Math.sin(f * 0.08) > 0) ? 1 : 0;
     const cycle = Math.floor(f / 40) % 12;
-    // Sit pose (lower bob) every few cycles
-    if (cycle === 5 || cycle === 6) bob = 3;
+    if (cycle === 5 || cycle === 6) bob = 1;
     // Wave (shift + arm feel) when content
     if (S.happy >= 2 && (cycle === 8 || cycle === 9)) {
       shift = (f % 16 < 8) ? 2 : -1;
@@ -1461,8 +1465,8 @@ function drawPet(cx, cy, form, f) {
       } else if (fm === 'adult2' || fm === 'adult9') { // Kiko / Rin — athletic sway
         shift = (Math.floor(f / 20) % 2 === 0) ? 1 : -1;
         if (f % 60 < 4) bob = 2;
-      } else if (fm === 'adult5' || fm === 'adult6') { // Nori / Zuzu — heavy sit
-        bob = 2 + ((f % 100 < 40) ? 1 : 0);
+      } else if (fm === 'adult5' || fm === 'adult6') {
+        bob = 1;
         shift = 0;
       } else if (fm === 'adult8' || fm === 'adult10') { // Bibi / Bolt — alert
         if (f % 70 < 8) shift = (f % 14 < 7) ? 2 : -2;
@@ -1486,7 +1490,7 @@ function drawPet(cx, cy, form, f) {
   // Low energy slump when hearts low
   const lowEnergy = !S.sleep && !S.game && !a && (S.hunger <= 1 || S.happy <= 1);
   if (lowEnergy) {
-    bob = 2; // sit lower — no fractional scale (keeps pixels crisp)
+    bob = 1;
   }
 
   // Occasional head tilt when idle and content
@@ -1708,7 +1712,6 @@ function drawPet(cx, cy, form, f) {
       px(5 + r2 - 2, 3 - r2 + 1, INK); px(5 + r2 - 1, 3 - r2, INK); px(5 + r2, 3 - r2 - 1, INK);
       if (g >= 1) { fillRect(-8, r1 + 2, 4, 3, INK); fillRect(5, r1 + 2, 4, 3, INK); }
       if (g >= 3) { px(-5, -2, BG); px(6, 0, BG); }
-      fillRect(-5, 8, 10, 3, BG);
     } else if (form === 'adult1') {
       // Momo — best care, round with side fins/ears
       fillCirc(0, 1, 16, INK);
@@ -1733,7 +1736,7 @@ function drawPet(cx, cy, form, f) {
     } else if (form === 'adult4') {
       // Poko — chubby with belly mark
       fillCirc(0, 2, 18, INK);
-      fillCirc(0, 6, 10, BG);
+      px(-2, 12, BG); px(0, 13, BG); px(2, 12, BG);
       px(-6, 5, INK); px(6, 5, INK);
       fillRect(-9, 18, 6, 3, INK); fillRect(4, 18, 6, 3, INK);
     } else if (form === 'adult5') {
@@ -2533,7 +2536,7 @@ function update() {
   if (!S.sleep && !S.game && !S.battle && !isNightTime() && S.stage !== 'egg' && S.stage !== 'dead') {
     // Bored (happy 0-1): yawn + call for attention/play; lights optional comfort
     if (S.happy <= 1 && !S.call && Math.random() < 0.00002) {
-      S.anim = 'yawn';
+      S.anim = 'call';
       S.animTimer = now + 1200;
       S.call = true;
       careNotify('happy', 'Needs PLAY — bored and restless!');
@@ -2547,7 +2550,7 @@ function update() {
       S.lightsMissPending = false;
       careNotify('lights', 'Sleepy baby — lights OFF for a nap?');
       toast('Getting sleepy...');
-      S.anim = 'yawn';
+      S.anim = 'call';
       S.animTimer = now + 1000;
     }
   }
@@ -5274,7 +5277,7 @@ navigator.serviceWorker.register('./service-worker.js?v=2.81', { updateViaCache:
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.92', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v2.93', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
