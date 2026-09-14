@@ -16,6 +16,9 @@ and care alerts can still reach you after you leave.
 
 Your save stays on that phone or computer. Same browser, same pal.
 
+Pet Memory has **5 slots**. Parked pals wait frozen. Only the active pal needs care.
+They do not return home from old age. Neglect still can. Age is how long you have been together.
+
 ---
 
 ## The three buttons
@@ -42,11 +45,13 @@ Keep the hearts up.
 - Empty happy hearts → play
 - Pile on the screen → clean
 - Swirl / sick face → medicine
-- Night (8pm–8am) → lights off so they can sleep
+- Night → lights off so they can sleep. Set bed and wake in Status (A / B).
+- A full night (6h+) keeps them rested. Short nights tire them and can steer a worse teen/adult. Ears and tail stay the same.
 
 They age up in the morning after a night’s rest.
 Ignore them and they get stubborn. Care for them and they shine.
 The body they hatch with — ears, tail, markings — stays with that life as they evolve.
+Train and breed to find missing Paldex looks. Care changes the body, not the species.
 
 ---
 

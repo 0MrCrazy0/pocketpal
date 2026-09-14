@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v2.93 -->
+<!-- Public Release - POCKETPAL v3.03 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -217,7 +217,7 @@
   }
   .overlay .friend-list {
     width: 100%;
-    max-height: 48px;
+    max-height: 120px;
     overflow-y: auto;
     margin: 6px 0;
     text-align: left;
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v2.93
+//  POCKETPAL v3.03
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -483,6 +483,10 @@ const S = {
   lastVirtTick: Date.now(),
   lastAgeDay: '',   // YYYY-MM-DD of last morning age-up
   sleptProperly: false, // lights were off during night sleep
+  bedHour: 20,
+  wakeHour: 8,
+  goodNights: 0,
+  shortNights: 0,
   fx: [],           // floating hearts / bubbles {type,x,y,life,vy}
   hatchPhase: 0,    // 0 idle egg, 1 shaking, 2 cracking, 3 done
   deathPhase: 0,    // 0 rising, 1 spirit
@@ -590,6 +594,7 @@ function recordFamilyMember(reason) {
 
 // ---- 256 unique Pal species: 8 ears × 8 tails × 4 patterns (guaranteed unique IDs) ----
 const SPECIES_COUNT = 256;
+const MEMORY_SLOTS = 5;
 const NAME_A = ['Vel','Nim','Zar','Oka','Lum','Pex','Qui','Iri','Bos','Tep','Myn','Ara','Sho','Gri','Wib','Cai','Neo','Fay','Rux','Dai','Kel','Yuu','Plo','Hex','Siv','Ora','Jin','Taz','Mew','Vyn','Azu','Rel'];
 const NAME_B = ['ko','mi','ra','zu','bit','chi','do','nx','lo','qi','va','no','shi','el','um','ak'];
 function hash32(s) {
@@ -2078,9 +2083,10 @@ function drawStatus() {
     'STREAK ' + (S.careStreak || 0) + 'D  BATTLE ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L',
     'NEXT ' + nextEvoHint(),
     'CODE ' + (S.myCode || '---') + '  FR ' + ((S.friends && S.friends.length)||0),
-    'TIME ' + timeStr + '  8PM-8AM',
+    'TIME ' + timeStr + '  ' + state,
+    'BED ' + formatHour(getBedWake().bed) + '  WAKE ' + formatHour(getBedWake().wake) + '  ' + nightHours() + 'H ' + restQuality(),
     'ALERTS ' + (S.notifications?'ON':'OFF') + '  LIGHTS ' + (S.lights?'ON':'OFF'),
-    state + (flags && flags !== 'OK' ? ' ' + flags : '')
+    'A BED   B WAKE   C BACK'
   ];
   lines.forEach((l, i) => drawText(String(l).slice(0, 38), 4, 3 + i * 16, '#0f380f'));
 }
@@ -2338,6 +2344,20 @@ function update() {
     } else {
       toast('Good morning!');
       melWake();
+    }
+    const nh = nightHours();
+    if (S.sleptProperly) {
+      if (nh < 6) {
+        S.shortNights = (S.shortNights || 0) + 1;
+        S.careMiss = (S.careMiss || 0) + 1;
+        rustDisc(1, 'Short night — tired');
+      } else {
+        S.goodNights = (S.goodNights || 0) + 1;
+        if (nh >= 10 && S.happy < 4) S.happy = Math.min(4, (S.happy || 0) + 1);
+      }
+    } else {
+      S.shortNights = (S.shortNights || 0) + 1;
+      S.careMiss = (S.careMiss || 0) + 1;
     }
     S.sleptProperly = false;
     // Authentic: if poop timer was due overnight, go shortly after wake
@@ -2599,12 +2619,6 @@ function update() {
       (S.sick && S.hunger === 0 && S.careMiss > 16 * d.care) ||
       ((S.poopCount || 0) >= 4 && S.sick && S.happy === 0 && S.careMiss > 12 * d.care)) {
     die();
-  } else if (S.stage === 'adult' && S.age >= 12) {
-    // Rising chance with age (classic: long adult life → natural return)
-    // ~age 12 soft start; by 18–20 much more likely over time
-    const over = S.age - 11; // 1 at age 12
-    const chance = Math.min(0.00012, 0.000012 * over * over);
-    if (Math.random() < chance) die();
   }
 
   if (now - S.lastSave > 30000) save();
@@ -2619,7 +2633,8 @@ function checkEvo() {
   if (S.stage === 'baby' && t > 4 * 60000) {
     evo('child', 'child');
   } else if (S.stage === 'child' && S.age >= 2) {
-    const good = (S.careMiss - S.inheritedBonus) < 3;
+    const tired = (S.shortNights || 0) >= 3 && (S.shortNights || 0) > (S.goodNights || 0);
+    const good = (S.careMiss - S.inheritedBonus + (tired ? 1 : 0)) < 3;
     evo('teen', good ? 'teenGood' : 'teenBad');
   } else if (S.stage === 'teen' && S.age >= 5) {
     evoAdult();
@@ -2646,7 +2661,8 @@ function evo(st, fm) {
 function evoAdult() {
   // Classic care-mistake + discipline + weight tiers
   // Lower careMiss = better adult (matches Gen1/Gen2 philosophy)
-  const c = Math.max(0, S.careMiss - S.inheritedBonus);
+  const rest = (S.goodNights || 0) - (S.shortNights || 0);
+  const c = Math.max(0, S.careMiss - S.inheritedBonus + (rest <= -3 ? 1 : 0) - (rest >= 3 ? 1 : 0));
   const d = S.discMiss;
   const overweight = S.weight > 28;
   let f = 'adult6'; // worst default (neglected)
@@ -2662,22 +2678,51 @@ function evoAdult() {
   // else adult6 Zuzu
   evo('adult', f);
 }
+function clearActiveMemorySlot() {
+  normalizePetMemory();
+  if (S.petId) {
+    const i = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === S.petId);
+    if (i >= 0) S.petMemory[i] = null;
+  }
+  S.activeSlot = null;
+}
+function livingParkedSlots() {
+  normalizePetMemory();
+  const out = [];
+  for (let i = 0; i < MEMORY_SLOTS; i++) {
+    const e = S.petMemory[i];
+    if (e && e.pet && e.pet.stage !== 'dead' && e.pet.form !== 'dead') out.push(i);
+  }
+  return out;
+}
+function offerPetsAfterReturn() {
+  const slots = livingParkedSlots();
+  const extra = document.getElementById('overlay-extra');
+  let html = '<p style="font-size:12px">Their slot is free. Pick a parked pal or start a new life.</p>';
+  slots.forEach(i => {
+    const pet = S.petMemory[i].pet;
+    html += '<div class="friend-item"><strong>SLOT '+(i+1)+'</strong> · '+petMemoryName(pet)+'<br><button onclick="window.useStoredPet('+i+')">USE PET</button></div>';
+  });
+  html += '<div class="btn-row"><button onclick="window.restart({fromDeath:true})">START NEW PET</button></div>';
+  extra.innerHTML = html;
+  show('Returned home', 'Age ' + S.age + '  ·  Gen ' + S.generation);
+  const btn = document.getElementById('obtn');
+  if (btn) btn.style.display = 'none';
+}
 function die() {
   if (S.stage === 'dead') return;
   S.call = false;
   S.deaths++;
   recordFamilyMember('returned');
+  clearActiveMemorySlot();
   S.anim = 'death';
   S.animTimer = Date.now() + 2500;
-  S.stage = 'dead'; // stop update loop immediately
+  S.stage = 'dead';
   melDeath();
-  // Rise animation then show spirit form
   setTimeout(() => {
     S.form = 'dead';
     S.anim = null;
-    show('Returned home', 'Age ' + S.age + '  ·  Gen ' + S.generation + '\\n\\nPress B to restart');
-    const _db = document.getElementById('obtn');
-    if (_db) { _db.style.display = ''; _db.textContent = 'Start New Pet'; }
+    offerPetsAfterReturn();
     save();
   }, 2400);
   save();
@@ -2935,10 +2980,44 @@ function med() {
     beep(160, 0.08);
   }
 }
+function clampHour(h, fallback) {
+  h = (h == null || isNaN(h)) ? fallback : (h | 0);
+  return ((h % 24) + 24) % 24;
+}
+function formatHour(h) {
+  h = clampHour(h, 0);
+  const am = h < 12;
+  let n = h % 12;
+  if (n === 0) n = 12;
+  return n + (am ? 'AM' : 'PM');
+}
 function getBedWake() {
-  // Authentic night window: 8:00 PM → 8:00 AM for all stages
-  // (matches classic "put pet to bed at night, wake in the morning")
-  return { bed: 20, wake: 8 };
+  return { bed: clampHour(S.bedHour, 20), wake: clampHour(S.wakeHour, 8) };
+}
+function nightHours() {
+  const { bed, wake } = getBedWake();
+  const n = (wake - bed + 24) % 24;
+  return n === 0 ? 24 : n;
+}
+function restQuality() {
+  const n = nightHours();
+  if (n < 6) return 'SHORT';
+  if (n >= 10) return 'LONG';
+  return 'OK';
+}
+function bumpBedHour() {
+  let h = (clampHour(S.bedHour, 20) + 1) % 24;
+  if (h === clampHour(S.wakeHour, 8)) h = (h + 1) % 24;
+  S.bedHour = h;
+  toast('Bedtime ' + formatHour(h) + ' · ' + nightHours() + 'h ' + restQuality());
+  save();
+}
+function bumpWakeHour() {
+  let h = (clampHour(S.wakeHour, 8) + 1) % 24;
+  if (h === clampHour(S.bedHour, 20)) h = (h + 1) % 24;
+  S.wakeHour = h;
+  toast('Wake ' + formatHour(h) + ' · ' + nightHours() + 'h ' + restQuality());
+  save();
 }
 
 function isNightTime() {
@@ -3877,14 +3956,13 @@ function petMemoryDetails(p){
   const age=p.age||0;
   const wins=p.battleWins||0;
   const losses=p.battleLosses||0;
-  return 'ID '+petMemoryId(p)+' · '+stage+' · Age '+age+' · Gen '+gen+' · '+wins+'W-'+losses+'L'+(p.morphId!=null?' · '+speciesTag(p.morphId):'');
+  return 'ID '+petMemoryId(p)+' · '+stage+' · Age '+age+' · Gen '+gen+' · '+wins+'W-'+losses+'L'+(p.morphId!=null?' · '+speciesTag(p.morphId)+' · '+morphLook(p.morphId):'');
 }
 function normalizePetMemory(){
-  // Fixed 3 slots. Legacy dense lists are padded; null holes preserved.
-  let list = Array.isArray(S.petMemory) ? S.petMemory.slice(0, 3) : [];
+  let list = Array.isArray(S.petMemory) ? S.petMemory.slice(0, MEMORY_SLOTS) : [];
   // Recover if someone accidentally wiped to [] but slots exist as sparse
-  while (list.length < 3) list.push(null);
-  S.petMemory = [0,1,2].map(i => {
+  while (list.length < MEMORY_SLOTS) list.push(null);
+  S.petMemory = Array.from({length: MEMORY_SLOTS}, (_, i) => {
     const e = list[i];
     if (e && e.pet && typeof e.pet === 'object' && e.pet.stage) {
       e.slot = i;
@@ -3895,7 +3973,7 @@ function normalizePetMemory(){
     }
     return null;
   });
-  if (S.activeSlot != null && (S.activeSlot < 0 || S.activeSlot > 2 || !S.petMemory[S.activeSlot])) {
+  if (S.activeSlot != null && (S.activeSlot < 0 || S.activeSlot >= MEMORY_SLOTS || !S.petMemory[S.activeSlot])) {
     if (S.petId && S.stage !== 'egg' && S.stage !== 'dead') {
       const idx = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === S.petId);
       S.activeSlot = idx >= 0 ? idx : null;
@@ -3906,7 +3984,7 @@ function normalizePetMemory(){
   return S.petMemory;
 }
 function writePetToSlot(slot, petSnap, keepId) {
-  if (slot < 0 || slot > 2) return;
+  if (slot < 0 || slot >= MEMORY_SLOTS) return;
   normalizePetMemory();
   const prev = S.petMemory[slot];
   S.petMemory[slot] = {
@@ -3924,7 +4002,7 @@ function storeCurrentPet(){
   const snap = memorySnapshot();
   // Prefer existing home slot for this petId
   let slot = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
-  if (slot < 0 && S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot <= 2) {
+  if (slot < 0 && S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot < MEMORY_SLOTS) {
     // Home slot already claimed by activeSlot even if snapshot lagged
     if (!S.petMemory[S.activeSlot] || !S.petMemory[S.activeSlot].pet || S.petMemory[S.activeSlot].pet.petId === snap.petId) {
       slot = S.activeSlot;
@@ -3949,13 +4027,13 @@ function startFreshLife(){
   const filled = S.petMemory.filter(e => e && e.pet).length;
   const activeInSlot = S.petId && S.petMemory.some(e => e && e.pet && e.pet.petId === S.petId);
   // Max 3 pets total in slots. If 3 filled, block. If active isn't in a slot and no empty slot, block.
-  if (filled >= 3) {
-    toast('Memory full (3/3) — clear a slot first');
+  if (filled >= MEMORY_SLOTS) {
+    toast('Memory full (' + MEMORY_SLOTS + '/' + MEMORY_SLOTS + ') — clear a slot first');
     showPetMemory();
     return;
   }
   if (S.stage !== 'egg' && S.stage !== 'dead') {
-    if (!activeInSlot && filled >= 3) {
+    if (!activeInSlot && filled >= MEMORY_SLOTS) {
       toast('Memory full — clear a slot first');
       showPetMemory();
       return;
@@ -3989,7 +4067,7 @@ function useStoredPet(i){
   // 1) Write current living pet back into ITS home slot (never into the target slot)
   if (S.stage !== 'egg' && S.stage !== 'dead') {
     const snap = memorySnapshot();
-    let home = (S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot <= 2) ? S.activeSlot : -1;
+    let home = (S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot < MEMORY_SLOTS) ? S.activeSlot : -1;
     if (home < 0) {
       home = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
     }
@@ -4016,6 +4094,7 @@ function useStoredPet(i){
 
   S.battle=false; S.bat=null; S.battleLocked=false; S.game=false; S.menu=null; S.paused=false;
   S.lastH=S.lastY=S.lastP=S.lastAge=Date.now();
+  S.lastSave=Date.now();
   S.lastVirtTick=Date.now();
   ensurePetIds();
   save();
@@ -4066,8 +4145,8 @@ function showPetMemory(){
     if (idx >= 0) S.activeSlot = idx;
   }
   const extra=document.getElementById('overlay-extra');
-  let html='<p style="font-size:12px">Three fixed slots. Each pet stays in its slot. The active pet is marked on its slot — switching parks the other pet back in its own slot.</p>';
-  for (let i = 0; i < 3; i++) {
+  let html='<p style="font-size:12px">Five slots. Parked pals wait frozen — care only runs on the active pal.</p>';
+  for (let i = 0; i < MEMORY_SLOTS; i++) {
     const e = S.petMemory[i];
     const isActive = (S.activeSlot === i && S.stage !== 'egg' && S.stage !== 'dead');
     if (e && e.pet) {
@@ -4086,7 +4165,7 @@ function showPetMemory(){
     }
   }
   const filled = S.petMemory.filter(e => e && e.pet).length;
-  const freeSlots = 3 - filled;
+  const freeSlots = MEMORY_SLOTS - filled;
   // Active living pet that is NOT already in a slot still needs a free slot to park
   let activeNeedsSlot = false;
   if (S.stage !== 'egg' && S.stage !== 'dead' && S.petId) {
@@ -4103,30 +4182,33 @@ function showPetMemory(){
     return freeSlots >= 1 || !activeNeedsSlot && freeSlots >= 1;
   })();
   // Simpler rule: max 3 pets in memory slots. If all 3 slots occupied, cannot start new.
-  const memoryFull = filled >= 3;
+  const memoryFull = filled >= MEMORY_SLOTS;
   if (!memoryFull) {
     html+='<div class="btn-row"><button onclick="window.startFreshLife()">START NEW PET</button></div>';
-    html+='<p style="margin-top:8px;font-size:11px">START NEW PET parks the active pet in its slot first. Max 3 pets.</p>';
+    html+='<p style="margin-top:8px;font-size:11px">Parked pals wait frozen. Care only runs on the active pal. Max 5.</p>';
   } else {
-    html+='<p style="margin-top:8px;font-size:12px"><strong>Memory full (3/3)</strong> — CLEAR a slot before starting a new pet.</p>';
+    html+='<p style="margin-top:8px;font-size:12px"><strong>Memory full (5/5)</strong> — CLEAR a slot before starting a new pet.</p>';
   }
   extra.innerHTML=html; show('Pet Memory','Fixed slots · active stays in its slot'); document.getElementById('obtn').style.display='none';
 }
-window.storeCurrentPet=storeCurrentPet; window.startFreshLife=startFreshLife; window.useStoredPet=useStoredPet; window.discardStoredPet=discardStoredPet; window.confirmDiscardStoredPet=confirmDiscardStoredPet; window.showPetMemory=showPetMemory;
+window.restart=restart; window.storeCurrentPet=storeCurrentPet; window.startFreshLife=startFreshLife; window.useStoredPet=useStoredPet; window.discardStoredPet=discardStoredPet; window.confirmDiscardStoredPet=confirmDiscardStoredPet; window.showPetMemory=showPetMemory;
 
 function showFamilyAlbum() {
   const extra = document.getElementById('overlay-extra');
   const list = S.petFamily || [];
-  let html = '<p style="font-size:12px">Forms you raised (evo + returned home). Care path unlocks different adults.</p>';
+  let html = '<p style="font-size:12px">Forms you raised.</p>';
   if (!list.length) {
-    html += '<p style="opacity:0.8">Empty — evolve or complete a life to collect forms.</p>';
+    html += '<p style="opacity:0.8">Empty — evolve a pal to collect forms.</p>';
   } else {
     html += '<div class="friend-list">';
     list.forEach((e, i) => {
+      const why = e.reason === 'returned' ? 'returned home — neglect' : (e.reason === 'evolved' ? 'evolved' : (e.reason || 'raised'));
+      const look = (e.morphId != null) ? morphLook(e.morphId) : '';
       html += '<div class="friend-item">' + (e.name || e.form) + (e.morphId!=null ? ' ' + speciesTag(e.morphId) : '') + ' · ' + (e.trait || '') +
+        (look ? ' · ' + look : '') +
         ' · G' + (e.gen||1) + ' age' + (e.age||0) +
         ' · ' + (e.wins||0) + 'W-' + (e.losses||0) + 'L' +
-        ' · ' + (e.reason || '') + '</div>';
+        ' · ' + why + '</div>';
     });
     html += '</div>';
   }
@@ -4145,6 +4227,10 @@ window.showFamilyAlbum = showFamilyAlbum;
 const EAR_LABEL = ['nubs','flops','perks','longs','horns','antenna','tufts','winglets'];
 const TAIL_LABEL = ['stub','long','curl','split','spike','puff','whip','fan'];
 const PATT_LABEL = ['plain','speckled','banded','starred'];
+function morphLook(id) {
+  const m = morphParts(id);
+  return EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern];
+}
 function harvestSeenSpecies() {
   if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
   if (S.stage !== 'egg' && S.stage !== 'dead' && S.morphId != null) markSpeciesSeen(S.morphId);
@@ -4186,6 +4272,7 @@ function showPaldex(page) {
   } else {
     html += '<p style="opacity:.8">Hatch a Pal to start the dex.</p>';
   }
+  html += '<p style="font-size:11px">Train and breed to find missing looks. Same species can grow into a different body.</p>';
   html += '<div class="btn-row"><button onclick="window.showConnectMenu()">Back to Connect</button></div>';
   extra.innerHTML = html;
   show('Paldex', 'Species you have met');
@@ -4227,7 +4314,7 @@ function showConnectMenu() {
     '</div>' +
     '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Teen+ to battle · friend-code fights only</p>' +
     '<div class="btn-row"><button onclick="window.shareFriendLink()">Share my code / battle link</button></div>' +
-    '<div class="btn-row"><button onclick="window.showPetMemory()">Pet Memory (' + ((S.petMemory||[]).filter(e=>e&&e.pet).length) + '/3)</button><button onclick="window.showFamilyAlbum()">Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
+    '<div class="btn-row"><button onclick="window.showPetMemory()">Pet Memory (' + ((S.petMemory||[]).filter(e=>e&&e.pet).length) + '/' + MEMORY_SLOTS + ')</button><button onclick="window.showFamilyAlbum()">Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
     '<div class="btn-row"><button onclick="window.showPaldex()">Paldex (' + speciesSeenCount() + '/' + SPECIES_COUNT + ')</button></div>' +
     '<p style="margin-top:8px;font-size:11px">Friends: ' + S.friends.length + ' · Gen ' + S.generation + ' · Record ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
   show('Connect', 'Friends · Breed · Battle');
@@ -4608,6 +4695,10 @@ function selectIcon(dir) {
 
 function confirm() {
   if (S.paused) { toast('Paused — Hold B to resume'); return; }
+  if (S.menu === 'status') {
+    bumpWakeHour();
+    return;
+  }
   if (S.battle) {
     battleOrder('attack');
     return;
@@ -4634,7 +4725,7 @@ function confirm() {
   const a = ICONS[S.sel];
   if (a === 'status') {
     S.menu = S.menu === 'status' ? null : 'status';
-    toast(S.menu === 'status' ? 'Status' : 'Closed');
+    toast(S.menu === 'status' ? 'A Bed  B Wake  C Back' : 'Closed');
   } else if (a === 'feed') {
     if (S.sleep) { toast('Sleeping...'); return; }
     S.menu = 'feed';
@@ -4703,6 +4794,8 @@ document.getElementById('btnA').onclick = () => {
   } else if (S.menu === 'playpick') {
     S.menu = null;
     startLookGame();
+  } else if (S.menu === 'status') {
+    bumpBedHour();
   } else {
     selectIcon(-1); // A = previous icon
   }
@@ -4928,7 +5021,7 @@ function applyOfflineCatchup(now) {
   }
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
-  const ageGain = Math.max(nights, awakeAgeGain);
+  const ageGain = Math.min(1, Math.max(nights, awakeAgeGain));
   const stageBefore = S.stage;
   const formBefore = S.form;
   // Catch up within-stage growth (hours awake-equivalent while away)
@@ -5036,6 +5129,10 @@ function load() {
     if (S.paused === undefined) S.paused = false;
     if (S.pauseStarted === undefined) S.pauseStarted = 0;
     if (S.virtualHour === undefined) S.virtualHour = new Date().getHours();
+    if (S.bedHour == null) S.bedHour = 20;
+    if (S.wakeHour == null) S.wakeHour = 8;
+    if (S.goodNights == null) S.goodNights = 0;
+    if (S.shortNights == null) S.shortNights = 0;
     if (S.virtualMin === undefined) S.virtualMin = new Date().getMinutes();
     if (S.lastVirtTick === undefined) S.lastVirtTick = Date.now();
     if (S.lightsMissPending === undefined) S.lightsMissPending = false;
@@ -5050,7 +5147,7 @@ function load() {
     if (S.battle === undefined) S.battle = false;
     if (S.bat === undefined) S.bat = null;
     if (!Array.isArray(S.petMemory)) S.petMemory = [];
-    S.petMemory = [0, 1, 2].map(i => {
+    S.petMemory = Array.from({length: MEMORY_SLOTS}, (_, i) => {
       const e = S.petMemory[i];
       if (e && e.pet && typeof e.pet === 'object') {
         if (e.pet.petMemory) delete e.pet.petMemory;
@@ -5085,16 +5182,15 @@ function load() {
       // If born yesterday and it's already past 8am today, expect age >= 1
       if (expected === 0 && (Date.now() - Number(S.born)) > 12 * 3600000) expected = 1;
       if (expected > S.age) {
-        const missed = Math.min(expected - S.age, 10);
+        // Never jump more than one year of age on a single load — a big
+        // catch-up was aging adults into the "return home" window after updates.
+        const missed = Math.min(expected - S.age, 1);
         S.age += missed;
         S.lastAge = Date.now();
         S.lastAgeDay = new Date().toDateString();
-        for (let i = 0; i < 6; i++) {
-          const before = S.stage;
-          checkEvo();
-          if (S.stage === before) break;
-        }
-        setTimeout(() => toast('Growth catch-up! Age ' + S.age + (missed > 1 ? ' (+' + missed + ')' : '')), 600);
+        S._skipOldAgeDeath = Date.now() + 24 * 3600000;
+        checkEvo();
+        setTimeout(() => toast('Grew a bit while away · Age ' + S.age), 600);
       }
       S._ageCatchupDone = true;
     }
@@ -5200,6 +5296,10 @@ function restart(opts) {
     virtualHour: new Date().getHours(),
     virtualMin: new Date().getMinutes(),
     lastVirtTick: Date.now(),
+    bedHour: clampHour(S.bedHour, 20),
+    wakeHour: clampHour(S.wakeHour, 8),
+    goodNights: 0,
+    shortNights: 0,
     lastAgeDay: '', sleptProperly: false, _ageCatchupDone: true, _discPracticed: false,
     fx: [], hatchPhase: 0, deathPhase: 0, tiltTimer: 0
   });
@@ -5270,14 +5370,14 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=2.81', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=3.00', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v2.93', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v3.03', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
