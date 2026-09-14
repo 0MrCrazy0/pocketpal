@@ -1,5 +1,5 @@
-/* PocketPal Service Worker v3.03 */
-const CACHE = 'pocketpal-v303';
+/* PocketPal Service Worker v3.05 */
+const CACHE = 'pocketpal-v305';
 const META = 'pocketpal-meta';
 const ASSETS = [
   './', './index.html', './manifest.json',
@@ -35,17 +35,23 @@ async function readSnap() {
   } catch (e) {}
   return snap;
 }
+function projectedStat(v, last, step, now) {
+  v = v | 0;
+  if (v <= 0) return 0;
+  if (!last || !step || step <= 0) return v;
+  return Math.max(0, v - Math.floor((now - last) / step));
+}
 function dueAlarms(s, now) {
   if (!s || !s.enabled || s.paused || s.sleep) return [];
   const out = [];
-  if (s.hunger <= 0 || (s.lastH && now - s.lastH > (s.hungerMs || 150000))) {
-    out.push({ type: 'hunger', title: 'PocketPal is hungry', body: 'Feed me when you can.' });
+  if (projectedStat(s.hunger, s.lastH, s.hungerMs || 20 * 60000, now) <= 1) {
+    out.push({ type: 'hunger', title: 'PocketPal is hungry', body: 'Food is almost gone — time to feed.' });
   }
-  if (s.happy <= 0 || (s.lastY && now - s.lastY > (s.happyMs || 192000))) {
-    out.push({ type: 'happy', title: 'PocketPal wants to play', body: 'Got a minute for a game?' });
+  if (projectedStat(s.happy, s.lastY, s.happyMs || 24 * 60000, now) <= 1) {
+    out.push({ type: 'happy', title: 'PocketPal wants to play', body: 'Happy is almost gone — play a game.' });
   }
-  if (s.poop) {
-    out.push({ type: 'poop', title: 'PocketPal made a mess', body: 'Clean me up, please.' });
+  if ((s.poopCount || 0) >= 2) {
+    out.push({ type: 'poop', title: 'PocketPal made a mess', body: 'More than one pile — please clean.' });
   }
   if (s.sick) {
     out.push({ type: 'sick', title: 'PocketPal feels sick', body: 'I need medicine.' });

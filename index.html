@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v3.03 -->
+<!-- Public Release - POCKETPAL v3.05 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v3.03
+//  POCKETPAL v3.05
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -1072,8 +1072,23 @@ if (typeof window !== 'undefined') {
 
 // Override: window.POCKETPAL_PUSH_URL = 'https://YOUR_WORKER.workers.dev/push'
 // 3) Set window.POCKETPAL_VAPID_PUBLIC = 'your-vapid-public-key'
-function careSnapshotBody(sub, enabled) {
+function carePipMs(kind) {
+  const d = DIFF[S.difficulty] || DIFF.realtime;
+  const sp = d.timeScale || 0.12;
   const baby = (S.age || 0) < 1;
+  if (kind === 'happy') return (baby ? 3.8 : 2.9) * 60000 / sp * (d.happy || 1);
+  return (baby ? 3.2 : 2.5) * 60000 / sp * (d.hunger || 1);
+}
+function careStillDue(type) {
+  if (type === 'hunger') return S.hunger <= 1;
+  if (type === 'happy') return S.happy <= 1;
+  if (type === 'poop') return (S.poopCount || 0) >= 2;
+  if (type === 'sick') return !!(S.sick || S.injured);
+  if (type === 'lights') return !!S.lightsMissPending && !!S.lights;
+  if (type === 'discipline') return !!(S.call && S._falseCall);
+  return true;
+}
+function careSnapshotBody(sub, enabled) {
   return {
     petId: S.myCode || 'local',
     enabled: !!enabled,
@@ -1082,14 +1097,15 @@ function careSnapshotBody(sub, enabled) {
       hunger: S.hunger,
       happy: S.happy,
       poop: !!S.poop,
+      poopCount: S.poopCount || 0,
       sick: !!(S.sick || S.injured),
       sleep: !!S.sleep,
       paused: !!S.paused,
       lastH: S.lastH || Date.now(),
       lastY: S.lastY || Date.now(),
       lastP: S.lastP || Date.now(),
-      hungerMs: (baby ? 3.2 : 2.5) * 60000,
-      happyMs: (baby ? 4.0 : 3.2) * 60000
+      hungerMs: carePipMs('hunger'),
+      happyMs: carePipMs('happy')
     }
   };
 }
@@ -1149,12 +1165,12 @@ function updateAppBadge() {
   } catch (e) {}
 }
 const CARE_ALERTS = {
-  hunger:     { title: 'PocketPal is hungry',     body: 'Feed me when you can.' },
-  happy:      { title: 'PocketPal wants to play', body: 'Got a minute for a game?' },
-  poop:       { title: 'PocketPal made a mess',   body: 'Clean me up, please.' },
+  hunger:     { title: 'PocketPal is hungry',     body: 'Food is almost gone — time to feed.' },
+  happy:      { title: 'PocketPal wants to play', body: 'Happy is almost gone — play a game.' },
+  poop:       { title: 'PocketPal made a mess',   body: 'More than one pile — please clean.' },
   sick:       { title: 'PocketPal feels sick',    body: 'I need medicine.' },
-  lights:     { title: 'PocketPal is sleepy',     body: 'Lights out so I can sleep.' },
-  discipline: { title: 'PocketPal is acting up',  body: 'That call was fake — use Discipline.' }
+  lights:     { title: 'PocketPal is sleepy',     body: 'Yawning — lights off for bed.' },
+  discipline: { title: 'False call',              body: 'No real need. Use Discipline, not food.' }
 };
 function careAlertIcon(file) {
   try { return new URL(file, window.location.href).href; } catch (e) { return './' + file; }
@@ -1170,9 +1186,9 @@ function dismissCareAlert(type) {
   }).catch(() => {});
 }
 function clearResolvedCareAlerts() {
-  if (S.hunger > 0) dismissCareAlert('hunger');
+  if (S.hunger > 1) dismissCareAlert('hunger');
   if (S.happy > 1) dismissCareAlert('happy');
-  if (!S.poop) dismissCareAlert('poop');
+  if ((S.poopCount || 0) < 2) dismissCareAlert('poop');
   if (!S.sick && !S.injured) dismissCareAlert('sick');
   if (!S.lightsMissPending) dismissCareAlert('lights');
 }
@@ -1182,6 +1198,8 @@ function hintOpenedCare(type) {
 }
 function careNotify(type, message) {
   if (!S.notifications) return;
+  if (S.game || S.battle || S.paused) return;
+  if (!careStillDue(type)) return;
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
   const now = Date.now();
@@ -2251,7 +2269,9 @@ function update() {
 
   // Clear temporary face / anim when timer expires (except permanent sleep)
   if (S.animTimer && now > S.animTimer) {
-    if (S.anim !== 'sleep') {
+    if (S.game || S.battle) {
+      if (S.anim && S.anim !== 'sleep') S.anim = null;
+    } else if (S.anim !== 'sleep') {
       // Finish poop sequence → show pile + call
       if (S.anim === 'poop' || S._pendingPoop) {
         S.poop = true;
@@ -2277,6 +2297,9 @@ function update() {
   // Daytime safety: clear stale bedtime flags; never stay asleep at 2pm
   if (!night) {
     if (S.lightsMissPending) S.lightsMissPending = false;
+    if (!S.sleep && !S.lights) {
+      S.lights = true;
+    }
     if (S.sleep) {
       // Force wake if somehow sleeping outside night window
       S.sleep = false;
@@ -2394,7 +2417,7 @@ function update() {
     if (now - S.lastH > (S.age < 1 ? 3.2 : 2.5) * 60000 / sp * d.hunger) {
       if (S.hunger > 0) {
         S.hunger--;
-        if (S.hunger === 0) {
+        if (S.hunger <= 1) {
           S.call = true; S._falseCall = false;
           careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!');
           S.anim = 'call'; S.animTimer = now + 1200;
@@ -2420,7 +2443,7 @@ function update() {
     if (now - S.lastY > (S.age < 1 ? 3.8 : 2.9) * 60000 / sp * d.happy) {
       if (S.happy > 0) {
         S.happy--;
-        if (S.happy === 0) {
+        if (S.happy <= 1) {
           S.call = true; S._falseCall = false;
           careNotify('happy', 'Needs PLAY — open PocketPal and play with me!');
           S.anim = 'call'; S.animTimer = now + 1200;
@@ -2525,6 +2548,7 @@ function update() {
     const fcCooldown = 8 * 60000;
     const disc = S.disc || 0;
     if (!S.call && !S.poop && !S.sick && !S.lightsMissPending &&
+        !S.game && !S.battle &&
         S.stage !== 'egg' && S.stage !== 'dead' && !S.sleep &&
         (now - (S.lastFalseCall || 0)) > fcCooldown / Math.max(0.5, (DIFF[S.difficulty]||DIFF.realtime).timeScale || 0.15)) {
       let chance = disc >= 100 ? 0.000003 : disc >= 80 ? 0.000008 : disc >= 50 ? 0.000015 : 0.000025;
@@ -4976,7 +5000,7 @@ function applyOfflineCatchup(now) {
     S.hunger = Math.max(0, S.hunger - Math.min(hLoss, 4)); // cap offline drain
     // Care miss grows slowly offline — player gets a chance to recover on return
     S.careMiss += Math.min(3, Math.max(0, hLoss - 1)) * d.care;
-    if (S.hunger === 0) {
+    if (S.hunger <= 0) {
       rustDisc(Math.min(8, 2 + hLoss));
       S.call = true; careNotify('hunger', 'Needs FOOD — open PocketPal and feed me!');
     }
@@ -5076,7 +5100,6 @@ function pushCareSnapshotToSW(clear) {
       navigator.serviceWorker.controller.postMessage({ type: 'CARE_SNAPSHOT', enabled: false });
       return;
     }
-    const baby = (S.age || 0) < 1;
     navigator.serviceWorker.controller.postMessage({
       type: 'CARE_SNAPSHOT',
       enabled: true,
@@ -5085,12 +5108,13 @@ function pushCareSnapshotToSW(clear) {
       hunger: S.hunger,
       happy: S.happy,
       poop: !!S.poop,
-      sick: !!S.sick,
+      poopCount: S.poopCount || 0,
+      sick: !!(S.sick || S.injured),
       lastH: S.lastH || Date.now(),
       lastY: S.lastY || Date.now(),
       lastP: S.lastP || Date.now(),
-      hungerMs: (baby ? 3.2 : 2.5) * 60000,
-      happyMs: (baby ? 4.0 : 3.2) * 60000,
+      hungerMs: carePipMs('hunger'),
+      happyMs: carePipMs('happy'),
       poopMs: 8 * 60000
     });
   } catch (e) {}
@@ -5377,7 +5401,7 @@ navigator.serviceWorker.register('./service-worker.js?v=3.00', { updateViaCache:
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v3.03', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v3.05', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
