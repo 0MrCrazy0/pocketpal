@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v3.06 -->
+<!-- Public Release - POCKETPAL v3.07 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v3.06
+//  POCKETPAL v3.07
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -5268,6 +5268,7 @@ if (navigator.serviceWorker) {
   });
 }
 window.addEventListener('beforeunload', save);
+window.addEventListener('pagehide', save);
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
@@ -5401,7 +5402,7 @@ navigator.serviceWorker.register('./service-worker.js?v=3.00', { updateViaCache:
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v3.06', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v3.07', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
