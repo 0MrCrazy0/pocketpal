@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>PocketPal</title>
-<!-- Public Release - POCKETPAL v3.07 -->
+<!-- Public Release - POCKETPAL v3.10 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -400,7 +400,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v3.07
+//  POCKETPAL v3.10
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -610,7 +610,8 @@ function morphParts(id) {
     ears: id % 8,
     tail: Math.floor(id / 8) % 8,
     pattern: Math.floor(id / 64) % 4,
-    accent: (id * 5 + 3) % 8
+    accent: (id * 5 + 3) % 8,
+    eyes: Math.floor(id / 16) % 4
   };
 }
 function generatePetName(id) {
@@ -714,6 +715,21 @@ function onPetBody(x, y, met) {
   const dx = x, dy = y - met.cy;
   return dx * dx + dy * dy <= (met.r - 1) * (met.r - 1);
 }
+function partGrow(g) {
+  g = g || 0;
+  if (g >= 3) return 2;
+  if (g >= 2) return 1;
+  return 0;
+}
+function isNaughty() {
+  return !!(S.call && S._falseCall) && !S.sleep && !S.game && !S.battle;
+}
+function naughtyPart(morphId) {
+  const m = morphParts(morphId);
+  if (m.ears !== 0 && m.ears !== 6) return 'ears';
+  if (m.tail !== 0) return 'tail';
+  return 'arms';
+}
 function tailAnchor(form, g) {
   const met = formMetrics(form, g);
   let cx = 0, cy = met.cy, r = met.r;
@@ -737,83 +753,87 @@ function drawMorphTail(form, morphId, g, INK, f) {
     const y = a.y + Math.round((a.ey - a.y) * i / 6);
     fillRect(x, y, 3, 3, INK);
   }
-  const wag = (S.sleep || S.anim === 'eat' || S.anim === 'sick') ? 0 : (((f || 0) >> 3) & 1);
+  let wag = (S.sleep || S.anim === 'eat' || S.anim === 'sick') ? 0 : (((f || 0) >> 3) & 1);
+  if (isNaughty() && naughtyPart(morphId) === 'tail') wag = ((f || 0) >> 2) & 1 ? 2 : -1;
+  const grow = partGrow(g);
   const tx = a.ex + wag;
   const ty = a.ey;
 
   if (m.tail === 0) {
-    fillRect(tx, ty, 4, 4, INK);
-    px(tx + 4, ty + 3, INK);
+    fillRect(tx, ty, 4 + grow, 4 + grow, INK);
+    px(tx + 4 + grow, ty + 3 + grow, INK);
   } else if (m.tail === 1) {
-    for (let i = 0; i < 8; i++) {
-      fillRect(tx + Math.floor(i / 3), ty + i, 3, 2, INK);
+    for (let i = 0; i < 8 + grow * 2; i++) {
+      fillRect(tx + Math.floor(i / 3), ty + i, 3 + (grow > 1 ? 1 : 0), 2, INK);
     }
   } else if (m.tail === 2) {
-    fillRect(tx, ty, 3, 6, INK);
-    fillRect(tx + 1, ty + 5, 5, 3, INK);
-    fillRect(tx + 4, ty + 2, 3, 6, INK);
+    fillRect(tx, ty, 3, 6 + grow, INK);
+    fillRect(tx + 1, ty + 5 + grow, 5 + grow, 3, INK);
+    fillRect(tx + 4 + grow, ty + 2, 3, 6 + grow, INK);
   } else if (m.tail === 3) {
     fillRect(tx, ty, 3, 3, INK);
-    fillRect(tx - 2, ty + 2, 2, 5, INK);
-    fillRect(tx + 3, ty + 2, 2, 5, INK);
-    px(tx - 3, ty + 6, INK); px(tx + 5, ty + 6, INK);
+    fillRect(tx - 2 - grow, ty + 2, 2, 5 + grow, INK);
+    fillRect(tx + 3 + grow, ty + 2, 2, 5 + grow, INK);
+    px(tx - 3 - grow, ty + 6 + grow, INK); px(tx + 5 + grow, ty + 6 + grow, INK);
   } else if (m.tail === 4) {
     fillRect(tx, ty, 3, 3, INK);
-    fillRect(tx + 2, ty - 1, 3, 3, INK);
-    px(tx + 5, ty - 2, INK); px(tx + 6, ty - 4, INK);
+    fillRect(tx + 2, ty - 1 - grow, 3, 3, INK);
+    px(tx + 5, ty - 2 - grow, INK); px(tx + 6, ty - 4 - grow, INK);
   } else if (m.tail === 5) {
     fillRect(tx, ty, 3, 3, INK);
-    fillCirc(tx + 3, ty + 4, 4, INK);
+    fillCirc(tx + 3, ty + 4, 4 + grow, INK);
   } else if (m.tail === 6) {
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 9 + grow * 2; i++) {
       fillRect(tx + Math.floor(i / 4), ty + i, 3, 2, INK);
     }
   } else {
     fillRect(tx, ty, 3, 3, INK);
-    fillRect(tx + 2, ty + 1, 3, 6, INK);
+    fillRect(tx + 2, ty + 1, 3, 6 + grow, INK);
     px(tx + 5, ty + 1, INK); px(tx + 6, ty, INK);
-    px(tx + 5, ty + 6, INK); px(tx + 6, ty + 7, INK);
+    px(tx + 5, ty + 6 + grow, INK); px(tx + 6, ty + 7 + grow, INK);
   }
 }
-function drawMorphHead(form, morphId, g, INK, BG) {
+function drawMorphHead(form, morphId, g, INK, BG, f) {
   if (form === 'egg' || form === 'dead') return;
   const m = morphParts(morphId);
   const met = formMetrics(form, g);
-  const top = met.crown;
-  const earX = met.earX;
+  const earFlick = (isNaughty() && naughtyPart(morphId) === 'ears') ? ((((f || 0) >> 2) & 1) ? -1 : 1) : 0;
+  const top = met.crown + earFlick;
+  const grow = partGrow(g);
+  const earX = met.earX + grow;
   const rootL = -earX, rootR = earX;
   px(rootL, top + 2, INK); px(rootL + 1, top + 2, INK);
   px(rootR - 1, top + 2, INK); px(rootR, top + 2, INK);
 
   if (m.ears === 0) {
-    fillCirc(rootL - 1, top + 3, 4, INK);
-    fillCirc(rootR + 1, top + 3, 4, INK);
+    fillCirc(rootL - 1, top + 3, 4 + grow, INK);
+    fillCirc(rootR + 1, top + 3, 4 + grow, INK);
   } else if (m.ears === 1) {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 8 + grow * 2; i++) {
       px(rootL + 2 + Math.floor(i / 3), top + 1 - i, INK);
       px(rootL + 3 + Math.floor(i / 3), top + 1 - i, INK);
       px(rootR - 2 - Math.floor(i / 3), top + 1 - i, INK);
       px(rootR - 3 - Math.floor(i / 3), top + 1 - i, INK);
     }
   } else if (m.ears === 2) {
-    fillRect(rootL - 3, top + 1, 5, 8, INK);
-    fillRect(rootR - 1, top + 1, 5, 8, INK);
-    px(rootL - 4, top + 8, INK); px(rootR + 4, top + 8, INK);
+    fillRect(rootL - 3 - grow, top + 1, 5 + grow, 8 + grow, INK);
+    fillRect(rootR - 1, top + 1, 5 + grow, 8 + grow, INK);
+    px(rootL - 4 - grow, top + 8 + grow, INK); px(rootR + 4 + grow, top + 8 + grow, INK);
   } else if (m.ears === 3) {
-    fillCirc(rootL - 2, top + 3, 4, INK);
-    fillCirc(rootR + 2, top + 3, 4, INK);
+    fillCirc(rootL - 2, top + 3, 4 + grow, INK);
+    fillCirc(rootR + 2, top + 3, 4 + grow, INK);
   } else if (m.ears === 4) {
-    fillRect(-2, top - 1, 2, 5, INK); fillCirc(-1, top - 3, 2, INK);
-    fillRect(1, top, 2, 4, INK); fillCirc(2, top - 2, 2, INK);
+    fillRect(-2, top - 1 - grow, 2, 5 + grow, INK); fillCirc(-1, top - 3 - grow, 2, INK);
+    fillRect(1, top - grow, 2, 4 + grow, INK); fillCirc(2, top - 2 - grow, 2, INK);
   } else if (m.ears === 5) {
-    fillRect(rootL + 1, top - 8, 4, 12, INK);
-    fillRect(rootR - 4, top - 8, 4, 12, INK);
-    px(rootL + 2, top - 9, INK); px(rootR - 3, top - 9, INK);
+    fillRect(rootL + 1, top - 8 - grow, 4, 12 + grow, INK);
+    fillRect(rootR - 4, top - 8 - grow, 4, 12 + grow, INK);
+    px(rootL + 2, top - 9 - grow, INK); px(rootR - 3, top - 9 - grow, INK);
   } else if (m.ears === 6) {
-    fillRect(rootL, top + 1, 3, 3, INK);
-    fillRect(rootR - 2, top + 1, 3, 3, INK);
+    fillRect(rootL, top + 1 - grow, 3 + grow, 3 + grow, INK);
+    fillRect(rootR - 2 - grow, top + 1 - grow, 3 + grow, 3 + grow, INK);
   } else {
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 7 + grow; i++) {
       px(rootL - i, top + 2 + Math.floor(i / 2), INK);
       px(rootL - i, top + 3 + Math.floor(i / 2), INK);
       px(rootR + i, top + 2 + Math.floor(i / 2), INK);
@@ -885,7 +905,8 @@ function drawPetArms(form, g, f, INK) {
   const ax = met.armX;
   const ay = met.armY;
   const waving = S.anim === 'wave' && (f % 10 < 5);
-  const idle = (!S.sleep && S.anim !== 'sick' && !waving) ? (((f || 0) >> 3) & 1) : 0;
+  let idle = (!S.sleep && S.anim !== 'sick' && !waving) ? (((f || 0) >> 3) & 1) : 0;
+  if (isNaughty() && naughtyPart(S.morphId || 0) === 'arms') idle = ((f || 0) >> 2) & 1 ? 2 : 0;
   fillRect(-ax - 3, ay + idle, 4, 2, INK);
   px(-ax - 3, ay + 2 + idle, INK);
   px(-ax - 4, ay + 2 + idle, INK);
@@ -1444,7 +1465,8 @@ function drawFx() {
 function drawPet(cx, cy, form, f) {
   const INK = '#0f380f';
   const BG  = '#9bbc0f';
-  const blink = S.game || S.battle ? ((f % 120 < 3) && (!S._gameEyeOpenUntil || Date.now() >= S._gameEyeOpenUntil)) : (f % 90 < 5);
+  const tiredBlink = !S.game && !S.battle && (S.sleep || S.hunger <= 1 || S.happy <= 1 || S.sick);
+  const blink = S.game || S.battle ? ((f % 120 < 3) && (!S._gameEyeOpenUntil || Date.now() >= S._gameEyeOpenUntil)) : (tiredBlink ? (f % 160 < 8) : (f % 90 < 5));
   const a = S.anim;
   // Eyes closed during sleep (unless game), yawn, or death rise
   const eyesClosed = !S.battle && !S.game && ((S.sleep) || a === 'yawn') && a !== 'wake' && a !== 'poop';
@@ -1819,23 +1841,34 @@ function drawPet(cx, cy, form, f) {
     }
 
     drawMorphTail(form, mid, g, INK, f);
-    drawMorphHead(form, mid, g, INK, BG);
+    drawMorphHead(form, mid, g, INK, BG, f);
     drawPetArms(form, g, f, INK);
 
     // Face — sockets + pupils + a thick readable mouth, placed on THIS body
     if (form !== 'dead') {
       const metF = formMetrics(form, g);
       const ey = metF.faceY;
-      const sockW = form === 'baby' ? 6 : 7;
-      const sockH = form === 'baby' ? 5 : 6;
+      const eyeKind = morphParts(mid).eyes;
+      let sockW = form === 'baby' ? 6 : 7;
+      let sockH = form === 'baby' ? 5 : 6;
+      if (eyeKind === 1) { sockW = form === 'baby' ? 5 : 6; sockH = sockW; }
+      if (eyeKind === 2) { sockW = form === 'baby' ? 5 : 5; sockH = form === 'baby' ? 6 : 8; }
+      if (eyeKind === 3) { sockW = form === 'baby' ? 7 : 8; sockH = 3; }
       const eyeL = -sockW - 1;
       const eyeR = 2;
+      function paintSocket(x, y) {
+        if (eyeKind === 1) {
+          fillCirc(x + Math.floor(sockW / 2), y + Math.floor(sockH / 2), Math.max(2, Math.floor(sockW / 2)), BG);
+        } else {
+          fillRect(x, y, sockW, sockH, BG);
+        }
+      }
       if (eyesClosed) {
-        fillRect(eyeL, ey + 2, sockW, 2, BG);
-        fillRect(eyeR, ey + 2, sockW, 2, BG);
+        fillRect(eyeL, ey + Math.max(1, Math.floor(sockH / 2)), sockW, 2, BG);
+        fillRect(eyeR, ey + Math.max(1, Math.floor(sockH / 2)), sockW, 2, BG);
       } else if (!blink) {
-        fillRect(eyeL, ey, sockW, sockH, BG);
-        fillRect(eyeR, ey, sockW, sockH, BG);
+        paintSocket(eyeL, ey);
+        paintSocket(eyeR, ey);
 
         let lookX = 0, lookY = 0;
         const glanceSeed = ((form || '').length * 5 + (S._morphDraw || 0) * 3) | 0;
@@ -2343,14 +2376,12 @@ function update() {
     S.call = false;
     // Age once per calendar morning after a night of sleep
     const dayKey = new Date(now).toDateString();
-    // Also age if last age-up was more than 10 hours ago (covers edge cases)
-    const longEnough = !S.lastAge || (now - S.lastAge > 10 * 3600000);
     let faded = false;
     if (S.lastAgeDay !== dayKey && (S.disc || 0) >= 35 && !S._discPracticed) {
       faded = rustDisc(4);
     }
     if (S.lastAgeDay !== dayKey) S._discPracticed = false;
-    if (S.lastAgeDay !== dayKey && longEnough) {
+    if (S.lastAgeDay !== dayKey) {
       S.age++;
       S.lastAgeDay = dayKey;
       S.lastAge = now;
@@ -4251,9 +4282,10 @@ window.showFamilyAlbum = showFamilyAlbum;
 const EAR_LABEL = ['nubs','flops','perks','longs','horns','antenna','tufts','winglets'];
 const TAIL_LABEL = ['stub','long','curl','split','spike','puff','whip','fan'];
 const PATT_LABEL = ['plain','speckled','banded','starred'];
+const EYE_LABEL = ['square','round','tall','squint'];
 function morphLook(id) {
   const m = morphParts(id);
-  return EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern];
+  return EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern] + '/' + EYE_LABEL[m.eyes];
 }
 function harvestSeenSpecies() {
   if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
@@ -5395,14 +5427,14 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=3.00', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=3.10', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
 
 function init() {
   if (!load() || S.stage === 'egg') {
-    show('PocketPal v3.07', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
+    show('PocketPal v3.10', 'A = Select  B = Confirm  C = Cancel\\nHold B = Pause\\n\\n256 species · Real-time care');
     document.getElementById('obtn').textContent = 'Start New Life';
   } else {
     hide();
