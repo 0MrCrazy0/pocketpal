@@ -1,5 +1,5 @@
-/* PocketPal Service Worker v5.21 */
-const CACHE = 'pocketpal-v521';
+/* PocketPal Service Worker v5.25 */
+const CACHE = 'pocketpal-v525';
 const META = 'pocketpal-meta';
 const ASSETS = [
   './', './index.html', './manifest.json',

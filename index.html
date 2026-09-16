@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.21 -->
+<!-- Public Release - POCKETPAL v5.25 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -312,6 +312,7 @@
       <div class="meter">⚖️ <span id="wt">5g</span></div>
       <div class="meter">🎓 <span id="disc">0%</span></div>
       <div class="meter">👥 <span id="friends">0</span></div>
+      <div class="meter">🪙 <span id="coins">0</span></div>
     </div>
     <div class="stage-line">
       <span id="stage-line">Egg • Hatching...</span>
@@ -416,7 +417,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.21 — Hatch Name Plate Pass
+//  POCKETPAL v5.25 — richer Pet Memory cards · as-parked status · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -424,7 +425,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 const W = 240, H = 178;
 // Intro/reveal name plates sit under the pet, clearly above mode strip (icons ~y 164–175)
-// v5.21: taller plate so both 7px glyph lines clear the ink frame; bottom ≤ ~148
+// v5.21+: taller plate so both 7px glyph lines clear the ink frame; bottom ≤ ~148
 const LCD_NAME_PLATE_Y = 114;
 const LCD_NAME_PLATE_H = 28;
 const HATCH_PLATE_MS = 5000;
@@ -485,6 +486,14 @@ const S = {
   deaths: 0, frame: 0,
   myCode: null,
   friends: [],
+  // v5.22 account economy (persist like friends)
+  coins: 0,
+  invChip: 0,
+  invTonic: 0,
+  invRevive: 0,
+  coinsPlayDay: '',
+  coinsPlayEarned: 0,
+  _coinToastPend: 0,
   selectedFriend: 0,
   married: false,
   anim: null,
@@ -547,7 +556,8 @@ const S = {
 const ACCOUNT_KEEP_KEYS = [
   'friends', 'petFamily', 'petMemory', 'speciesSeen', 'deaths',
   'sound', 'notifications', 'difficulty', 'shellTheme', 'myCode',
-  'careStreak', 'lastCareDay'
+  'careStreak', 'lastCareDay',
+  'coins', 'invChip', 'invTonic', 'invRevive', 'coinsPlayDay', 'coinsPlayEarned'
 ];
 
 function captureAccountGlobals() {
@@ -564,6 +574,12 @@ function captureAccountGlobals() {
     myCode: S.myCode,
     careStreak: S.careStreak,
     lastCareDay: S.lastCareDay,
+    coins: S.coins | 0,
+    invChip: S.invChip | 0,
+    invTonic: S.invTonic | 0,
+    invRevive: S.invRevive | 0,
+    coinsPlayDay: S.coinsPlayDay || '',
+    coinsPlayEarned: S.coinsPlayEarned | 0,
     activeSlot: S.activeSlot
   };
 }
@@ -582,6 +598,12 @@ function restoreAccountGlobals(keep, opts) {
   S.myCode = keep.myCode;
   S.careStreak = keep.careStreak;
   S.lastCareDay = keep.lastCareDay;
+  S.coins = keep.coins | 0;
+  S.invChip = keep.invChip | 0;
+  S.invTonic = keep.invTonic | 0;
+  S.invRevive = keep.invRevive | 0;
+  S.coinsPlayDay = keep.coinsPlayDay || '';
+  S.coinsPlayEarned = keep.coinsPlayEarned | 0;
   if (opts.keepActiveSlot) S.activeSlot = keep.activeSlot;
 }
 
@@ -769,11 +791,16 @@ function familyTraitLabel(e) {
 }
 function recordFamilyMember(reason) {
   if (!S.petFamily) S.petFamily = [];
+  let snap = null;
+  try { snap = memorySnapshot(); } catch (e) { snap = null; }
   const entry = {
     form: S.form,
     name: displayName(S),
+    petName: S.petName || displayName(S),
     morphId: S.morphId || 0,
     trait: familyTraitFor(S),
+    _eggBiasTrait: S._eggBiasTrait || null,
+    eggId: S.eggId != null ? S.eggId : null,
     stage: S.stage,
     age: S.age,
     gen: S.generation || 1,
@@ -782,8 +809,17 @@ function recordFamilyMember(reason) {
     xp: S.battleXP || 0,
     disc: S.disc || 0,
     careMiss: Math.floor(S.careMiss || 0),
+    hunger: S.hunger | 0,
+    happy: S.happy | 0,
+    weight: S.weight | 0,
+    growthPhase: S.growthPhase | 0,
+    bedHour: clampHour(S.bedHour, 20),
+    wakeHour: clampHour(S.wakeHour, 8),
+    petId: S.petId || null,
     reason: reason || 'lived',
-    at: Date.now()
+    at: Date.now(),
+    // since v5.23: full continuity for Revive Charm (as-at return-home/death)
+    snap: snap
   };
   // One slot per form+gen to avoid spam; keep history of variants
   const key = entry.form + '-G' + entry.gen;
@@ -796,6 +832,425 @@ function recordFamilyMember(reason) {
 // ---- 256 unique Pal species: 8 ears × 8 tails × 4 patterns (guaranteed unique IDs) ----
 const SPECIES_COUNT = 256;
 const MEMORY_SLOTS = 5;
+
+// ---- v5.22 Coins & Pal Shop ----
+const SHOP_PRICES = { chip: 8, tonic: 12, revive: 80 };
+const PLAY_COIN_DAILY_CAP = 6;
+
+function canEarnCoins() {
+  return S.stage !== 'egg' && S.stage !== 'dead' && !S.paused && !S._away;
+}
+function flushCoinToast(force) {
+  const pend = S._coinToastPend | 0;
+  if (pend <= 0) return;
+  if (!force && pend < 2) return;
+  S._coinToastPend = 0;
+  toast('+' + pend + ' COINS', { pri: 2, hold: 1600 });
+}
+function earnCoins(n, opts) {
+  opts = opts || {};
+  n = n | 0;
+  if (n <= 0) return 0;
+  if (!opts.force && !canEarnCoins()) return 0;
+  S.coins = (S.coins | 0) + n;
+  S._coinToastPend = (S._coinToastPend | 0) + n;
+  if (n >= 2 || (S._coinToastPend | 0) >= 2) {
+    // Defer so action toasts (win/train) show first, then coins
+    clearTimeout(S._coinToastTimer);
+    S._coinToastTimer = setTimeout(() => flushCoinToast(true), 1100);
+  }
+  return n;
+}
+function earnPlayCoins(n) {
+  // Soft daily cap for Look/Memory wins only
+  if (!canEarnCoins()) return 0;
+  const day = new Date().toDateString();
+  if (S.coinsPlayDay !== day) {
+    S.coinsPlayDay = day;
+    S.coinsPlayEarned = 0;
+  }
+  const left = Math.max(0, PLAY_COIN_DAILY_CAP - (S.coinsPlayEarned | 0));
+  const give = Math.min(n | 0, left);
+  if (give <= 0) return 0;
+  S.coinsPlayEarned = (S.coinsPlayEarned | 0) + give;
+  return earnCoins(give);
+}
+function shopCatalog() {
+  const items = [
+    { id: 'chip', name: 'CHIP', price: SHOP_PRICES.chip, blurb: 'SNACK #2' },
+    { id: 'tonic', name: 'TONIC', price: SHOP_PRICES.tonic, blurb: 'CLEAR SICK' },
+    { id: 'revive', name: 'REVIVE', price: SHOP_PRICES.revive, blurb: 'FAMILY RETURN' }
+  ];
+  if ((S.invRevive | 0) > 0) {
+    items.push({ id: 'useRevive', name: 'USE REVIVE', price: 0, blurb: 'x' + (S.invRevive | 0) });
+  }
+  return items;
+}
+function openPalShop() {
+  hide();
+  S.menu = 'shop';
+  S.shopSel = 0;
+  toast('PAL SHOP  A cycle  B buy  C back · ' + (S.coins | 0) + 'c', { pri: 2, hold: 2200 });
+  beep(320, 0.05);
+}
+function drawShop() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  const INK = '#0f380f';
+  const items = shopCatalog();
+  if (S.shopSel == null || S.shopSel < 0) S.shopSel = 0;
+  if (S.shopSel >= items.length) S.shopSel = 0;
+  drawTextCentered('PAL SHOP', 6, INK);
+  drawTextCentered('COINS ' + (S.coins | 0), 20, INK);
+  drawText('CHIP ' + (S.invChip | 0) + '  TON ' + (S.invTonic | 0) + '  REV ' + (S.invRevive | 0), 4, 34, INK);
+  items.forEach((it, i) => {
+    const mark = i === S.shopSel ? '>' : ' ';
+    const price = it.price > 0 ? (it.price + 'c') : 'USE';
+    const line = mark + it.name + ' ' + price + '  ' + (it.blurb || '');
+    drawText(String(line).slice(0, 36), 4, 50 + i * 14, INK);
+  });
+  drawText('FEED/MED USE INV', 4, 150, INK);
+  drawText('A CYCLE  B BUY  C BACK', 4, 164, INK);
+}
+function buyShopItem() {
+  const items = shopCatalog();
+  const it = items[S.shopSel | 0];
+  if (!it) { toast('Empty shop'); return; }
+  if (it.id === 'useRevive') {
+    openRevivePicker();
+    return;
+  }
+  const price = it.price | 0;
+  if ((S.coins | 0) < price) {
+    toast('Need ' + price + ' coins');
+    beep(160, 0.08);
+    return;
+  }
+  S.coins = (S.coins | 0) - price;
+  if (it.id === 'chip') {
+    S.invChip = (S.invChip | 0) + 1;
+    toast('Bought CHIP · inv ' + S.invChip);
+  } else if (it.id === 'tonic') {
+    S.invTonic = (S.invTonic | 0) + 1;
+    toast('Bought TONIC · inv ' + S.invTonic);
+  } else if (it.id === 'revive') {
+    S.invRevive = (S.invRevive | 0) + 1;
+    toast('Bought REVIVE · inv ' + S.invRevive);
+  }
+  beep(520, 0.06);
+  save();
+}
+function feedOptsList() {
+  const opts = ['meal', 'snack'];
+  if ((S.invChip | 0) > 0) opts.push('chip');
+  return opts;
+}
+function feedOptLabel(id) {
+  if (id === 'meal') return 'MEAL';
+  if (id === 'snack') return 'SNACK';
+  if (id === 'chip') return 'CHIP x' + (S.invChip | 0);
+  return String(id || '').toUpperCase();
+}
+function drawFeedPick() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  const INK = '#0f380f';
+  const opts = feedOptsList();
+  if (S.feedSel == null || S.feedSel < 0) S.feedSel = 0;
+  if (S.feedSel >= opts.length) S.feedSel = 0;
+  drawTextCentered('FEED', 10, INK);
+  opts.forEach((id, i) => {
+    const mark = i === S.feedSel ? '>' : ' ';
+    drawText(mark + feedOptLabel(id), 20, 48 + i * 22, INK);
+  });
+  drawText('CHIP = INV SNACK', 4, 148, INK);
+  drawText('A CYCLE  B USE  C BACK', 4, 164, INK);
+}
+function drawMedPick() {
+  ctx.fillStyle = '#9bbc0f';
+  ctx.fillRect(0, 0, W, H);
+  const INK = '#0f380f';
+  const opts = ['MEDICINE', 'TONIC x' + (S.invTonic | 0)];
+  if (S.medSel == null || S.medSel < 0) S.medSel = 0;
+  if (S.medSel > 1) S.medSel = 0;
+  drawTextCentered('MED', 10, INK);
+  opts.forEach((label, i) => {
+    const mark = i === S.medSel ? '>' : ' ';
+    drawText(mark + label, 20, 48 + i * 22, INK);
+  });
+  drawText('TONIC = INV HEAL', 4, 148, INK);
+  drawText('A CYCLE  B USE  C BACK', 4, 164, INK);
+}
+function openFeedMenu() {
+  if (S.sleep) { toast('Sleeping...'); return; }
+  if ((S.invChip | 0) > 0) {
+    S.menu = 'feedpick';
+    S.feedSel = 0;
+    toast('FEED A cycle B use · Meal/Snack/Chip', { pri: 2, hold: 2000 });
+    return;
+  }
+  // No chip: classic one-shot Meal / Snack (A=Meal B=Snack)
+  S.menu = 'feed';
+  toast('FEED  A=Meal  B=Snack');
+}
+function useFeedSelection() {
+  const opts = feedOptsList();
+  const id = opts[S.feedSel | 0] || 'meal';
+  S.menu = null;
+  if (id === 'chip') useChip();
+  else feed(id);
+}
+function useChip() {
+  if ((S.invChip | 0) <= 0) { toast('No Chip'); return; }
+  if (S.stage === 'egg' || S.stage === 'dead' || S.sleep) return;
+  if (S.sick) { toast('Too sick to eat'); return; }
+  S.invChip = (S.invChip | 0) - 1;
+  S.happy = Math.min(4, S.happy + 1);
+  S.weight += 2;
+  let result = 'yum';
+  let msg = 'Chip +1 Happy';
+  if (S.weight > 36 && Math.random() < 0.3) {
+    S.sick = true;
+    result = 'sick';
+    msg = 'Stomachache!';
+  } else if (S.happy >= 4) {
+    result = 'joy';
+  }
+  startCareCinema({
+    kind: 'snack',
+    result: result,
+    variant: (Math.floor(Math.random() * 4) + 1) % 4,
+    toast: msg
+  });
+  S.call = false;
+  S._falseCall = false;
+  beep(480, 0.06);
+  save();
+}
+function useTonic() {
+  if ((S.invTonic | 0) <= 0) { toast('No Tonic'); return; }
+  if (S.stage === 'egg' || S.stage === 'dead') { toast('No pet'); return; }
+  if (S.paused) { toast('Paused'); return; }
+  S.invTonic = (S.invTonic | 0) - 1;
+  const wasSick = !!(S.sick || S.injured);
+  S.sick = false;
+  S.sickSince = 0;
+  S.injured = false;
+  if ((S.careMiss | 0) > 0) S.careMiss = Math.max(0, (S.careMiss | 0) - 1);
+  startCareCinema({
+    kind: 'med',
+    result: wasSick ? 'better' : 'better',
+    itemX: Math.max(70, Math.min(190, (S.petX || 120) + 28)),
+    toast: wasSick ? 'Tonic — healed!' : 'Tonic — care eased'
+  });
+  beep(420, 0.09);
+  save();
+}
+function openMedMenu() {
+  if (S.paused) { toast('Paused'); return; }
+  if ((S.invTonic | 0) > 0) {
+    S.menu = 'medpick';
+    S.medSel = 0;
+    toast('MED A cycle B use · Medicine / Tonic', { pri: 2, hold: 2000 });
+    return;
+  }
+  med();
+}
+function useMedSelection() {
+  const opts = ['medicine', 'tonic'];
+  const id = opts[S.medSel | 0] || 'medicine';
+  S.menu = null;
+  if (id === 'tonic') useTonic();
+  else med();
+}
+function reviveableFamily() {
+  return (S.petFamily || []).filter(e => e && (e.reason === 'returned' || e.reason === 'neglect'));
+}
+function memoryFullBlock(openMemory) {
+  toast('MEMORY FULL', { pri: 3, hold: 2800 });
+  S._memFullUntil = Date.now() + 2200;
+  beep(160, 0.08);
+  if (openMemory !== false) {
+    try { showPetMemory(); } catch (e) {}
+  }
+}
+function openRevivePicker() {
+  if ((S.invRevive | 0) <= 0) { toast('No Revive Charm'); return; }
+  const list = reviveableFamily();
+  if (!list.length) {
+    toast('No returned pals in Family');
+    beep(160, 0.08);
+    return;
+  }
+  const extra = document.getElementById('overlay-extra');
+  let html = '<p style="font-size:12px">Pick a returned pal · costs 1 Revive Charm · restores as they were (growth, stats, look, TEMP, schedule).</p>';
+  html += '<div class="friend-list">';
+  list.forEach((e, i) => {
+    const idx = (S.petFamily || []).indexOf(e);
+    const look = (e.morphId != null) ? morphLook(e.morphId) : '';
+    const st = String(e.stage || (e.snap && e.snap.stage) || '').toUpperCase();
+    const age = (e.age != null ? e.age : (e.snap && e.snap.age));
+    html += '<div class="friend-item">' + (e.name || e.form) +
+      (e.morphId != null ? ' ' + speciesTag(e.morphId) : '') +
+      ' · G' + (e.gen || 1) + (st ? ' · ' + st : '') + (age != null ? ' · Age ' + age : '') +
+      ' · ' + (e.reason || '') +
+      (look ? '<br><span style="font-size:10px;opacity:.85">' + look + '</span>' : '') +
+      '<br><button onclick="window.confirmReviveFamily(' + idx + ')">Revive</button></div>';
+  });
+  html += '</div>';
+  html += '<div class="btn-row"><button onclick="window.openPalShop()">Back to Shop</button></div>';
+  extra.innerHTML = html;
+  show('Revive', 'Restore as they were · no free revive');
+  document.getElementById('obtn').style.display = 'none';
+  S.menu = null;
+}
+function buildReviveCardFromFamily(entry) {
+  // Prefer full death/return snapshot; legacy album rows rebuild best-effort (not a baby).
+  if (entry.snap && typeof entry.snap === 'object' && entry.snap.stage && entry.snap.stage !== 'dead') {
+    const card = JSON.parse(JSON.stringify(entry.snap));
+    card.stage = entry.snap.stage;
+    card.form = entry.snap.form || entry.form;
+    return card;
+  }
+  const stage = entry.stage && entry.stage !== 'dead' && entry.stage !== 'egg' ? entry.stage : 'adult';
+  const form = entry.form && entry.form !== 'dead' && entry.form !== 'egg' ? entry.form : (stage === 'baby' ? 'baby' : 'adult1');
+  const morph = entry.morphId != null ? entry.morphId : 0;
+  const trait = entry._eggBiasTrait || entry.trait || null;
+  const TEMPS = { CALM:1, BRAVE:1, BRATTY:1, CHEERY:1, SHY:1, CLEVER:1, MELLOW:1 };
+  const seed = (trait && TEMPS[String(trait).toUpperCase()]) ? String(trait).toUpperCase() : null;
+  const now = Date.now();
+  const card = Object.assign({}, petDefaults(now), {
+    petId: entry.petId || newPetId(),
+    stage: stage,
+    form: form,
+    age: entry.age | 0,
+    weight: entry.weight != null ? entry.weight : 12,
+    hunger: entry.hunger != null ? entry.hunger : 2,
+    happy: entry.happy != null ? entry.happy : 2,
+    disc: entry.disc | 0,
+    careMiss: entry.careMiss | 0,
+    generation: entry.gen || 1,
+    morphId: morph,
+    petName: entry.petName || entry.name || generatePetName(morph),
+    _eggBiasTrait: seed,
+    eggId: entry.eggId != null ? entry.eggId : null,
+    eggChoice: entry.eggId != null ? entry.eggId : null,
+    eggSelect: false,
+    eggReadyAt: null,
+    battleWins: entry.wins | 0,
+    battleLosses: entry.losses | 0,
+    battleXP: entry.xp | 0,
+    growthPhase: entry.growthPhase | 0,
+    bedHour: clampHour(entry.bedHour, 20),
+    wakeHour: clampHour(entry.wakeHour, 8),
+    sick: false,
+    injured: false,
+    sleep: false,
+    lights: true,
+    call: false,
+    poop: false,
+    poopCount: 0,
+    poopSpots: []
+  });
+  return card;
+}
+function confirmReviveFamily(fi) {
+  const entry = (S.petFamily || [])[fi];
+  if (!entry || (entry.reason !== 'returned' && entry.reason !== 'neglect')) {
+    toast('Not reviveable');
+    return;
+  }
+  if ((S.invRevive | 0) <= 0) { toast('No Revive Charm'); return; }
+  if (S.battle || S.game) { toast('Finish activity first'); return; }
+
+  normalizePetMemory();
+
+  // Simulate park + place so we never overwrite and never consume revive if blocked
+  const sim = S.petMemory.map(e => (e && e.pet) ? e : null);
+  if (S.stage !== 'egg' && S.stage !== 'dead') {
+    const snap = memorySnapshot();
+    let slot = sim.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
+    if (slot < 0 && S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot < MEMORY_SLOTS) {
+      if (!sim[S.activeSlot] || !sim[S.activeSlot].pet) slot = S.activeSlot;
+    }
+    if (slot < 0) slot = sim.findIndex(e => !e || !e.pet);
+    if (slot < 0) {
+      memoryFullBlock(true);
+      return;
+    }
+    sim[slot] = { pet: snap };
+  }
+  let home = sim.findIndex(e => !e || !e.pet);
+  if (home < 0) {
+    memoryFullBlock(true);
+    return;
+  }
+
+  // Park living pet for real
+  if (S.stage !== 'egg' && S.stage !== 'dead') {
+    const snap = memorySnapshot();
+    let slot = S.petMemory.findIndex(e => e && e.pet && e.pet.petId === snap.petId);
+    if (slot < 0 && S.activeSlot != null && S.activeSlot >= 0 && S.activeSlot < MEMORY_SLOTS) {
+      if (!S.petMemory[S.activeSlot] || !S.petMemory[S.activeSlot].pet) slot = S.activeSlot;
+    }
+    if (slot < 0) slot = S.petMemory.findIndex(e => !e || !e.pet);
+    if (slot < 0) {
+      memoryFullBlock(true);
+      return;
+    }
+    writePetToSlot(slot, snap);
+  }
+
+  normalizePetMemory();
+  home = S.petMemory.findIndex(e => !e || !e.pet);
+  if (home < 0) {
+    memoryFullBlock(true);
+    return;
+  }
+
+  S.invRevive = (S.invRevive | 0) - 1;
+  entry.reason = 'revived';
+  entry.revivedAt = Date.now();
+
+  const card = buildReviveCardFromFamily(entry);
+  // Continuity: keep petId from death when present; do not invent Gen+1
+  if (!card.petId) card.petId = entry.petId || newPetId();
+  if (card.generation == null) card.generation = entry.gen || 1;
+  card.eggSelect = false;
+  card.eggReadyAt = null;
+  if (card.stage === 'dead' || card.form === 'dead') {
+    card.stage = entry.stage && entry.stage !== 'dead' ? entry.stage : 'adult';
+    card.form = entry.form && entry.form !== 'dead' ? entry.form : 'adult1';
+  }
+  card.revivedAt = Date.now();
+  card._revived = true;
+
+  const keep = captureAccountGlobals();
+  const now = Date.now();
+  wipeNonAccountKeys();
+  Object.assign(S, petDefaults(now), card);
+  restoreAccountGlobals(keep, { keepActiveSlot: false });
+  S.activeSlot = home;
+  S.menu = null;
+  S.battle = false;
+  S.game = false;
+  S.paused = false;
+  S._away = false;
+  S.anim = 'wake';
+  S.animTimer = now + 1800;
+  try { ensureMorph(S); } catch (e) {}
+  writePetToSlot(home, memorySnapshot());
+  hide();
+  spawnFx('heart', 120, 80, 4);
+  toast('Revived ' + displayName(S) + ' · as they were', { pri: 3, hold: 2800 });
+  melWake();
+  save();
+  updateUI();
+}
+window.openPalShop = openPalShop;
+window.openRevivePicker = openRevivePicker;
+window.confirmReviveFamily = confirmReviveFamily;
+
 const NAME_A = ['Vel','Nim','Zar','Oka','Lum','Pex','Qui','Iri','Bos','Tep','Myn','Ara','Sho','Gri','Wib','Cai','Neo','Fay','Rux','Dai','Kel','Yuu','Plo','Hex','Siv','Ora','Jin','Taz','Mew','Vyn','Azu','Rel'];
 const NAME_B = ['ko','mi','ra','zu','bit','chi','do','nx','lo','qi','va','no','shi','el','um','ak'];
 function hash32(s) {
@@ -2038,6 +2493,7 @@ function fillRect(x, y, w, h, c) {
 
 function drawHeart(x, y, filled) {
   const INK = '#0f380f';
+  // Classic ♥: cleft on top row, single-pixel point at bottom (v5.24 audit)
   const shape = filled ? [
     [0,1,1,0,1,1,0],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],
     [0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0]
@@ -2078,7 +2534,10 @@ const FONT = {
   '#':[0x0A,0x0A,0x1F,0x0A,0x1F,0x0A,0x0A],
   '/':[0x01,0x02,0x04,0x04,0x08,0x10,0x10],
   '%':[0x19,0x19,0x02,0x04,0x08,0x13,0x13],
-  '+':[0,0x04,0x04,0x1F,0x04,0x04,0]
+  '+':[0,0x04,0x04,0x1F,0x04,0x04,0],
+  '>':[0x10,0x08,0x04,0x02,0x04,0x08,0x10],
+  '<':[0x01,0x02,0x04,0x08,0x04,0x02,0x01],
+  '*':[0x00,0x04,0x15,0x0E,0x15,0x04,0x00]
 };
 function drawText(str, x, y, color) {
   ctx.fillStyle = color || '#0f380f';
@@ -3487,7 +3946,8 @@ function drawStatus() {
     'TEMP ' + temp,
     'HUN ' + hun + '/4  HAP ' + hap + '/4  DISC ' + (S.disc || 0) + '%',
     'PALS ' + speciesSeenCount() + '/' + SPECIES_COUNT + '  FAMILY ' + ((S.petFamily && S.petFamily.length) || 0),
-    'STREAK ' + (S.careStreak || 0) + 'D  BATTLE ' + (S.battleWins || 0) + 'W-' + (S.battleLosses || 0) + 'L',
+    'STREAK ' + (S.careStreak || 0) + 'D  COINS ' + (S.coins | 0),
+    'BATTLE ' + (S.battleWins || 0) + 'W-' + (S.battleLosses || 0) + 'L  CHIP' + (S.invChip|0) + ' TON' + (S.invTonic|0) + ' REV' + (S.invRevive|0),
     'NEXT ' + nextEvoHint(),
     'FRIENDS ' + ((S.friends && S.friends.length) || 0) + '  SHARE VIA CONNECT',
     'TIME ' + timeStr + '  ' + state,
@@ -3495,8 +3955,8 @@ function drawStatus() {
     ('ALERTS ' + (S.notifications ? 'ON' : 'OFF') + '  LT ' + (S.lights ? 'ON' : 'OFF') + (flags ? ('  ' + flags) : '')),
     'A BED   B WAKE   C BACK'
   ];
-  // 13 lines × 13px fits 178 LCD (was 16px → last line clipped)
-  lines.forEach((l, i) => drawText(String(l).slice(0, 38), 4, 3 + i * 13, '#0f380f'));
+  // v5.22: 14 lines × 12px fits 178 LCD
+  lines.forEach((l, i) => drawText(String(l).slice(0, 38), 4, 2 + i * 12, '#0f380f'));
 }
 
 function drawGame() {
@@ -3603,6 +4063,12 @@ function render() {
     drawFx();
   } else if (S.menu === 'status') {
     drawStatus();
+  } else if (S.menu === 'shop') {
+    drawShop();
+  } else if (S.menu === 'feedpick') {
+    drawFeedPick();
+  } else if (S.menu === 'medpick') {
+    drawMedPick();
   } else if (S.battle) {
     drawBattle();
   } else if (S.game) {
@@ -3619,6 +4085,12 @@ function render() {
   if ((S.paused || S._away) && S.stage !== 'dead') {
     ctx.fillStyle = 'rgba(15,56,15,0.25)';
     ctx.fillRect(0, 0, W, H);
+  }
+  // since v5.23: MEMORY FULL LCD flash (revive blocked)
+  if (S._memFullUntil && Date.now() < S._memFullUntil) {
+    ctx.fillStyle = 'rgba(15,56,15,0.55)';
+    ctx.fillRect(20, 70, 200, 36);
+    drawTextCentered('MEMORY FULL', 82, '#9bbc0f');
   }
 }
 
@@ -3888,6 +4360,7 @@ function update() {
       S.anim = 'grow';
       S.animTimer = now + 2600; // short morning age-up drama
       checkEvo(); // may replace with longer evo cutscene — fine
+      earnCoins(1); // morning age-up
       toast('Good morning! Age ' + S.age);
       melWake();
     } else {
@@ -4315,10 +4788,11 @@ function livingParkedSlots() {
 function offerPetsAfterReturn() {
   const slots = livingParkedSlots();
   const extra = document.getElementById('overlay-extra');
-  let html = '<p style="font-size:12px">Their slot is free. Pick a parked pal or start a new life.</p>';
+  let html = '<p style="font-size:12px">Their slot is free. Pick a parked pal or start a new life. Parked status is as-parked / as-restored (frozen).</p>';
   slots.forEach(i => {
     const pet = S.petMemory[i].pet;
-    html += '<div class="friend-item"><strong>SLOT '+(i+1)+'</strong> · '+petMemoryName(pet)+'<br><button onclick="window.useStoredPet('+i+')">USE PET</button></div>';
+    html += '<div class="friend-item">'+petMemoryCardHtml(pet, { isActive: false, slot: i })
+      + '<div class="btn-row"><button onclick="window.useStoredPet('+i+')">USE PET</button></div></div>';
   });
   html += '<div class="btn-row"><button onclick="window.restart({fromDeath:true})">START NEW PET</button></div>';
   extra.innerHTML = html;
@@ -4478,6 +4952,7 @@ function endPlay(won) {
     S.animTimer = Date.now() + 2000;
     spawnFx('heart', S.petX || 120, 70, personalityOf(S) === 'CHEERY' ? 7 : 5);
     spawnFx('star', S.petX || 120, 90, 3);
+    earnPlayCoins(1); // Look/Memory win
     toast('Won! +Happy  +closer bond');
     melWin();
   } else {
@@ -5410,6 +5885,9 @@ function finishBattle(won) {
     S.injured = false;
     S.anim = 'dance';
     S.animTimer = now + 1600;
+    // v5.22 coins: train +3, friend/share/p2p +5
+    if (B && (B.kind === 'friend' || B.kind === 'p2p')) earnCoins(5);
+    else earnCoins(3); // training battle
     // v5.10 B3 — brief praise beat (existing stats only)
     S._postArena = {
       kind: 'win',
@@ -5985,6 +6463,14 @@ function memorySnapshot(){
   delete copy.myCode;
   delete copy.careStreak;
   delete copy.lastCareDay;
+  delete copy.coins;
+  delete copy.invChip;
+  delete copy.invTonic;
+  delete copy.invRevive;
+  delete copy.coinsPlayDay;
+  delete copy.coinsPlayEarned;
+  delete copy._coinToastPend;
+  delete copy._coinToastTimer;
   delete copy.notifications;
   delete copy.sound;
   delete copy.difficulty;
@@ -5997,6 +6483,19 @@ function memorySnapshot(){
   if (copy.lastGrowthAt == null) copy.lastGrowthAt = 0;
   if (copy.stage === 'egg' && copy.eggReadyAt) {
     copy.eggLeft = Math.max(0, copy.eggReadyAt - Date.now());
+  }
+  // v5.25: parked Memory cards need care / schedule / TEMP fields for rich UI
+  copy.sleep = !!copy.sleep;
+  copy.hunger = Math.max(0, Math.min(4, copy.hunger|0));
+  copy.happy = Math.max(0, Math.min(4, copy.happy|0));
+  copy.sick = !!copy.sick;
+  copy.poop = !!copy.poop;
+  copy.poopCount = copy.poopCount|0;
+  copy.injured = !!copy.injured;
+  copy.bedHour = clampHour(copy.bedHour, 20);
+  copy.wakeHour = clampHour(copy.wakeHour, 8);
+  if (copy._eggBiasTrait == null && copy.eggId != null) {
+    try { copy._eggBiasTrait = eggTraits(copy.eggId).trait; } catch (e) {}
   }
   return copy;
 }
@@ -6027,13 +6526,96 @@ function petMemoryId(p){
   if(!p.petId) p.petId = newPetId();
   return String(p.petId).slice(-6).toUpperCase();
 }
+function careHeartsBar(n){
+  n = Math.max(0, Math.min(4, n|0));
+  return '\u2665'.repeat(n) + '\u2661'.repeat(4 - n);
+}
+function padHourMem(h){
+  return String(clampHour(h, 0)).padStart(2, '0');
+}
+function petEggHatchLabel(p){
+  if (!p || p.stage !== 'egg') return null;
+  if ((p.hatchPhase|0) > 0 || p.anim === 'hatch') return 'EGG · HATCHING';
+  let leftMs = null;
+  if (p.eggLeft != null) leftMs = Math.max(0, p.eggLeft|0);
+  else if (p.eggReadyAt) leftMs = Math.max(0, p.eggReadyAt - Date.now());
+  if (leftMs == null) return 'EGG';
+  if (leftMs <= 0) return 'EGG · READY';
+  const m = Math.max(1, Math.ceil(leftMs / 60000));
+  return 'EGG · ~' + m + 'm';
+}
+/** Compact one-liner (legacy callers / toasts). Prefer petMemoryCardHtml for overlays. */
 function petMemoryDetails(p){
-  const stage=String(p.stage||'').toUpperCase();
-  const gen=p.generation||1;
-  const age=p.age||0;
-  const wins=p.battleWins||0;
-  const losses=p.battleLosses||0;
-  return 'ID '+petMemoryId(p)+' · '+stage+' · Age '+age+' · Gen '+gen+' · '+wins+'W-'+losses+'L'+(p.morphId!=null?' · '+speciesTag(p.morphId)+' · '+morphLook(p.morphId):'');
+  if (!p) return '';
+  const stage = String(p.stage||'').toUpperCase();
+  const gen = p.generation||1;
+  const age = p.age||0;
+  const wins = p.battleWins||0;
+  const losses = p.battleLosses||0;
+  let wake = '—';
+  if (p.stage === 'egg') wake = petEggHatchLabel(p) || 'EGG';
+  else wake = p.sleep ? 'ASLEEP' : 'AWAKE';
+  const hun = Math.max(0, Math.min(4, p.hunger|0));
+  const hap = Math.max(0, Math.min(4, p.happy|0));
+  const chips = [];
+  if (p.sick) chips.push('SICK');
+  if (p.poop || (p.poopCount|0) >= 1) chips.push('DIRTY');
+  if (p.injured) chips.push('INJURED');
+  if (p.stage !== 'egg' && (hun <= 1 || hap <= 1)) chips.push('LOW');
+  let temp = '';
+  try { temp = personalityOf(p) || ''; } catch (e) { temp = ''; }
+  const bed = padHourMem(p.bedHour != null ? p.bedHour : 20);
+  const wakeH = padHourMem(p.wakeHour != null ? p.wakeHour : 8);
+  return 'ID '+petMemoryId(p)+' · '+wake+' · H'+hun+'/4 Y'+hap+'/4'
+    + (chips.length ? ' · '+chips.join('/') : '')
+    + ' · '+stage+' · Age '+age+' · Gen '+gen
+    + ' · BED '+bed+':00 WAKE '+wakeH+':00'
+    + ' · '+wins+'W-'+losses+'L'
+    + (temp ? ' · TEMP '+temp : '')
+    + (p.morphId!=null?' · '+speciesTag(p.morphId)+' · '+morphLook(p.morphId):'');
+}
+/** Rich overlay card for Pet Memory / return picker. opts: {isActive, slot} */
+function petMemoryCardHtml(p, opts){
+  opts = opts || {};
+  if (!p) return '<em>empty</em>';
+  const isActive = !!opts.isActive;
+  const slotN = ((opts.slot != null ? opts.slot : 0)|0) + 1;
+  const tag = isActive ? 'ACTIVE' : 'PARKED \u00b7 FROZEN';
+  const name = petMemoryName(p);
+  const hun = Math.max(0, Math.min(4, p.hunger|0));
+  const hap = Math.max(0, Math.min(4, p.happy|0));
+  const stage = String(p.stage||'').toUpperCase();
+  const lines = [];
+  lines.push('<strong>'+name+'</strong> \u00b7 <span style="letter-spacing:.02em">'+tag+'</span> \u00b7 SLOT '+slotN);
+  if (p.stage === 'egg') {
+    lines.push('<strong>'+(petEggHatchLabel(p) || 'EGG')+'</strong>');
+  } else {
+    lines.push('<strong>'+(p.sleep ? 'ASLEEP' : 'AWAKE')+'</strong>');
+  }
+  lines.push('H'+careHeartsBar(hun)+'  Y'+careHeartsBar(hap)+' <span style="opacity:.8">('+hun+'/4 \u00b7 '+hap+'/4)</span>');
+  const chips = [];
+  if (p.sick) chips.push('SICK');
+  if (p.poop || (p.poopCount|0) >= 1) chips.push('DIRTY');
+  if (p.injured) chips.push('INJURED');
+  if (p.stage !== 'egg' && (hun <= 1 || hap <= 1)) chips.push('LOW');
+  if (chips.length) {
+    lines.push(chips.map(function(c){
+      return '<span style="display:inline-block;margin:1px 3px 1px 0;padding:0 4px;border:1px solid rgba(15,56,15,.45);border-radius:3px;font-size:10px;letter-spacing:.04em">'+c+'</span>';
+    }).join(''));
+  }
+  lines.push(stage+' \u00b7 Age '+(p.age||0)+' \u00b7 Gen '+(p.generation||1));
+  if (p.morphId != null) {
+    lines.push(speciesTag(p.morphId)+' \u00b7 '+morphLook(p.morphId));
+  }
+  const bed = padHourMem(p.bedHour != null ? p.bedHour : 20);
+  const wakeH = padHourMem(p.wakeHour != null ? p.wakeHour : 8);
+  lines.push('BED '+bed+':00 \u00b7 WAKE '+wakeH+':00');
+  lines.push((p.battleWins||0)+'W-'+(p.battleLosses||0)+'L');
+  let temp = '';
+  try { temp = personalityOf(p) || ''; } catch (e) { temp = ''; }
+  if (temp) lines.push('TEMP '+String(temp).slice(0, 8));
+  lines.push('<span style="opacity:.75">ID '+petMemoryId(p)+'</span>');
+  return '<div style="font-size:11px;line-height:1.45;margin:2px 0 4px">'+lines.join('<br>')+'</div>';
 }
 function normalizePetMemory(){
   let list = Array.isArray(S.petMemory) ? S.petMemory.slice(0, MEMORY_SLOTS) : [];
@@ -6234,19 +6816,18 @@ function showPetMemory(){
     if (idx >= 0) S.activeSlot = idx;
   }
   const extra=document.getElementById('overlay-extra');
-  let html='<p style="font-size:12px">Five slots. Parked pals wait frozen — care only runs on the active pal.</p>';
+  let html='<p style="font-size:12px">Five slots. Parked pals are <strong>frozen</strong> — shown status is as-parked / as-restored. Care only runs on the active pal.</p>';
   for (let i = 0; i < MEMORY_SLOTS; i++) {
     const e = S.petMemory[i];
     const isActive = (S.activeSlot === i && S.stage !== 'dead');
     if (e && e.pet) {
       // Show live stats for active slot
       const p = isActive ? S : e.pet;
-      const tag = isActive ? 'ACTIVE · SLOT ' + (i+1) : 'SLOT ' + (i+1);
-      html+='<div class="friend-item"><strong>'+tag+'</strong> · '+petMemoryName(p)+'<br><span style="font-size:11px;opacity:.85">'+petMemoryDetails(p)+'</span>';
+      html+='<div class="friend-item">'+petMemoryCardHtml(p, { isActive: isActive, slot: i });
       if (!isActive) {
-        html+='<br><div class="btn-row"><button onclick="window.useStoredPet('+i+')">USE PET</button><button onclick="window.discardStoredPet('+i+')" style="background:#5a3030">CLEAR</button></div>';
+        html+='<div class="btn-row"><button onclick="window.useStoredPet('+i+')">USE PET</button><button onclick="window.discardStoredPet('+i+')" style="background:#5a3030">CLEAR</button></div>';
       } else {
-        html+='<br><span style="font-size:11px;opacity:.85">Currently playing — switch to another slot to park this pet here</span>';
+        html+='<span style="font-size:11px;opacity:.85">Currently playing — switch to another slot to park this pet here</span>';
       }
       html+='</div>';
     } else {
@@ -6274,7 +6855,7 @@ function showPetMemory(){
   const memoryFull = filled >= MEMORY_SLOTS;
   if (!memoryFull) {
     html+='<div class="btn-row"><button onclick="window.startFreshLife()">START NEW PET</button></div>';
-    html+='<p style="margin-top:8px;font-size:11px">Parked pals wait frozen. Care only runs on the active pal. Max 5.</p>';
+    html+='<p style="margin-top:8px;font-size:11px">Parked pals are frozen (status as-parked). Care only on active. Max 5.</p>';
   } else {
     html+='<p style="margin-top:8px;font-size:12px"><strong>Memory full (5/5)</strong> — CLEAR a slot before starting a new pet.</p>';
   }
@@ -6291,7 +6872,8 @@ function showFamilyAlbum() {
   } else {
     html += '<div class="friend-list">';
     list.forEach((e, i) => {
-      const why = e.reason === 'returned' ? 'returned home — neglect' : (e.reason === 'evolved' ? 'evolved' : (e.reason || 'raised'));
+      const why = e.reason === 'returned' || e.reason === 'neglect' ? 'returned home — neglect'
+        : (e.reason === 'revived' ? 'revived' : (e.reason === 'evolved' ? 'evolved' : (e.reason || 'raised')));
       const look = (e.morphId != null) ? morphLook(e.morphId) : '';
       html += '<div class="friend-item">' + (e.name || e.form) + (e.morphId!=null ? ' ' + speciesTag(e.morphId) : '') + ' · ' + familyTraitLabel(e) +
         (look ? ' · ' + look : '') +
@@ -6406,8 +6988,8 @@ function showConnectMenu() {
     '</div>' +
     '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Snapshot fight uses the packed pal, not a generated stand-in. New link from the same pal refreshes their row.</p>' +
     '<div class="btn-row"><button onclick="window.showPetMemory()">Pet Memory (' + ((S.petMemory||[]).filter(e=>e&&e.pet).length) + '/' + MEMORY_SLOTS + ')</button><button onclick="window.showFamilyAlbum()">Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
-    '<div class="btn-row"><button onclick="window.showPaldex()">Paldex (' + speciesSeenCount() + '/' + SPECIES_COUNT + ')</button></div>' +
-    '<p style="margin-top:8px;font-size:11px">Friends: ' + S.friends.length + ' · Gen ' + S.generation + ' · Record ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
+    '<div class="btn-row"><button onclick="window.showPaldex()">Paldex (' + speciesSeenCount() + '/' + SPECIES_COUNT + ')</button><button onclick="window.openPalShop()">Pal Shop (' + (S.coins|0) + 'c)</button></div>' +
+    '<p style="margin-top:8px;font-size:11px">Coins ' + (S.coins|0) + ' · Inv C' + (S.invChip|0) + ' T' + (S.invTonic|0) + ' R' + (S.invRevive|0) + ' · Friends ' + S.friends.length + ' · Gen ' + S.generation + ' · ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
   show('Connect', 'Share link · Breed · Snapshot battle');
   document.getElementById('obtn').style.display = 'none';
 }
@@ -6650,6 +7232,7 @@ function endTraining(ok) {
     S.animTimer = now + 1400;
     spawnFx('star', S.petX || 120, 70, 4);
     spawnFx('heart', S.petX || 120, 85, 2);
+    earnCoins(2); // Train XP success
     S._postArena = {
       kind: 'train_ok',
       until: now + 2000,
@@ -6774,7 +7357,7 @@ function selectIcon(dir) {
   if (S.paused || S.game || S.battle || S.stage === 'dead') return;
   // Changing mode with A closes open menus (status / connect / feed pick)
   // C remains Cancel for explicit close without changing icon
-  if (S.menu === 'status' || S.menu === 'feed' || S.menu === 'playpick') {
+  if (S.menu === 'status' || S.menu === 'feed' || S.menu === 'feedpick' || S.menu === 'playpick' || S.menu === 'shop' || S.menu === 'medpick') {
     S.menu = null;
   }
   try { hide(); } catch(e) {}
@@ -6807,9 +7390,22 @@ function confirm() {
     resolve(1); // B = Right for Look/Memory
     return;
   }
+  if (S.menu === 'feedpick') {
+    useFeedSelection();
+    return;
+  }
   if (S.menu === 'feed') {
-    feed('meal');
+    // classic: B = Snack
+    feed('snack');
     S.menu = null;
+    return;
+  }
+  if (S.menu === 'medpick') {
+    useMedSelection();
+    return;
+  }
+  if (S.menu === 'shop') {
+    buyShopItem();
     return;
   }
   if (S.stage === 'dead') {
@@ -6836,15 +7432,13 @@ function confirm() {
     S.menu = S.menu === 'status' ? null : 'status';
     toast(S.menu === 'status' ? 'STATUS  A=Bed  B=Wake  C=Back' : 'Closed');
   } else if (a === 'feed') {
-    if (S.sleep) { toast('Sleeping...'); return; }
-    S.menu = 'feed';
-    toast('FEED  A=Meal  B=Snack');
+    openFeedMenu();
   } else if (a === 'play') {
     play();
   } else if (a === 'clean') {
     clean();
   } else if (a === 'med') {
-    med();
+    openMedMenu();
   } else if (a === 'light') {
     light();
   } else if (a === 'connect') {
@@ -6874,9 +7468,14 @@ function cancel() {
     beep(120, 0.03);
     return;
   }
-  if (S.menu === 'feed' || S.menu === 'playpick') {
+  if (S.menu === 'feed' || S.menu === 'feedpick' || S.menu === 'playpick' || S.menu === 'medpick') {
     S.menu = null;
     toast('Cancelled');
+    return;
+  }
+  if (S.menu === 'shop') {
+    S.menu = null;
+    toast('Shop closed');
     return;
   }
   if (S.menu === 'status') {
@@ -6909,9 +7508,21 @@ document.getElementById('btnA').onclick = () => {
     trainPress('A');
   } else if (S.game) {
     resolve(0); // Look/Memory: A = Left
+  } else if (S.menu === 'feedpick') {
+    const opts = feedOptsList();
+    S.feedSel = ((S.feedSel | 0) + 1) % opts.length;
+    beep(180, 0.02);
   } else if (S.menu === 'feed') {
     feed('meal');
     S.menu = null;
+    beep(180, 0.02);
+  } else if (S.menu === 'medpick') {
+    S.medSel = ((S.medSel | 0) + 1) % 2;
+    beep(180, 0.02);
+  } else if (S.menu === 'shop') {
+    const items = shopCatalog();
+    S.shopSel = ((S.shopSel | 0) + 1) % Math.max(1, items.length);
+    beep(180, 0.02);
   } else if (S.menu === 'playpick') {
     S.menu = null;
     startLookGame();
@@ -6949,9 +7560,15 @@ document.getElementById('btnB').addEventListener('pointerup', () => {
       trainPress('B');
     } else if (S.game) {
       resolve(1);
+    } else if (S.menu === 'feedpick') {
+      useFeedSelection();
     } else if (S.menu === 'feed') {
       feed('snack');
       S.menu = null;
+    } else if (S.menu === 'medpick') {
+      useMedSelection();
+    } else if (S.menu === 'shop') {
+      buyShopItem();
     } else if (S.menu === 'playpick') {
       S.menu = null;
       startMemoryGame();
@@ -6998,7 +7615,10 @@ document.addEventListener('keydown', e => {
     else if (S.battle) battleOrder('attack');
     else if (S.game && S.gameType === 'train') trainPress('B');
     else if (S.game) resolve(1);
+    else if (S.menu === 'feedpick') { useFeedSelection(); }
     else if (S.menu === 'feed') { feed('snack'); S.menu = null; }
+    else if (S.menu === 'medpick') { useMedSelection(); }
+    else if (S.menu === 'shop') { buyShopItem(); }
     else if (S.menu === 'playpick') { S.menu = null; startMemoryGame(); }
     else confirm();
   }
@@ -7056,6 +7676,8 @@ function updateUI() {
   document.getElementById('wt').textContent = (S.weight || 0) + 'g';
   document.getElementById('disc').textContent = (S.disc || 0) + '%';
   document.getElementById('friends').textContent = (S.friends && S.friends.length) || 0;
+  const coinsEl = document.getElementById('coins');
+  if (coinsEl) coinsEl.textContent = (S.coins | 0);
   document.getElementById('pet-name').textContent = displayName(S) + (S.stage!=='egg' && S.stage!=='dead' ? ' ' + speciesTag(ensureMorph(S)) : '');
   document.getElementById('gen-line').textContent = 'Gen ' + S.generation;
   document.getElementById('soundBtn').textContent = S.sound ? '🔊' : '🔇';
@@ -7096,7 +7718,7 @@ function activeMinutesBetween(start, end) {
 
 function updateCareStreak() {
   const day = new Date().toDateString();
-  if (S.lastCareDay === day) return;
+  if (S.lastCareDay === day) return false;
   const yest = new Date();
   yest.setDate(yest.getDate() - 1);
   if (S.lastCareDay === yest.toDateString()) {
@@ -7107,6 +7729,9 @@ function updateCareStreak() {
     S.careStreak = 1; // broken streak resets to 1 for today
   }
   S.lastCareDay = day;
+  // v5.22: once/day streak tick → +2 coins (living, not frozen)
+  earnCoins(2);
+  return true;
 }
 
 function applyOfflineCatchup(now) {
@@ -7443,6 +8068,12 @@ function load() {
     // Never kill the moment the app/update loads
     S.loadGraceUntil = Date.now() + 3 * 60000;
     if (S.shellTheme === undefined) S.shellTheme = 0;
+    if (S.coins == null) S.coins = 0;
+    if (S.invChip == null) S.invChip = 0;
+    if (S.invTonic == null) S.invTonic = 0;
+    if (S.invRevive == null) S.invRevive = 0;
+    if (S.coinsPlayDay == null) S.coinsPlayDay = '';
+    if (S.coinsPlayEarned == null) S.coinsPlayEarned = 0;
     applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {}
 
@@ -7580,7 +8211,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.21', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.25', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -7588,7 +8219,7 @@ navigator.serviceWorker.register('./service-worker.js?v=5.21', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.21', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.25', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {

@@ -79,6 +79,112 @@ That’s the whole toy.
 
 
 
+
+
+## v5.25 Public Release
+
+Richer Pet Memory cards so owners can tell parked pals apart. Built on v5.24 polish. No IAP. No free revive. Coins / inventory still persist across pets. PWA offline cache bumped to `pocketpal-v525`.
+
+### Richer Pet Memory cards
+- Each occupied slot shows **Name** + **ACTIVE** vs **PARKED · FROZEN**.
+- **AWAKE** / **ASLEEP** from `sleep` (live `S` for the active slot). Eggs show **EGG** / hatch countdown / READY / HATCHING instead.
+- Care meters: `H♥♥♡♡  Y♥♥♥♡` plus `n/4` counts.
+- Alert chips when true: **SICK**, **DIRTY**, **INJURED**, **LOW** (hunger or happy ≤1).
+- Stage · Age · Gen · species/morph look · `BED xx:00 · WAKE yy:00` · battle `nW-nL` · short **TEMP**.
+- Overlay blurb notes parked pals are frozen — status is as-parked / as-restored.
+- `memorySnapshot` still stores sleep, hunger, happy, sick, poop, injury, bed/wake, personality seed for parked cards.
+- Same card HTML used by `showPetMemory` and `offerPetsAfterReturn`.
+
+### Carried forward from v5.24
+- Shop/feed/med `>` arrow points RIGHT (MSB-left FONT).
+- INV `CHIP` / `TON` / `REV` labels; Chip via Feed picker, Tonic via Med picker, Revive via Shop USE REVIVE (as-was; MEMORY FULL no consume).
+- Happy heart FX shapes; coins persist.
+
+### Changelog path
+**v5.21** → **v5.22** (shop) → **v5.23** (revive-as-was / pickers) → **v5.24** (arrow / INV / hearts) → **v5.25** (richer Memory cards).
+
+Version **5.25** / SW cache `pocketpal-v525`.
+
+## v5.24 Public Release
+
+Owner feedback polish on v5.23. No IAP. No free revive. Coins / inventory still persist across pets. PWA offline cache bumped to `pocketpal-v524`.
+
+### Shop / picker arrow points RIGHT
+- Bitmap FONT `>` was mirrored under MSB-left `drawText` (`ch[row] & (0x10 >> col)`), so the selection caret looked like `<`.
+- Fixed: `'>':[0x10,0x08,0x04,0x02,0x04,0x08,0x10]` (classic right-pointing). `'<'` mirrored. ASCII-verified MSB-left.
+
+### Inventory labels readable
+- Shop LCD shows `CHIP n  TON n  REV n` (not cryptic `INV C0 T0 R0`).
+- Status line uses `CHIP` / `TON` / `REV` abbreviations.
+- Shop footer tip: `FEED/MED USE INV`.
+
+### How to use shop items (end-to-end)
+- **Chip:** Feed → feedpick (when you own chips) → select **CHIP** → **B** runs `useChip` (consumes 1). No chip → classic **A=Meal B=Snack**.
+- **Tonic:** Med → medpick (when you own tonics) → select **TONIC** → **B** runs `useTonic`. No tonic → one-tap medicine.
+- **Revive:** Connect → Pal Shop → buy **REVIVE** (80c) → **USE REVIVE** → Family picker → restore as-was into an empty Memory slot. **MEMORY FULL** blocks without consuming.
+
+### Hearts
+- Meter `drawHeart`, floating `spawnFx('heart')`, CHEERY / care-cinema hearts audited: cleft top, pointed bottom; happy/content paths still spawn hearts.
+
+### Changelog path
+**v5.21** → **v5.22** (shop) → **v5.23** (revive-as-was / pickers) → **v5.24** (arrow direction, INV labels, item-use clarity, hearts audit).
+
+Version **5.24** / SW cache `pocketpal-v524`. *(Superseded by v5.25 for Memory card detail.)*
+
+## v5.23 Public Release
+
+Owner polish on the v5.22 shop build. No IAP. No free revive. Coins / inventory save migration unchanged. PWA offline kept (`pocketpal-v523` cache).
+
+### Revive Charm — restore as they were
+- **Use Revive** (Family returned / neglect only) restores the pal **as at return-home/death**: growth/age, stage/form, stats, morph/look, name, TEMP seed, bed/wake schedule, traits — not a weakened baby.
+- Family album now stores a full `snap` at death/return for continuity. Legacy album rows (pre-5.23) rebuild best-effort from saved summary fields (still not a baby).
+- Marks the Family entry **revived**. Consumes **1** `invRevive`. Does **not** invent Gen+1.
+- Revived pal goes into an **empty** Pet Memory slot. If memory is full → toast + LCD **`MEMORY FULL`** (free a slot first). Never overwrites.
+
+### Med / Feed pickers
+- **Med:** if `invTonic > 0`, opens medpick LCD — Medicine / Tonic with `>` arrow; **A** cycles, **B** uses, **C** cancels. No tonic → one-tap medicine (unchanged). `useTonic` kept.
+- **Feed:** if `invChip > 0`, opens feedpick LCD — Meal / Snack / Chip with `>` arrow; **A** cycles, **B** uses, **C** cancels. No chip → classic **A=Meal B=Snack** toast flow.
+
+### Shop LCD arrow
+- Selected shop line shows a visible **`>`** in front of the item name (bitmap FONT now includes `>`). **A** moves the arrow immediately (redraw). **B** buys / Use Revive. **C** closes.
+
+### Changelog path
+**v5.21** (hatch name plate, no shop) → **v5.22** (coins & Pal Shop; revive was weakened baby) → **v5.23** (revive-as-was, memory-full block, Med/Food LCD pickers, shop arrow glyph).
+
+Version **5.23** / SW cache `pocketpal-v523`. *(Superseded by v5.24 for arrow / INV labels / use tips.)*
+
+## v5.22 Coins & Pal Shop
+
+Account coins (`S.coins`) and shop inventory persist across pets like friends/memory. No IAP. No free revive.
+
+### Economy
+
+| Action | Coins | Notes |
+| --- | --- | --- |
+| Care streak day tick | **+2** | Once/day when streak increments; living pet only; not while Pause/Away |
+| Win Look or Memory | **+1** | Soft daily cap **6** from minigames |
+| Train XP success | **+2** | `endTraining` win |
+| Training battle win | **+3** | |
+| Friend / share-link battle win | **+5** | Includes P2P |
+| Morning age-up | **+1** | Natural wake `age++` only |
+| Losses / neglect / idle / offline catch-up / shop buy | **0** | No earn |
+
+Toast `+N COINS` when N≥2 (or pending coalesces to ≥2). Shown on Status + shell meter.
+
+### Pal Shop (Connect → Pal Shop)
+
+LCD list — **A** cycle / **B** buy / **C** back:
+
+| Item | Price | Effect |
+| --- | --- | --- |
+| **Chip** | 8 | Inventory; Feed menu offers Chip (happy+1, weight like snack, stomachache risk) |
+| **Tonic** | 12 | Inventory; Med menu offers Tonic (clears sick/injured; careMiss−1 if >0) |
+| **Revive Charm** | 80 | Inventory; **Use Revive** → Family picker for returned/neglect only. *(v5.22: weakened baby. **v5.23:** restore as they were; MEMORY FULL if no free slot.)* |
+
+Keeps v5.15–5.21 (grace, face fit, hatch plate, TEMP, visual growth, fresh-life reset).
+
+Version **5.22** / SW cache `pocketpal-v522`. *(Superseded by v5.23 for revive / pickers / shop arrow.)*
+
 ## v5.21 Hatch Name Plate
 
 Hatch / evo / grow LCD name plates no longer clip the second line into the border. Hatch plate holds longer so you can read TEMP + name.
