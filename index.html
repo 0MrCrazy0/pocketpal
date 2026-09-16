@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.31 -->
+<!-- Public Release - POCKETPAL v5.32 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -417,7 +417,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.31 FINAL — closed-phone care push reliability · prior polish kept
+//  POCKETPAL v5.32 FINAL — closed-app care push projection fix · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -2248,6 +2248,11 @@ function careStillDue(type) {
   return true;
 }
 function careSnapshotBody(sub, enabled) {
+  // v5.32: paused/frozen only for intentional Away/Pause — not visibility hidden.
+  // backgrounded marks closed/background so Worker can project; SW still gets frozen via pushCareSnapshotToSW.
+  const visHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+  const visVisible = typeof document !== 'undefined' && document.visibilityState === 'visible';
+  const intentionalFreeze = !!(S.paused || S._away);
   return {
     petId: S.myCode || 'local',
     enabled: !!enabled,
@@ -2263,9 +2268,10 @@ function careSnapshotBody(sub, enabled) {
       poopCount: S.poopCount || 0,
       sick: !!(S.sick || S.injured),
       sleep: !!S.sleep,
-      paused: !!(S.paused || S._away || (typeof document !== 'undefined' && document.visibilityState === 'hidden')),
-      frozen: !!(S.paused || S._away || (typeof document !== 'undefined' && document.visibilityState === 'hidden')),
-      focused: typeof document !== 'undefined' && document.visibilityState === 'visible',
+      paused: intentionalFreeze,
+      frozen: intentionalFreeze,
+      backgrounded: !!visHidden,
+      focused: !!visVisible,
       lastH: S.lastH || Date.now(),
       lastY: S.lastY || Date.now(),
       lastP: S.lastP || Date.now(),
@@ -8031,12 +8037,15 @@ function pushCareSnapshotToSW(clear) {
       navigator.serviceWorker.controller.postMessage({ type: 'CARE_SNAPSHOT', enabled: false });
       return;
     }
+    // SW local: freeze when hidden so periodicsync does not spam projected pings while tab is backgrounded;
+    // Worker /care uses careSnapshotBody (no frozen-from-hidden) and always projects for closed-phone.
     const frozen = careFrozenNow();
     navigator.serviceWorker.controller.postMessage({
       type: 'CARE_SNAPSHOT',
       enabled: true,
       paused: frozen,
       frozen: frozen,
+      backgrounded: typeof document !== 'undefined' && document.visibilityState === 'hidden',
       sleep: !!S.sleep,
       focused: typeof document !== 'undefined' && document.visibilityState === 'visible',
       stage: S.stage || '',
@@ -8378,7 +8387,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.31', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.32', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -8386,7 +8395,7 @@ navigator.serviceWorker.register('./service-worker.js?v=5.31', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.31', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.32', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {
