@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.30 -->
+<!-- Public Release - POCKETPAL v5.31 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -417,7 +417,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.30 FINAL — audit A/B/C High patches · prior polish kept
+//  POCKETPAL v5.31 FINAL — closed-phone care push reliability · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -1041,6 +1041,7 @@ function useChip() {
 function useTonic() {
   if ((S.invTonic | 0) <= 0) { toast('No Tonic'); return; }
   if (S.stage === 'egg' || S.stage === 'dead') { toast('No pet'); return; }
+  if (S.sleep) { toast('Sleeping...'); return; }
   if (S.paused) { toast('Paused'); return; }
   S.invTonic = (S.invTonic | 0) - 1;
   const wasSick = !!(S.sick || S.injured);
@@ -1058,6 +1059,7 @@ function useTonic() {
   save();
 }
 function openMedMenu() {
+  if (S.sleep) { toast('Sleeping...'); return; }
   if (S.paused) { toast('Paused'); return; }
   if ((S.invTonic | 0) > 0) {
     S.menu = 'medpick';
@@ -2272,6 +2274,22 @@ function careSnapshotBody(sub, enabled) {
     }
   };
 }
+function notePushWorkerBlocked() {
+  if (S._pushWorkerBlockedToast) return;
+  S._pushWorkerBlockedToast = true;
+  try { toast('Push Worker blocked — check Cloudflare Access', { pri: 3, hold: 4200 }); } catch (e) {}
+}
+function looksLikePushWorkerBlocked(res, text) {
+  if (!res) return true;
+  if (res.type === 'opaqueredirect') return true;
+  if (res.status === 302 || res.status === 401 || res.status === 403) return true;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.includes('text/html')) return true;
+  if (ct && !ct.includes('json') && !ct.includes('text/plain')) return true;
+  const sample = String(text || '').slice(0, 80).trim().toLowerCase();
+  if (sample.startsWith('<!doctype') || sample.startsWith('<html') || sample.includes('cloudflareaccess')) return true;
+  return false;
+}
 async function publishCareCard(forceOff) {
   const base = workerBaseUrl();
   if (!base) return false;
@@ -2281,13 +2299,30 @@ async function publishCareCard(forceOff) {
       const reg = await navigator.serviceWorker.ready;
       if (reg.pushManager) sub = await reg.pushManager.getSubscription();
     }
-    await fetch(base + '/care', {
+    const res = await fetch(base + '/care', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(careSnapshotBody(sub, !forceOff && !!S.notifications))
+      body: JSON.stringify(careSnapshotBody(sub, !forceOff && !!S.notifications)),
+      keepalive: true,
+      redirect: 'follow'
     });
+    const text = await res.text();
+    if (looksLikePushWorkerBlocked(res, text)) {
+      notePushWorkerBlocked();
+      return false;
+    }
+    try { JSON.parse(text); } catch (e) {
+      notePushWorkerBlocked();
+      return false;
+    }
+    S._lastCarePub = Date.now();
     return true;
   } catch (e) { return false; }
+}
+/** Bypass 20s throttle — call when tab hides / app closes so Worker gets focused:false. */
+function forcePublishCareOnHide() {
+  S._lastCarePub = 0;
+  try { publishCareCard(); } catch (e) {}
 }
 async function subscribeWebPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
@@ -2301,11 +2336,26 @@ async function subscribeWebPush() {
     }
     const base = workerBaseUrl();
     if (base) {
-      await fetch(base + '/care', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(careSnapshotBody(sub, true))
-      }).catch(() => {});
+      try {
+        const r = await fetch(base + '/care', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(careSnapshotBody(sub, true)),
+          keepalive: true
+        });
+        const txt = await r.text();
+        if (looksLikePushWorkerBlocked(r, txt)) notePushWorkerBlocked();
+        else S._lastCarePub = Date.now();
+      } catch (e) {}
+      // Also probe vapid-public once (Access often wraps GETs as HTML login)
+      try {
+        if (!S._vapidProbed) {
+          S._vapidProbed = true;
+          const vr = await fetch(base + '/vapid-public');
+          const vt = await vr.text();
+          if (looksLikePushWorkerBlocked(vr, vt)) notePushWorkerBlocked();
+        }
+      } catch (e) {}
     }
     return sub;
   } catch (e) { return null; }
@@ -5105,6 +5155,7 @@ function clean() {
   } else toast('Nothing to clean');
 }
 function med() {
+  if (S.sleep) { toast('Sleeping...'); return; }
   if (S.paused) { toast('Paused'); return; }
   if (S.sick) {
     const wasInj = S.injured;
@@ -8215,13 +8266,14 @@ if (navigator.serviceWorker) {
     if (ev.data && ev.data.type === 'CARE_OPEN') hintOpenedCare(ev.data.care);
   });
 }
-window.addEventListener('beforeunload', save);
-window.addEventListener('pagehide', save);
+window.addEventListener('beforeunload', () => { save(); forcePublishCareOnHide(); });
+window.addEventListener('pagehide', () => { save(); forcePublishCareOnHide(); });
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     hiddenAt = Date.now();
     save();
+    forcePublishCareOnHide(); // always POST focused:false (bypass 20s throttle)
     pushCareSnapshotToSW(); // frozen=true — SW must not project drain while hidden
     stopMusic();
   } else {
@@ -8326,7 +8378,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.30', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.31', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -8334,7 +8386,7 @@ navigator.serviceWorker.register('./service-worker.js?v=5.30', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.30', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.31', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {
