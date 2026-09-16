@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.25 -->
+<!-- Public Release - POCKETPAL v5.30 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -417,7 +417,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.25 — richer Pet Memory cards · as-parked status · prior polish kept
+//  POCKETPAL v5.30 FINAL — audit A/B/C High patches · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -821,9 +821,20 @@ function recordFamilyMember(reason) {
     // since v5.23: full continuity for Revive Charm (as-at return-home/death)
     snap: snap
   };
-  // One slot per form+gen to avoid spam; keep history of variants
+  // Album: collapse same form+gen spam, but NEVER drop another pet's
+  // returned/neglect row — that erased Revive Charm targets (v5.29 audit C).
   const key = entry.form + '-G' + entry.gen;
-  S.petFamily = S.petFamily.filter(e => (e.form + '-G' + e.gen) !== key);
+  S.petFamily = S.petFamily.filter(e => {
+    if (!e) return false;
+    const reviveable = (e.reason === 'returned' || e.reason === 'neglect');
+    if (reviveable) {
+      // Replace only the same petId's prior return row
+      if (entry.petId && e.petId && e.petId === entry.petId &&
+          (reason === 'returned' || reason === 'neglect')) return false;
+      return true;
+    }
+    return (e.form + '-G' + e.gen) !== key;
+  });
   S.petFamily.unshift(entry);
   if (S.petFamily.length > 24) S.petFamily.pop();
 }
@@ -1246,6 +1257,7 @@ function confirmReviveFamily(fi) {
   melWake();
   save();
   updateUI();
+  updateIconHighlight();
 }
 window.openPalShop = openPalShop;
 window.openRevivePicker = openRevivePicker;
@@ -1308,6 +1320,7 @@ function eggBiasMorphId(eggId, petId) {
   return (ears + (tail * 8) + (pattern * 64)) % SPECIES_COUNT;
 }
 function beginEggSelect(opts) {
+  S.sel = 0;
   S.eggSelect = true;
   S.eggPick = 0;
   S.eggId = null;
@@ -1321,6 +1334,7 @@ function beginEggSelect(opts) {
   S.eggReadyAt = null;
   delete S.eggLeft;
   if (!(opts && opts.silent)) toast('Pick an egg · A cycle  B confirm', { pri: 3, hold: 2800 });
+  updateIconHighlight();
 }
 function confirmEggSelect() {
   if (!S.eggSelect) return;
@@ -1336,6 +1350,16 @@ function confirmEggSelect() {
   beep(520, 0.06);
   toast(EGG_NAMES[pick] + ' · TEMP ' + tr.trait + ' · hatch ~5 min', { pri: 3, hold: 2800 });
   save();
+  updateIconHighlight();
+}
+function eggWaitMessage() {
+  if (S.eggSelect) return 'Pick an egg · A cycle  B confirm';
+  const left = Math.max(0, (S.eggReadyAt || 0) - Date.now());
+  if ((S.hatchPhase | 0) >= 1 || (S.eggReadyAt && left <= 30000)) {
+    return left <= 0 ? 'Hatching!' : 'Egg is hatching...';
+  }
+  if (S.eggReadyAt) return 'Egg warming · ' + Math.max(1, Math.ceil(left / 60000)) + ' min';
+  return 'Egg warming — wait to hatch';
 }
 function melHatch() {
   melody([[392,0.06],[523,0.06],[659,0.07],[784,0.08],[988,0.1],[1175,0.16]]);
@@ -1891,6 +1915,9 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
     // Accents / patterns wait for higher kit — keep baby face clean
     return;
   }
+  // v5.30: forms that paint their own ears/fins/horns — skip morph ear layer (audit B3)
+  const formOwnsEars = (form === 'child' || form === 'adult1' || form === 'adult2' || form === 'adult8');
+  if (!formOwnsEars) {
   let ears = m.ears;
   // kit 1: suppress tall/wide ear variants → short stubs (species still hinted by type 0/3/6)
   if (lv === 1 && (ears === 5 || ears === 7)) ears = 6;
@@ -1938,6 +1965,7 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
       px(rootR + i, top + 3 + Math.floor(i / 2), INK);
     }
   }
+  } // !formOwnsEars
 
   // Patterns once kit ≥ 1 (already inside lv>0)
   const bellyY = met.cy + Math.max(8, Math.floor(met.r * 0.55));
@@ -3769,7 +3797,9 @@ function drawPet(cx, cy, form, f) {
 
 function drawModeStrip() {
   // Small selected-mode icon strip at bottom of LCD (classic feel)
+  // Selection = filled invert; care-need = blinking outline/underline only
   const INK = '#0f380f';
+  const LCD = '#9bbc0f';
   const labels = ['ST','FD','PL','CL','MD','LT','CN','DS'];
   const x0 = 8;
   const y = H - 12;
@@ -3780,10 +3810,13 @@ function drawModeStrip() {
     const needIdx = need ? map[need] : -1;
     if (i === S.sel) {
       fillRect(x - 2, y - 2, 26, 11, INK);
-      drawText(labels[i], x + 2, y, '#9bbc0f');
+      drawText(labels[i], x + 2, y, LCD);
     } else if (i === needIdx && (S.frame % 40 < 22)) {
-      fillRect(x - 2, y - 2, 26, 11, INK);
-      drawText(labels[i], x + 2, y, '#9bbc0f');
+      fillRect(x - 2, y - 2, 26, 1, INK);
+      fillRect(x - 2, y + 8, 26, 1, INK);
+      fillRect(x - 2, y - 2, 1, 11, INK);
+      fillRect(x + 23, y - 2, 1, 11, INK);
+      drawText(labels[i], x + 2, y, INK);
     } else {
       drawText(labels[i], x + 2, y, INK);
     }
@@ -4100,64 +4133,68 @@ function update() {
   // The wall clock always follows the phone, including egg/dead/paused states.
   syncDeviceClock(now);
 
-  // Battle state machine
-  if (S.battle) advanceBattle(now);
+  // v5.30: battle / train / memory clocks freeze with Pause / Away / hidden tab (audit A H2)
+  const arenaFrozen = !!(S.paused || S._away || (typeof document !== 'undefined' && document.visibilityState === 'hidden'));
+  if (!arenaFrozen) {
+    // Battle state machine
+    if (S.battle) advanceBattle(now);
 
-  // Training timing game
-  if (S.game && S.gameType === 'train') {
-    // Coach-style metronome beeps between cues (sparse; beep() no-ops when sound off)
-    if (S.trainPhase === 'wait' && !S.paused && S.sound) {
-      if (!S._trainBeepAt) S._trainBeepAt = now + 900;
-      if (now >= S._trainBeepAt) {
-        beep(320 + (Math.floor(S.frame / 14) % 3) * 30, 0.02, 'square', 0.035);
-        S._trainBeepAt = now + 900;
+    // Training timing game
+    if (S.game && S.gameType === 'train') {
+      // Coach-style metronome beeps between cues (sparse; beep() no-ops when sound off)
+      if (S.trainPhase === 'wait' && !S.paused && S.sound) {
+        if (!S._trainBeepAt) S._trainBeepAt = now + 900;
+        if (now >= S._trainBeepAt) {
+          beep(320 + (Math.floor(S.frame / 14) % 3) * 30, 0.02, 'square', 0.035);
+          S._trainBeepAt = now + 900;
+        }
+      }
+      if (S.trainPhase === 'wait' && now >= (S.trainUntil || 0)) {
+        S.trainPhase = 'go';
+        // First cue is always B (the confirm button). Later rounds mix A/B.
+        S.trainBtn = (S.gRound <= 1) ? 'B' : ((Math.random() < 0.5) ? 'A' : 'B');
+        S.trainUntil = now + 2000; // 2s window — readable on a phone (unchanged by personality)
+        S._trainBeepAt = 0;
+        toast('PRESS ' + S.trainBtn + '!');
+        beep(880, 0.06);
+        // CLEVER: sharper spark + tiny follow-up beep (feel only — no STA/win change)
+        if (personalityOf(S) === 'CLEVER') {
+          spawnFx('spark', 120, 68, 2);
+          beep(1180, 0.028);
+        }
+      } else if (S.trainPhase === 'go' && now >= (S.trainUntil || 0)) {
+        S.playResult = 'sad';
+        S._trainReact = 'stumble';
+        S._trainReactUntil = now + 450;
+        if ((S.trainOops || 0) > 0) {
+          S.trainOops--;
+          toast('Missed it — 1 more chance');
+          S.gRound++;
+          if (S.gRound > 3) endTraining(S.gScore >= 2);
+          else trainNextWait(now);
+        } else {
+          endTraining(S.gScore >= 2);
+        }
       }
     }
-    if (S.trainPhase === 'wait' && now >= (S.trainUntil || 0)) {
-      S.trainPhase = 'go';
-      // First cue is always B (the confirm button). Later rounds mix A/B.
-      S.trainBtn = (S.gRound <= 1) ? 'B' : ((Math.random() < 0.5) ? 'A' : 'B');
-      S.trainUntil = now + 2000; // 2s window — readable on a phone (unchanged by personality)
-      S._trainBeepAt = 0;
-      toast('PRESS ' + S.trainBtn + '!');
-      beep(880, 0.06);
-      // CLEVER: sharper spark + tiny follow-up beep (feel only — no STA/win change)
-      if (personalityOf(S) === 'CLEVER') {
-        spawnFx('spark', 120, 68, 2);
-        beep(1180, 0.028);
-      }
-    } else if (S.trainPhase === 'go' && now >= (S.trainUntil || 0)) {
-      S.playResult = 'sad';
-      S._trainReact = 'stumble';
-      S._trainReactUntil = now + 450;
-      if ((S.trainOops || 0) > 0) {
-        S.trainOops--;
-        toast('Missed it — 1 more chance');
-        S.gRound++;
-        if (S.gRound > 3) endTraining(S.gScore >= 2);
-        else trainNextWait(now);
+
+    // v5.10 post-arena praise / tough-love plate expiry
+    if (S._postArena && now >= (S._postArena.until || 0)) S._postArena = null;
+
+    // Memory game: show each step, then switch to input
+    if (S.game && S.gameType === 'memory' && S.memPhase === 'show' && now > (S.memTimer || 0)) {
+      // Finished displaying current step — advance
+      if (S.memIdx >= S.memSeq.length - 1) {
+        // Whole sequence shown
+        S.memIdx = 0;
+        S.memPhase = 'input';
+        toast('Your turn! A=Left B=Right');
+        beep(600, 0.05);
       } else {
-        endTraining(S.gScore >= 2);
+        S.memIdx++;
+        S.memTimer = now + 750;
+        beep(400, 0.03);
       }
-    }
-  }
-
-  // v5.10 post-arena praise / tough-love plate expiry
-  if (S._postArena && now >= (S._postArena.until || 0)) S._postArena = null;
-
-  // Memory game: show each step, then switch to input
-  if (S.game && S.gameType === 'memory' && S.memPhase === 'show' && now > (S.memTimer || 0)) {
-    // Finished displaying current step — advance
-    if (S.memIdx >= S.memSeq.length - 1) {
-      // Whole sequence shown
-      S.memIdx = 0;
-      S.memPhase = 'input';
-      toast('Your turn! A=Left B=Right');
-      beep(600, 0.05);
-    } else {
-      S.memIdx++;
-      S.memTimer = now + 750;
-      beep(400, 0.03);
     }
   }
 
@@ -4238,6 +4275,7 @@ function update() {
       careNotify('egg', 'Your PocketPal hatched!');
       claimSlotForActive();
       save();
+      updateIconHighlight();
     }
     return;
   }
@@ -4494,6 +4532,8 @@ function update() {
       if (S.game || S.battle) {
         S.poop = true;
         S.poopCount = Math.min(4, (S.poopCount || 0) + 1);
+        if (!S.poopSpots) S.poopSpots = [];
+        S.poopSpots.push(Math.round(S.petX || 120) + 16);
         careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
       } else {
         S.anim = 'poop';
@@ -4659,8 +4699,9 @@ function update() {
       S.age++;
       S.lastAge = now;
       S.lastAgeDay = dayKey;
+      S._growCut = { t0: now, age: S.age, name: displayName(S), phase: S.growthPhase };
       S.anim = 'grow';
-      S.animTimer = now + 1000;
+      S.animTimer = now + 2200;
       checkEvo();
       beep(520, 0.1); beep(700, 0.12);
       toast('Happy birthday! Age ' + S.age);
@@ -5234,6 +5275,17 @@ function shiftCareTimers(frozenFor) {
   if (S.animTimer) S.animTimer += frozenFor;
   // Keep care cinema phase clock aligned with shifted animTimer (Pause / Away)
   if (S._care && S._care.t0) S._care.t0 += frozenFor;
+  // v5.30: evo / grow / hatch / post-arena cinema clocks (audit B1)
+  if (S._evoCut && S._evoCut.t0) S._evoCut.t0 += frozenFor;
+  if (S._growCut && S._growCut.t0) S._growCut.t0 += frozenFor;
+  if (S._hatchCut && S._hatchCut.t0) S._hatchCut.t0 += frozenFor;
+  if (S._postArena && S._postArena.until) S._postArena.until += frozenFor;
+  // v5.30: freeze battle / train / memory / look clocks with care (audit A H2)
+  if (S.bat && S.bat.phaseUntil) S.bat.phaseUntil += frozenFor;
+  if (S.trainUntil) S.trainUntil += frozenFor;
+  if (S.memTimer) S.memTimer += frozenFor;
+  if (S._lookSettleAt) S._lookSettleAt += frozenFor;
+  if (S._gameEyeOpenUntil) S._gameEyeOpenUntil += frozenFor;
   if (S.sleepStart) S.sleepStart += frozenFor;
   if (S.poopSince) S.poopSince += frozenFor;
   if (S._napStarted) S._napStarted += frozenFor;
@@ -6332,7 +6384,9 @@ function snapToFriend(obj) {
   const stage = obj.s || obj.stage || (String(form).startsWith('teen') ? 'teen' : (String(form).startsWith('adult') || form === 'secret' ? 'adult' : 'teen'));
   const morph = obj.m != null ? Number(obj.m) : (obj.morph != null ? Number(obj.morph) : 0);
   const petId = String(obj.id || obj.petId || '');
-  const petName = obj.n || obj.petName || generatePetName(morph);
+  let petName = String(obj.n || obj.petName || generatePetName(morph)).slice(0, 24);
+  petName = petName.replace(/[<>&"'`]/g, '');
+  if (!petName) petName = generatePetName(morph);
   return {
     petId: petId,
     code: petId || null,
@@ -6519,6 +6573,7 @@ function applyPetCard(card){
   resetHomePose();
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
+  try { updateIconHighlight(); } catch(e) {}
 }
 function petMemoryName(p){ return p && (p.petName || NAMES[p.form] || p.form || 'PocketPal'); }
 function petMemoryId(p){
@@ -6714,7 +6769,7 @@ function startFreshLife(){
     showPetMemory();
     return;
   }
-  restart({ silentEgg: true });
+  restart({ silentEgg: true, keepGeneration: true });
   writePetToSlot(empty, memorySnapshot());
   S.activeSlot = empty;
   save();
@@ -6771,6 +6826,7 @@ function useStoredPet(i){
   hide(); updateUI();
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
+  updateIconHighlight();
   toast(petMemoryName(S) + ' active · Slot ' + (i + 1));
 }
 function discardStoredPet(i){
@@ -6952,6 +7008,11 @@ function showPaldex(page) {
 }
 window.showPaldex = showPaldex;
 
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 function showConnectMenu() {
   publishBattleCard();
   const extra = document.getElementById('overlay-extra');
@@ -6962,8 +7023,8 @@ function showConnectMenu() {
     friendHtml = '<div class="friend-list">';
     S.friends.forEach((f, i) => {
       const sel = i === S.selectedFriend ? 'selected' : '';
-      const look = (f.petName || f.name || 'Pal') + ' ' + (f.morph != null ? speciesTag(f.morph) : '') +
-        ' · ' + (NAMES[f.form] || f.stage || '') + ' age ' + (f.age || 0) +
+      const look = escapeHtml(f.petName || f.name || 'Pal') + ' ' + (f.morph != null ? speciesTag(f.morph) : '') +
+        ' · ' + escapeHtml(NAMES[f.form] || f.stage || '') + ' age ' + (f.age || 0) +
         (f.real ? '' : ' · old');
       friendHtml += '<div class="friend-item ' + sel + '" onclick="window.selectFriend(' + i + ')">' + look + '</div>';
     });
@@ -6989,7 +7050,7 @@ function showConnectMenu() {
     '<p style="margin-top:6px;font-size:10px;opacity:0.85">Stage: ' + S.stage + ' · Snapshot fight uses the packed pal, not a generated stand-in. New link from the same pal refreshes their row.</p>' +
     '<div class="btn-row"><button onclick="window.showPetMemory()">Pet Memory (' + ((S.petMemory||[]).filter(e=>e&&e.pet).length) + '/' + MEMORY_SLOTS + ')</button><button onclick="window.showFamilyAlbum()">Family Album (' + ((S.petFamily&&S.petFamily.length)||0) + ')</button></div>' +
     '<div class="btn-row"><button onclick="window.showPaldex()">Paldex (' + speciesSeenCount() + '/' + SPECIES_COUNT + ')</button><button onclick="window.openPalShop()">Pal Shop (' + (S.coins|0) + 'c)</button></div>' +
-    '<p style="margin-top:8px;font-size:11px">Coins ' + (S.coins|0) + ' · Inv C' + (S.invChip|0) + ' T' + (S.invTonic|0) + ' R' + (S.invRevive|0) + ' · Friends ' + S.friends.length + ' · Gen ' + S.generation + ' · ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
+    '<p style="margin-top:8px;font-size:11px">Coins ' + (S.coins|0) + ' · CHIP ' + (S.invChip|0) + ' TON ' + (S.invTonic|0) + ' REV ' + (S.invRevive|0) + ' · Friends ' + S.friends.length + ' · Gen ' + S.generation + ' · ' + (S.battleWins||0) + 'W-' + (S.battleLosses||0) + 'L · C = back</p>';
   show('Connect', 'Share link · Breed · Snapshot battle');
   document.getElementById('obtn').style.display = 'none';
 }
@@ -7339,12 +7400,24 @@ window.addFriend = addFriend;
 window.tryBreed = tryBreed;
 
 // ===== REAL TAMAGOTCHI A/B/C CONTROL =====
-// A = move selection left / Left in game
+// A = move selection right / next icon in main menu
 // B = confirm selection / Right in game
 // C = cancel
 
 function updateIconHighlight() {
-  document.querySelectorAll('.icon').forEach((el, i) => el.classList.toggle('on', i === S.sel));
+  const n = ICONS.length;
+  let sel = Number(S.sel);
+  if (!Number.isFinite(sel) || sel < 0 || sel >= n) sel = 0;
+  S.sel = sel | 0;
+  const action = ICONS[S.sel];
+  const icons = document.querySelectorAll('#icons .icon');
+  let matched = false;
+  icons.forEach(el => {
+    const on = el.getAttribute('data-a') === action;
+    el.classList.toggle('on', on);
+    if (on) matched = true;
+  });
+  if (!matched && icons[S.sel]) icons[S.sel].classList.add('on');
 }
 
 function selectIcon(dir) {
@@ -7361,9 +7434,9 @@ function selectIcon(dir) {
     S.menu = null;
   }
   try { hide(); } catch(e) {}
-  S.sel = (S.sel + dir + ICONS.length) % ICONS.length;
+  S.sel = ((S.sel | 0) + dir + ICONS.length) % ICONS.length;
   updateIconHighlight();
-  const name = ICON_LABELS[ICONS[S.sel]] || ICONS[S.sel];
+  const name = ICON_LABELS[ICONS[S.sel | 0]] || ICONS[S.sel | 0];
   toast(name);
   beep(150, 0.02, 'square', 0.03);
 }
@@ -7413,7 +7486,7 @@ function confirm() {
     return;
   }
   if (S.stage === 'egg') {
-    const a = ICONS[S.sel];
+    const a = ICONS[S.sel | 0];
     if (a === 'status') {
       S.menu = S.menu === 'status' ? null : 'status';
       toast(S.menu === 'status' ? 'STATUS  A=Bed  B=Wake  C=Back' : 'Closed');
@@ -7422,12 +7495,12 @@ function confirm() {
     } else if (a === 'light') {
       light();
     } else {
-      toast('Egg warming — wait to hatch');
+      toast(eggWaitMessage());
     }
     return;
   }
 
-  const a = ICONS[S.sel];
+  const a = ICONS[S.sel | 0];
   if (a === 'status') {
     S.menu = S.menu === 'status' ? null : 'status';
     toast(S.menu === 'status' ? 'STATUS  A=Bed  B=Wake  C=Back' : 'Closed');
@@ -7529,7 +7602,7 @@ document.getElementById('btnA').onclick = () => {
   } else if (S.menu === 'status') {
     bumpBedHour();
   } else {
-    selectIcon(-1); // A = previous icon
+    selectIcon(1); // A = next icon (left→right)
   }
 };
 
@@ -7746,8 +7819,10 @@ function applyOfflineCatchup(now) {
   const happyStep = (S.age < 1 ? 3.8 : 2.9) / sp * d.happy;
   const poopStep = 6.8 / sp;
   const ageStep = (12 * 60) / sp;
-  const hLoss = Math.floor(activeMin / hungerStep);
-  const yLoss = Math.floor(activeMin / happyStep);
+  // v5.30: live sleep freezes meters — offline catchup must match (audit A H3)
+  const sleepFreeze = !!S.sleep;
+  const hLoss = sleepFreeze ? 0 : Math.floor(activeMin / hungerStep);
+  const yLoss = sleepFreeze ? 0 : Math.floor(activeMin / happyStep);
   if (hLoss > 0) {
     S.hunger = Math.max(0, S.hunger - Math.min(hLoss, 4)); // cap offline drain
     // Care miss grows slowly offline — player gets a chance to recover on return
@@ -7762,8 +7837,12 @@ function applyOfflineCatchup(now) {
     S.careMiss += Math.min(3, Math.max(0, yLoss - 1)) * d.care;
     if (S.happy === 0) { S.call = true; careNotify('happy', 'Needs PLAY — open PocketPal and play with me!'); }
   }
-  if (!S.poop && activeMin >= poopStep) {
-    S.poop = true; S.call = true; S.poopX = Math.round(S.petX || 120) + 16; S.poopY = 145; S.poopSince = now;
+  if (!sleepFreeze && !S.poop && activeMin >= poopStep) {
+    S.poop = true; S.call = true;
+    S.poopX = Math.round(S.petX || 120) + 16; S.poopY = 145; S.poopSince = now;
+    S.poopCount = Math.max(1, S.poopCount | 0);
+    if (!S.poopSpots) S.poopSpots = [];
+    if (!S.poopSpots.length) S.poopSpots.push(S.poopX);
     careNotify('poop', 'Needs CLEAN — open PocketPal and clean up!');
   }
   // Classic aging: +1 age per night/morning crossed while away
@@ -7793,6 +7872,27 @@ function applyOfflineCatchup(now) {
   }
   if (nights > 0) {
     S._discPracticed = false;
+  }
+  // v5.30: offline overnight lights-left-ON care miss (audit A H4)
+  // Skip if already in proper lights-off sleep at save time.
+  if (nights > 0 && S.lights && !(S.sleep && S.sleptProperly && !S.lights)) {
+    if (!S.sleptProperly) {
+      S.careMiss += Math.min(nights, 2) * d.care;
+      rustDisc(Math.min(4, nights));
+      try { toast('Left lights on overnight — care miss', { pri: 2 }); } catch (e) {}
+      if (typeof isNightTime === 'function' && isNightTime()) {
+        S.sleep = true;
+        S._dayNap = false;
+        S.lightsMissPending = false;
+        S.sleptProperly = false;
+        S.anim = 'sleep';
+        S.animTimer = now + 999999;
+      } else if (S.sleep && !S._dayNap) {
+        // Returned in daytime after lights-on night — wake like morning path
+        S.sleep = false;
+        S.lightsMissPending = false;
+      }
+    }
   }
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
@@ -7866,7 +7966,7 @@ function applyOfflineCatchup(now) {
   // Grace: do not die immediately after offline catch-up / app update
   S.loadGraceUntil = now + 3 * 60000; // 3 minutes to care for pet
   S.lastSave = now;
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) { noteSaveFail(); }
   return elapsed;
 }
 function careFrozenNow() {
@@ -7906,12 +8006,17 @@ function pushCareSnapshotToSW(clear) {
     });
   } catch (e) {}
 }
+function noteSaveFail() {
+  if (S._saveFailToast) return;
+  S._saveFailToast = true;
+  try { toast('Save failed — storage full', { pri: 3, hold: 3200 }); } catch (e) {}
+}
 function save() {
   S.lastSave = Date.now();
   try {
     if (S.stage !== 'dead' && typeof claimSlotForActive === 'function') claimSlotForActive();
   } catch (e) {}
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) { noteSaveFail(); }
   pushCareSnapshotToSW();
   clearResolvedCareAlerts();
   if (!S._lastCarePub || Date.now() - S._lastCarePub > 20000) {
@@ -8086,6 +8191,13 @@ function load() {
     updateCareStreak();
     tryAcceptFriendFromUrl();
     tryOpenCareFromUrl();
+    {
+      const n = ICONS.length;
+      let sel = Number(S.sel);
+      if (!Number.isFinite(sel) || sel < 0 || sel >= n) S.sel = 0;
+      else S.sel = sel | 0;
+    }
+    updateIconHighlight();
     return true;
   } catch(e) { return false; }
 }
@@ -8142,7 +8254,8 @@ function restart(opts) {
   wipeNonAccountKeys();
   Object.assign(S, petDefaults(now), {
     petId,
-    generation: fromDeath ? ((generation || 1) + 1) : 1,
+    generation: (opts && opts.keepGeneration) ? (generation || 1)
+      : (fromDeath ? ((generation || 1) + 1) : 1),
     activeSlot: null,
     bedHour: 20,
     wakeHour: 8,
@@ -8153,12 +8266,14 @@ function restart(opts) {
   });
   restoreAccountGlobals(keep, { keepActiveSlot: false });
   S.activeSlot = null;
+  S.sel = 0;
   delete S.eggLeft;
   hide();
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
   beginEggSelect({ silent: !!(opts && opts.silentEgg) });
   save();
+  updateIconHighlight();
 }
 function show(title, msg) {
   document.getElementById('otitle').textContent = title;
@@ -8211,7 +8326,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.25', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.30', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -8219,17 +8334,12 @@ navigator.serviceWorker.register('./service-worker.js?v=5.25', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.25', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.30', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {
     hide();
-    if (S.eggSelect) {
-      toast('Pick an egg · A cycle  B confirm', { pri: 3, hold: 2800 });
-    } else {
-      const left = Math.max(0, (S.eggReadyAt || (Date.now() + 5 * 60000)) - Date.now());
-      toast('Egg warming · ' + Math.ceil(left / 60000) + ' min');
-    }
+    toast(eggWaitMessage(), { pri: 3, hold: 2800 });
   } else {
     hide();
     toast('Save restored · Gen ' + S.generation);
@@ -8240,5 +8350,6 @@ function init() {
 init();
 
 </script>
+
 </body>
 </html>
