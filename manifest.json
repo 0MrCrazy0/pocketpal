@@ -1,7 +1,7 @@
 {
   "name": "PocketPal",
   "short_name": "PocketPal",
-  "description": "Raise a handheld pixel pal for about 15 days. 256 looks. Care, train, battle friends with a code.",
+  "description": "Raise a handheld pixel pal for about 15 days. 256 looks. Care, train, battle friends with a share link.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

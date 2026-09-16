@@ -1,5 +1,5 @@
-/* PocketPal Service Worker v5.05 */
-const CACHE = 'pocketpal-v505';
+/* PocketPal Service Worker v5.21 */
+const CACHE = 'pocketpal-v521';
 const META = 'pocketpal-meta';
 const ASSETS = [
   './', './index.html', './manifest.json',
@@ -41,8 +41,15 @@ function projectedStat(v, last, step, now) {
   if (!last || !step || step <= 0) return v;
   return Math.max(0, v - Math.floor((now - last) / step));
 }
+function isFrozen(s) {
+  // paused / frozen / Away / hidden-tab snapshot — live care is not draining
+  return !!(s && (s.paused || s.frozen));
+}
 function dueAlarms(s, now) {
-  if (!s || !s.enabled || s.paused || s.focused) return [];
+  // v5.14: while care is frozen, do NOT project hunger/happy drain (false alerts).
+  // Still surface already-due needs + wall-clock egg hatch. Skip entirely when focused.
+  if (!s || !s.enabled || s.focused) return [];
+  const frozen = isFrozen(s);
   if (s.stage === 'egg') {
     if (s.eggReadyAt && now >= s.eggReadyAt - 120000) {
       return [{ type: 'egg', title: 'Egg is hatching', body: 'Open PocketPal — your pal is coming out.' }];
@@ -51,10 +58,16 @@ function dueAlarms(s, now) {
   }
   if (s.sleep) return [];
   const out = [];
-  if (projectedStat(s.hunger, s.lastH, s.hungerMs || 20 * 60000, now) <= 1) {
+  const hunger = frozen
+    ? (s.hunger | 0)
+    : projectedStat(s.hunger, s.lastH, s.hungerMs || 20 * 60000, now);
+  const happy = frozen
+    ? (s.happy | 0)
+    : projectedStat(s.happy, s.lastY, s.happyMs || 24 * 60000, now);
+  if (hunger <= 1) {
     out.push({ type: 'hunger', title: 'PocketPal is hungry', body: 'Food is almost gone — time to feed.' });
   }
-  if (projectedStat(s.happy, s.lastY, s.happyMs || 24 * 60000, now) <= 1) {
+  if (happy <= 1) {
     out.push({ type: 'happy', title: 'PocketPal wants to play', body: 'Happy is almost gone — play a game.' });
   }
   if ((s.poopCount || 0) >= 1) {
@@ -69,17 +82,19 @@ function dueAlarms(s, now) {
   if (s.naughty) {
     out.push({ type: 'discipline', title: 'PocketPal is being naughty', body: 'Discipline to train them, or ignore and spoil them.' });
   }
-  if (s.stage === 'egg' && s.eggReadyAt && now >= s.eggReadyAt - 120000) {
-    out.push({ type: 'egg', title: 'Egg is hatching', body: 'Open PocketPal — your pal is coming out.' });
-  }
   return out;
 }
 function nextWakeMs(s, now) {
-  if (!s || !s.enabled || s.paused || s.sleep || s.focused) return 0;
+  if (!s || !s.enabled || s.focused || s.sleep) return 0;
+  const frozen = isFrozen(s);
   const waits = [];
+  // Egg hatch is wall-clock even while frozen
   if (s.stage === 'egg' && s.eggReadyAt) waits.push(s.eggReadyAt - 120000 - now);
-  if (s.hunger > 0 && s.lastH) waits.push((s.lastH + (s.hungerMs || 20 * 60000)) - now);
-  if (s.happy > 0 && s.lastY) waits.push((s.lastY + (s.happyMs || 24 * 60000)) - now);
+  // Only schedule projected hunger/happy wakes when care is actively draining
+  if (!frozen) {
+    if (s.hunger > 0 && s.lastH) waits.push((s.lastH + (s.hungerMs || 20 * 60000)) - now);
+    if (s.happy > 0 && s.lastY) waits.push((s.lastY + (s.happyMs || 24 * 60000)) - now);
+  }
   const pos = waits.filter(t => t > 1000);
   return pos.length ? Math.min.apply(null, pos) : 0;
 }
