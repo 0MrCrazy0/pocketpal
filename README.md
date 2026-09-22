@@ -1,77 +1,42 @@
 # PocketPal
 
-A tiny handheld pet you raise in your browser.
+A tiny handheld pal in your browser. Feed it, clean it, play with it. In about **15 days** it grows up. Train it. Fight a **snapshot** of a friend’s pal (not live).
 
-Feed it. Play with it. Watch it grow for about 15 days. Train it. Battle friends with a share link.
+## Play
 
----
+1. Put the files on GitHub Pages (or any static host).
+2. Open the site. On a phone: **Add to Home Screen**.
+3. Pick an egg (A cycle, B lock). Hatch is about **5 minutes**.
+4. Bell **ON** = care pings when the tab is closed. Deploy `cloudflare-worker.js` and set cron to **1 hour**.
 
-## Start
-
-Open the game. **Pick one of six eggs** (A cycle, B confirm). Each egg is a **soft bias** (look family + a lifelong personality seed) — not a locked evolution path. Care still decides growth and adult form. The egg takes **about 5 minutes**. You can close the app — turn the bell on so you get a hatch ping.
-
-On your phone use **Add to Home Screen**.
-
-Save stays on that phone, that browser.
-
-Pet Memory has **5 slots**. Parked pals are frozen. Only the active pal needs care or ages.
-
-They do not leave from old age. Neglect still can.
-
----
+Save stays on that phone and that browser.
 
 ## Buttons
 
-| Button | What it does |
-| --- | --- |
-| **A** | Cycle icons. Guard in battle. Status: bump bedtime. |
-| **B** | Confirm. Attack. Hold B to pause. Status: bump wake time. |
-| **C** | Back. |
-
-Shell: bell (alerts), speaker, palette.
-
----
+| | |
+|---|---|
+| **A** | Cycle / Guard |
+| **B** | Confirm / Attack. Hold B = pause |
+| **C** | Back |
 
 ## Care
 
-- Food hearts low → feed
-- Happy hearts low → play
-- A pile on the screen → clean
-- Sick → medicine
-- Their night (Status sets bed/wake) → lights off. Lights are yours — the game will not flip them back on during the day. Lights off at night = good sleep. Lights left on at night = miss. Lights off while they are awake in the day = dark room, no miss (babies may nap). Waking them at night with lights on = miss.
-- Naughty call (**!** on the LCD) → Discipline, or spoil them
-- Real needs show **FD** feed, **PL** play, **CL** clean, **MD** medicine, **LT** lights
+Food low → feed. Happy low → play. Pile on screen → clean. Sick → medicine. Bedtime, lights off. Wake, lights on. **!** = tantrum (Discipline) only while the bar can still go up.
 
-Open on screen = toast only. Closed / minimized = phone ping if the bell is on.
+Pets do not die of old age. Neglect can send them home.
 
----
+## Growth
 
-## 15 days
+Baby → child (age 2) → teen (age 5) Lumi or Grub from care → adult (age 15). Egg is a soft look + temperament bias. Care picks the body.
 
-| Age | Stage |
-| --- | --- |
-| 5 min egg | Hatch |
-| 0–1 | Baby — big eyes; growthPhase sprouts ear/tail buds + feet |
-| 2–4 | Child — real ears/tail variants; arms wave mid-stage |
-| 5–9 | Teen (Lumi or Grub) — fuller kit |
-| 10–14 | Kit fills in |
-| 15 | Adult — full kit + one of 10 bodies |
-| 20+ trained | Elder |
+Paldex 256 = 8 headgear × 8 eyes × 4 belly = 256. Good care may add a horn on top of ears. Your pal has one ID. Missing = pals you have not met. Perks = temperament, not extra parts.
 
-Same species the whole life. Care changes size, timing, and which body. Growth phases make each stage visibly fill out.
+## Battles
 
----
+Teen+. Training fight or **Battle Friend** with a share link. Adult: win that friend, then Breed. Your pal stays. The egg goes in a free Memory slot (or you clear one). Genes show excellent / good / wild. Same link later **updates** that friend’s pal.
 
-## Train and battle
+Pet Memory: **5** slots. Parked pals are frozen.
 
-Teen+. Train XP, Training Battle, Battle Friend. Breed adults.
+## Upload
 
-Connect → **Share battle link** packs the pal on screen (look, stats, age). Friend opens the link to add them. Send a fresh link later to refresh that row. Too young (egg / baby / child) cannot share.
-
-Paldex = 256 looks you have met. Family = forms you raised (and neglect returns).
-
----
-
-That’s the whole toy.
-
----
+GitHub: `index.html`, `service-worker.js`, `manifest.json`, icons, `README.md`, `LICENSE`.

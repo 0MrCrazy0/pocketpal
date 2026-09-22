@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.32 -->
+<!-- Public Release - POCKETPAL v5.70 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -147,6 +147,15 @@
     border-color: #fff;
     color: #fff;
     box-shadow: 0 0 6px rgba(255,255,255,0.3);
+  }
+  .icon.need {
+    border-color: #9bbc0f;
+    box-shadow: 0 0 8px rgba(155,188,15,0.55);
+    animation: needPulse 1.1s ease-in-out infinite;
+  }
+  @keyframes needPulse {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
   }
   .btns {
     display: flex;
@@ -417,7 +426,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.32 FINAL — closed-app care push projection fix · prior polish kept
+//  POCKETPAL v5.70 FINAL — closed-app care push projection fix · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -695,53 +704,12 @@ function petDefaults(now) {
 }
 
 
-// v2.79 real-time P2P battle runtime (socket is intentionally not saved to localStorage)
-const P2P = { socket:null, room:'', slot:0, connected:false, peer:null, ready:false, peerReady:false, peerLocked:false, locked:false, peerAction:null, sentAction:false };
-function p2pWorkerBase(){ return workerBaseUrl(); }
-function p2pWsUrl(room){ const base=p2pWorkerBase(); if(!base) return ''; return base.replace(/^https:/,'wss:').replace(/^http:/,'ws:') + '/room?code=' + encodeURIComponent(room); }
-function randomRoomCode(){ const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let out=''; for(let i=0;i<6;i++) out+=chars[Math.floor(Math.random()*chars.length)]; return out; }
-function closeP2P(){ try{ if(P2P.socket) P2P.socket.close(); }catch(e){} P2P.socket=null; P2P.connected=false; P2P.peer=null; P2P.room=''; P2P.slot=0; P2P.ready=false; P2P.peerReady=false; P2P.locked=false; P2P.peerLocked=false; P2P.peerAction=null; P2P.sentAction=false; }
-function p2pSend(obj){ try{ if(P2P.socket && P2P.socket.readyState===1) P2P.socket.send(JSON.stringify(obj)); else return false; return true; }catch(e){return false;} }
-function p2pPetCard(){ ensureMorph(S); return {name:displayName(S),form:S.form,stage:S.stage,age:S.age||0,xp:S.battleXP||0,wins:S.battleWins||0,losses:S.battleLosses||0,wt:S.weight||10,disc:S.disc||0,power:battlePower(),maxHP:battleMaxHP(S.stage==='adult'&&S.form==='secret'?'secret':S.stage,S.battleXP),level:battleLevel(S.battleXP),morph:S.morphId||0,petName:S.petName||displayName(S)}; }
-function openP2PRoom(room, create){
-  const block=canBattle();
-  if(block){toast(block);return false;}
-  const code=(room||randomRoomCode()).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
-  const url=p2pWsUrl(code); if(!url){toast('Cloudflare Worker not configured');return false;}
-  closeP2P(); P2P.room=code; P2P.socket=new WebSocket(url);
-  P2P.socket.onopen=()=>{P2P.connected=true; p2pSend({type:'hello',pet:p2pPetCard()}); showP2PRoom();};
-  P2P.socket.onmessage=(ev)=>{ let m; try{m=JSON.parse(ev.data)}catch(e){return;}
-    if(m.type==='joined'){P2P.slot=m.slot||1; showP2PRoom();}
-    else if(m.type==='players'){showP2PRoom();}
-    else if(m.type==='peer'){P2P.peer=m.pet||null; if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.enemyName=P2P.peer.name||'Rival';S.bat.enemyForm=P2P.peer.form;S.bat.enemyStage=P2P.peer.stage;S.bat.enemyXP=P2P.peer.xp||0;S.bat.enemyWins=P2P.peer.wins||0;S.bat.enemyLosses=P2P.peer.losses||0;S.bat.enemyDisc=P2P.peer.disc||0;S.bat.enemyLevel=P2P.peer.level||1;S.bat.enPower=P2P.peer.power||1;S.bat.enMax=P2P.peer.maxHP||6;S.bat.enHP=S.bat.enMax;} showP2PRoom();}
-    else if(m.type==='ready'){P2P.peerReady=true; if(!S.battle) { toast('Opponent ready'); }}
-    else if(m.type==='lock'){P2P.peerLocked=true; if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.peerLocked=true; S.bat.log='OPPONENT LOCKED';}}
-    else if(m.type==='start'){if(!S.battle) startP2PBattle(); if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.phase='inspect';S.bat.phaseUntil=Date.now()+2800;S.bat.order=null;S.bat.charge=0;S.bat.peerAction=null;S.bat.sentAction=false;S.bat.log='ROUND 1 — ORDER!';}}
-    else if(m.type==='action'){if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.peerAction=m.action||{order:'attack',charge:0}; S.bat.log='OPPONENT READY';}}
-    else if(m.type==='forfeit'){if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.bat.won=true; S.bat.phase='end'; S.bat.phaseUntil=Date.now()+900; S.bat.log='OPPONENT FORFEIT!';}}
-    else if(m.type==='room_full'){toast('Room is full');closeP2P();}
-    else if(m.type==='opponent_left'){toast('Opponent left the room'); if(S.battle&&S.bat&&S.bat.kind==='p2p'){closeP2PBattle(true);} else closeP2P();}
-  };
-  P2P.socket.onerror=()=>{toast('P2P connection failed');closeP2P();};
-  P2P.socket.onclose=()=>{P2P.connected=false;};
-  return true;
-}
-function showP2PRoom(){
-  const extra=document.getElementById('overlay-extra'); if(!extra)return;
-  const waiting=!P2P.peer;
-  extra.innerHTML='<p><strong>ROOM '+P2P.room+'</strong></p>' + (waiting?'<p style="font-size:12px">Share this 6-character room code. Waiting for your opponent...</p>':'<p style="font-size:12px">Opponent connected: <strong>'+String(P2P.peer.name||'Rival')+'</strong></p>') + '<div class="btn-row"><button onclick="window.startP2PMatch()">'+(waiting?'WAITING...':'START P2P BATTLE')+'</button><button onclick="window.leaveP2PRoom()">LEAVE</button></div>';
-  show('P2P BATTLE','Real-time friend room'); document.getElementById('obtn').style.display='none';
-}
-function createP2PRoom(){ toast('P2P rooms are off — use Battle Friend with a share link'); }
-function joinP2PRoom(){ toast('P2P rooms are off — use Battle Friend with a share link'); }
-function leaveP2PRoom(){ closeP2P(); if(S.battle&&S.bat&&S.bat.kind==='p2p'){S.battle=false;S.bat=null;S.battleLocked=false;} showConnectMenu(); }
-function startP2PMatch(){ if(!P2P.peer){toast('Waiting for opponent');return;} const block=canBattle(); if(block){toast(block);beep(160,0.08);return;} P2P.ready=true; p2pSend({type:'ready'}); showP2PRoom(); toast('Ready — waiting for your opponent'); }
-function startP2PBattle(){
-  hide(); const me=p2pPetCard(), en=P2P.peer; if(!en){toast('Waiting for opponent');return;}
-  S.battle=true; S.game=false; S.menu=null; S.sleep=false; S.anim=null; S.battleLocked=false;
-  S.bat={kind:'p2p',phase:'inspect',_phaseDur:1200,phaseUntil:Date.now()+1200,round:1,maxRounds:5,myHP:me.maxHP,myMax:me.maxHP,enHP:en.maxHP||6,enMax:en.maxHP||6,myPower:me.power,enPower:en.power||1,enemyName:en.name||'Rival',enemyStage:en.stage||'teen',enemyForm:en.form||'teenGood',enemyMorph:en.morph||0,enemyXP:en.xp||0,enemyWins:en.wins||0,enemyLosses:en.losses||0,enemyDisc:en.disc||0,enemyLevel:en.level||1,order:null,charge:0,myStamina:8,myStaminaMax:10,enStamina:10,log:'CHECK STATS — B=LOCK IN',pendingDmg:0,won:null,peerLocked:false,sentAction:false,peerAction:null};
-  P2P.locked=false;P2P.ready=true;P2P.peerLocked=false;P2P.sentAction=false;P2P.peerAction=null; toast('P2P battle — inspect stats, then B to lock in');
-}
+// Snapshot battles only — live P2P removed
+const P2P = { locked:false };
+function p2pSend(){ return false; }
+function closeP2P(){}
+function createP2PRoom(){ toast('Use Battle Friend with a share link'); }
+function joinP2PRoom(){ toast('Use Battle Friend with a share link'); }
 function resetHomePose(){
   S._idleBit = null;
   S._idleUntil = 0;
@@ -765,7 +733,7 @@ function resetHomePose(){
   S.petTargetX = 120;
   if (S.sel == null || S.sel < 0 || S.sel > 7) S.sel = 0;
 }
-function closeP2PBattle(opponentLeft){ closeP2P(); S.battle=false;S.bat=null;S.battleLocked=false;S.menu=null; resetHomePose(); if(opponentLeft) toast('P2P battle ended — opponent left before completion'); save(); }
+function closeP2PBattle(){ S.battle=false;S.bat=null;S.battleLocked=false;S.menu=null; resetHomePose(); save(); }
 
 
 // v5.17: FORM_TRAITS (Curious/Playful/…) removed — confused with TEMP personality seed.
@@ -1316,10 +1284,9 @@ function eggBiasMorphId(eggId, petId) {
   const seed = hash32(String(id) + '|' + (petId || 'PAL') + '|morph');
   const earSpan = Math.max(1, tr.earsHi - tr.earsLo + 1);
   const ears = tr.earsLo + (seed % earSpan);
-  const tail = Math.floor(seed / 8) % 8;
-  // Prefer patternPref ~70%, else seed pattern
+  const eyes = Math.floor(seed / 8) % 8;
   const pattern = ((seed >> 4) % 10) < 7 ? tr.patternPref : Math.floor(seed / 64) % 4;
-  return (ears + (tail * 8) + (pattern * 64)) % SPECIES_COUNT;
+  return (ears + eyes * 8 + pattern * 64) % SPECIES_COUNT;
 }
 function beginEggSelect(opts) {
   S.sel = 0;
@@ -1531,10 +1498,11 @@ function morphParts(id) {
   return {
     id: id,
     ears: id % 8,
-    tail: Math.floor(id / 8) % 8,
+    eyes: Math.floor(id / 8) % 8,
     pattern: Math.floor(id / 64) % 4,
-    accent: (id * 5 + 3) % 8,
-    eyes: Math.floor(id / 16) % 4
+    mark: 0,
+    tail: 0,
+    accent: 1 + (Math.floor(id / 64) % 2)
   };
 }
 function generatePetName(id) {
@@ -1565,7 +1533,7 @@ function assignNewMorph(p, parent, partner) {
     : null;
   if (pId != null && qId != null && r < 0.35) {
     const a = morphParts(pId), b = morphParts(qId);
-    id = (a.ears + (b.tail * 8) + (a.pattern * 64)) % SPECIES_COUNT;
+    id = (a.ears + ((b.eyes % 8) * 8) + (a.pattern * 64)) % SPECIES_COUNT;
   } else if (pId != null && r < 0.62) {
     id = ((pId % SPECIES_COUNT) + SPECIES_COUNT) % SPECIES_COUNT;
   } else if (t.eggId != null || t.eggChoice != null) {
@@ -1591,8 +1559,11 @@ function assignNewMorph(p, parent, partner) {
 function ensureMorph(p) {
   const t = p || S;
   if (!t || t.form === 'egg' || t.stage === 'egg') return 0;
-  if (t.morphId == null || t.morphId < 0 || t.morphId >= SPECIES_COUNT) {
+  // Keep a saved look. Never reshuffle a valid 0–255 on deploy/load.
+  if (t.morphId == null || t.morphId === '' || isNaN(Number(t.morphId))) {
     t.morphId = hash32((t.petId || 'PAL') + '|' + (t.generation || 1) + '|' + (t.born || 0)) % SPECIES_COUNT;
+  } else {
+    t.morphId = ((Number(t.morphId) % SPECIES_COUNT) + SPECIES_COUNT) % SPECIES_COUNT;
   }
   if (!t.petName) t.petName = generatePetName(t.morphId);
   markSpeciesSeen(t.morphId);
@@ -1622,42 +1593,45 @@ function discQuotaLeft() {
   if (d >= 100) return 0;
   return Math.ceil((100 - d) / 25);
 }
+function homeDrawBoost() {
+  return 0; // same pixels home and battle — different scale was a "wrong pal" bug
+}
 function formMetrics(form, g) {
   g = g || 0;
-  let r = 15, cy = 1;
-  // v5.18: clearer per-phase body fill (baby/child steps of +2)
-  if (form === 'baby') { r = 8 + g * 2; cy = 2; }
-  else if (form === 'child') { r = 12 + g * 2; cy = 1; }
-  else if (form === 'teenGood') { r = 14 + g; cy = 0; }
-  else if (form === 'teenBad') { r = 12 + g; cy = 1; }
-  else if (form === 'adult1' || form === 'adult3') { r = 16; cy = 1; }
-  else if (form === 'adult4') { r = 18; cy = 2; }
-  else if (form === 'adult5') { r = 12; cy = 10; }
-  else if (form === 'adult6') { r = 17; cy = 4; }
-  else if (form === 'adult7') { r = 15; cy = 2; }
-  else if (form === 'adult8') { r = 14; cy = 2; }
-  else if (form === 'adult9') { r = 14; cy = 0; }
-  else if (form === 'adult10') { r = 15; cy = 1; }
-  else if (form === 'secret') { r = 16; cy = 0; }
-  else if (form === 'adult2') { r = 15; cy = 1; }
+  const hb = (form === 'egg' || form === 'dead') ? 0 : homeDrawBoost();
+  let r = 14 + hb, cy = 1;
+  if (form === 'baby') { r = 10 + g + hb; cy = 2; }
+  else if (form === 'child') { r = 13 + g + hb; cy = 1; }
+  else if (form === 'teenGood') { r = 15 + g + hb; cy = 0; }
+  else if (form === 'teenBad') { r = 14 + g + hb; cy = 1; }
+  else if (form === 'adult4') { r = 18 + hb; cy = 2; }
+  else if (form === 'adult5') { r = 13 + hb; cy = 2; }
+  else if (form === 'adult6') { r = 17 + hb; cy = 3; }
+  else if (form === 'secret') { r = 16 + hb; cy = 0; }
+  else if (form === 'adult1' || form === 'adult3') { r = 16 + hb; cy = 1; }
+  const skew = ((S && (S._morphDraw != null ? S._morphDraw : S.morphId)) || 0) % 3;
+  if (skew === 1) r += 1;
   return {
-    r: r,
-    cy: cy,
+    r: r, cy: cy,
+    headR: r, headCy: cy, torsoR: r, torsoCy: cy,
     crown: cy - r + 1,
     cheekY: cy,
-    // Interior root so the tail grows OUT of the body (not beside it)
-    tailX: Math.max(3, Math.floor(r * 0.38)),
-    tailY: cy + Math.max(3, Math.floor(r * 0.48)),
-    earX: Math.max(6, r - 3),
-    armY: cy + 1,
-    armX: r,
-    faceY: cy - Math.max(3, Math.floor(r * 0.42)),
-    mouthY: cy + Math.max(3, Math.floor(r * 0.28))
+    earX: Math.max(4, r - 5),
+    armY: cy + 2, armX: r,
+    faceY: cy - Math.max(3, Math.floor(r * 0.38)),
+    mouthY: cy + Math.max(3, Math.floor(r * 0.32))
   };
 }
 function onPetBody(x, y, met) {
-  const dx = x, dy = y - met.cy;
-  return dx * dx + dy * dy <= (met.r - 1) * (met.r - 1);
+  const hr = met.headR || met.r;
+  const hcy = (met.headCy != null) ? met.headCy : met.cy;
+  const dhx = x, dhy = y - hcy;
+  if (dhx * dhx + dhy * dhy <= (hr - 1) * (hr - 1)) return true;
+  if (met.torsoR) {
+    const dx = x, dy = y - met.torsoCy;
+    if (dx * dx + dy * dy <= (met.torsoR - 1) * (met.torsoR - 1)) return true;
+  }
+  return false;
 }
 // v5.20 Face Fit: sockets/pupils scaled to body radius + clamped on circle
 function faceSocketLayout(met, eyeKind) {
@@ -1677,11 +1651,20 @@ function faceSocketLayout(met, eyeKind) {
     if (r > 10) sockW = Math.max(3, sockW - 1);
     sockH = Math.min(sockW + (r <= 10 ? 1 : 2), Math.max(4, Math.floor(r * 0.55)));
   } else if (eyeKind === 3) {
-    // Wide / flat
     sockW = Math.min(sockW + 1, Math.max(4, Math.floor(r * 0.55)));
     sockH = Math.max(3, Math.floor(sockW * 0.5));
+  } else if (eyeKind === 4) {
+    sockW = 3; sockH = 3;
+  } else if (eyeKind === 5) {
+    sockW = Math.min(8, sockW + 2); sockH = sockW;
+  } else if (eyeKind === 6) {
+    /* close-set applied below */
+  } else if (eyeKind === 7) {
+    sockW = Math.max(3, sockW - 1); sockH = Math.max(3, sockH - 1);
   }
   let gap = Math.max(2, Math.min(4, Math.floor(r * 0.28)));
+  if (eyeKind === 6) gap = 1;
+  if (eyeKind === 7) gap = Math.min(6, gap + 2);
   let ey = met.faceY;
   function onFaceInset(x, y) {
     const dx = x, dy = y - met.cy;
@@ -1820,82 +1803,42 @@ function naughtyPart(morphId) {
 }
 function tailAnchor(form, g) {
   const met = formMetrics(form, g);
-  let cx = 0, cy = met.cy, r = met.r;
-  if (form === 'teenBad') { cx = 5; cy = 3; r = 10 + (g || 0); }
-  if (form === 'adult5') { cx = 0; cy = 10; r = 11; }
-  // Down-right unit on the silhouette, then step inside so the stem overlaps the body
-  const ux = 0.68, uy = 0.70;
+  let cx = 0, cy = met.torsoCy != null ? met.torsoCy : met.cy;
+  let r = met.torsoR != null ? met.torsoR : met.r;
+  const ux = 0.95, uy = 0.08;
   return {
-    x: cx + Math.round(ux * (r - 7)),
-    y: cy + Math.round(uy * (r - 7)),
-    ex: cx + Math.round(ux * (r - 1)),
-    ey: cy + Math.round(uy * (r - 1))
+    x: cx + Math.round(ux * (r - 4)),
+    y: cy + Math.round(uy * (r - 4)),
+    ex: cx + Math.round(ux * (r + 1)),
+    ey: cy + Math.round(uy * (r + 1))
   };
 }
 function drawMorphTail(form, morphId, g, INK, f) {
+  return; // v5.70: tails off until a rump attach looks right
   if (form === 'egg' || form === 'dead') return;
+  if (kitLevelNow(form) < 3) return;
   const m = morphParts(morphId);
   const a = tailAnchor(form, g);
-  const lv = kitLevelNow(form);
   let wag = (S.sleep || S.anim === 'eat' || S.anim === 'sick') ? 0 : (((f || 0) >> 3) & 1);
-  if (isNaughty() && naughtyPart(morphId) === 'tail') wag = ((f || 0) >> 2) & 1 ? 1 : 0;
-  // v5.18: kit 0 = face-only; optional 1px morph stub if tail ≠ 0
-  if (lv <= 0) {
-    if (m.tail !== 0) {
-      px(a.ex + wag, a.ey, INK);
-      px(a.ex + 1 + wag, a.ey + 1, INK);
-    }
-    return;
-  }
   let tail = m.tail;
-  // kit 1: collapse flashy long tails to short stub (still species-hinted)
-  if (lv === 1 && (tail === 1 || tail === 2 || tail === 6 || tail === 7)) tail = 0;
-  // Stem along body edge
-  for (let i = 0; i <= 7; i++) {
-    const x = a.x + Math.round((a.ex - a.x) * i / 7);
-    const y = a.y + Math.round((a.ey - a.y) * i / 7);
-    fillRect(x, y, 3, 3, INK);
+  const g2 = Math.min(partGrow(g), 2);
+  for (let i = 0; i <= 4; i++) {
+    const x = a.x + Math.round((a.ex - a.x) * i / 4);
+    const y = a.y + Math.round((a.ey - a.y) * i / 4);
+    px(x, y, INK); px(x, y + 1, INK);
   }
-  // kit 1 late phase: +1px bud; kit 2+: partGrow capped by lv
-  const grow = lv <= 1
-    ? ((g || 0) >= 3 ? 1 : 0)
-    : Math.min(partGrow(g), Math.max(0, lv - 2));
-  const tx = a.ex;
-  const ty = a.ey;
-  const fx = tx + wag;
-  const fy = ty;
-
-  fillRect(tx - 1, ty - 1, 4, 4, INK);
-  if (tail === 0) {
-    fillRect(tx, ty, 3 + grow, 3 + grow, INK);
-    px(fx + 3 + grow, fy + 2 + grow, INK);
-  } else if (tail === 1) {
-    for (let i = 0; i < 7 + grow; i++) {
-      fillRect(tx + Math.floor(i / 4), ty + i, 3, 2, INK);
-    }
-    px(fx + 2, fy + 7 + grow, INK);
-  } else if (tail === 2) {
-    fillRect(tx, ty, 3, 5 + grow, INK);
-    fillRect(tx + 1, ty + 4 + grow, 4 + grow, 3, INK);
-    fillRect(fx + 3, fy + 2, 3, 5 + grow, INK);
-  } else if (tail === 3) {
-    fillRect(tx - 2, ty + 1, 2, 4 + grow, INK);
-    fillRect(tx + 3, ty + 1, 2, 4 + grow, INK);
-    px(fx - 3, fy + 5 + grow, INK); px(fx + 5, fy + 5 + grow, INK);
-  } else if (tail === 4) {
-    fillRect(tx + 2, ty - 1, 3, 3, INK);
-    px(fx + 5, fy - 2, INK); px(fx + 6, fy - 3 - grow, INK);
-  } else if (tail === 5) {
-    fillCirc(tx + 2, ty + 3, 3 + grow, INK);
-  } else if (tail === 6) {
-    for (let i = 0; i < 8 + grow; i++) {
-      fillRect(tx + Math.floor(i / 5), ty + i, 3, 2, INK);
-    }
-    px(fx + 1, fy + 8 + grow, INK);
+  const tx = a.ex, ty = a.ey;
+  const along = (i) => ({ x: tx + i, y: ty + Math.floor(i / 5) + wag });
+  if (tail === 0) fillCirc(tx + 1, ty + wag, 2, INK);
+  else if (tail === 5) fillCirc(tx + 2, ty + wag, 2 + Math.min(1, g2), INK);
+  else if (tail === 4) {
+    for (let i = 0; i < 4 + g2; i++) px(tx + i, ty - i + wag, INK);
   } else {
-    fillRect(tx + 1, ty + 1, 3, 5 + grow, INK);
-    px(fx + 4, fy + 1, INK); px(fx + 5, fy, INK);
-    px(fx + 4, fy + 5 + grow, INK);
+    const n = (tail === 6 ? 8 : 6) + g2;
+    for (let i = 0; i < n; i++) {
+      const p = along(i);
+      px(p.x, p.y, INK); px(p.x, p.y + 1, INK);
+    }
   }
 }
 function drawMorphHead(form, morphId, g, INK, BG, f) {
@@ -1918,70 +1861,90 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
     return;
   }
   // v5.30: forms that paint their own ears/fins/horns — skip morph ear layer (audit B3)
-  const formOwnsEars = (form === 'child' || form === 'adult1' || form === 'adult2' || form === 'adult8');
+  const formOwnsEars = (form === 'adult3');
   if (!formOwnsEars) {
   let ears = m.ears;
-  // kit 1: suppress tall/wide ear variants → short stubs (species still hinted by type 0/3/6)
-  if (lv === 1 && (ears === 5 || ears === 7)) ears = 6;
-  else if (lv === 1 && (ears === 1 || ears === 2)) ears = 6;
-  const grow = lv <= 1
-    ? ((g || 0) >= 3 ? 1 : 0)
-    : Math.min(partGrow(g), Math.max(0, lv - 2));
-  const earX = met.earX + grow;
+  const grow = lv <= 1 ? ((g || 0) >= 3 ? 1 : 0) : Math.min(partGrow(g), Math.max(0, lv - 2));
+  const hornX = Math.max(3, Math.floor(met.r * 0.35));
+  const hornY = top + 1;
+  const capY = top;
+  const earX = Math.max(4, met.r - 4);
+  const earY = met.cy - Math.max(1, Math.floor(met.r * 0.2));
   const rootL = -earX, rootR = earX;
-  px(rootL, top + 2, INK); px(rootL + 1, top + 2, INK);
-  px(rootR - 1, top + 2, INK); px(rootR, top + 2, INK);
+  const ry = earY;
+  function paintHorns() {
+    for (let i = 0; i < 6 + grow; i++) {
+      px(-hornX, hornY - i, INK); px(-hornX - 1, hornY - i + 1, INK);
+      px(hornX, hornY - i, INK); px(hornX + 1, hornY - i + 1, INK);
+    }
+    px(-hornX, hornY - 6 - grow, INK); px(hornX, hornY - 6 - grow, INK);
+  }
+  function paintHair() {
+    fillRect(-4, capY - 1, 9, 3, INK);
+    px(0, capY - 3, INK); px(-2, capY - 3, INK); px(2, capY - 3, INK);
+    px(-3, capY - 2, INK); px(3, capY - 2, INK);
+  }
+  function paintAntenna() {
+    px(-1, capY, INK); px(1, capY, INK);
+    px(-1, capY - 2, INK); px(1, capY - 2, INK);
+    px(-1, capY - 4 - grow, INK); px(1, capY - 4 - grow, INK);
+    px(-2, capY - 6 - grow, INK); px(2, capY - 6 - grow, INK);
+    px(-3, capY - 6 - grow, INK); px(3, capY - 6 - grow, INK);
+  }
 
   if (ears === 0) {
-    fillCirc(rootL - 1, top + 3, 4 + grow, INK);
-    fillCirc(rootR + 1, top + 3, 4 + grow, INK);
+    fillCirc(rootL, ry + 1, 3 + Math.min(1, grow), INK);
+    fillCirc(rootR, ry + 1, 3 + Math.min(1, grow), INK);
   } else if (ears === 1) {
-    for (let i = 0; i < 8 + grow * 2; i++) {
-      px(rootL + 2 + Math.floor(i / 3), top + 1 - i, INK);
-      px(rootL + 3 + Math.floor(i / 3), top + 1 - i, INK);
-      px(rootR - 2 - Math.floor(i / 3), top + 1 - i, INK);
-      px(rootR - 3 - Math.floor(i / 3), top + 1 - i, INK);
+    for (let i = 0; i < 6 + grow; i++) {
+      px(rootL + Math.floor(i / 4), ry - i, INK);
+      px(rootL + 1 + Math.floor(i / 4), ry - i, INK);
+      px(rootR - Math.floor(i / 4), ry - i, INK);
+      px(rootR - 1 - Math.floor(i / 4), ry - i, INK);
     }
   } else if (ears === 2) {
-    fillRect(rootL - 3 - grow, top + 1, 5 + grow, 8 + grow, INK);
-    fillRect(rootR - 1, top + 1, 5 + grow, 8 + grow, INK);
-    px(rootL - 4 - grow, top + 8 + grow, INK); px(rootR + 4 + grow, top + 8 + grow, INK);
+    // Flop ears: 3px taper from the root, not a detached square slab
+    for (let i = 0; i < 6 + grow; i++) {
+      const w = i < 2 ? 3 : 2;
+      fillRect(rootL - 1, ry + i, w, 1, INK);
+      fillRect(rootR - (w - 1), ry + i, w, 1, INK);
+    }
   } else if (ears === 3) {
-    fillCirc(rootL - 2, top + 3, 4 + grow, INK);
-    fillCirc(rootR + 2, top + 3, 4 + grow, INK);
+    fillCirc(rootL, ry + 1, 3 + Math.min(2, grow), INK);
+    fillCirc(rootR, ry + 1, 3 + Math.min(2, grow), INK);
   } else if (ears === 4) {
-    fillRect(-2, top - 1 - grow, 2, 5 + grow, INK); fillCirc(-1, top - 3 - grow, 2, INK);
-    fillRect(1, top - grow, 2, 4 + grow, INK); fillCirc(2, top - 2 - grow, 2, INK);
+    paintHorns();
   } else if (ears === 5) {
-    fillRect(rootL + 1, top - 8 - grow, 4, 12 + grow, INK);
-    fillRect(rootR - 4, top - 8 - grow, 4, 12 + grow, INK);
-    px(rootL + 2, top - 9 - grow, INK); px(rootR - 3, top - 9 - grow, INK);
+    paintAntenna();
   } else if (ears === 6) {
-    fillRect(rootL, top + 1 - grow, 3 + grow, 3 + grow, INK);
-    fillRect(rootR - 2 - grow, top + 1 - grow, 3 + grow, 3 + grow, INK);
+    paintHair();
   } else {
-    for (let i = 0; i < 7 + grow; i++) {
-      px(rootL - i, top + 2 + Math.floor(i / 2), INK);
-      px(rootL - i, top + 3 + Math.floor(i / 2), INK);
-      px(rootR + i, top + 2 + Math.floor(i / 2), INK);
-      px(rootR + i, top + 3 + Math.floor(i / 2), INK);
+    for (let i = 0; i < 6 + grow; i++) {
+      px(rootL - i, ry + Math.floor(i / 2), INK);
+      px(rootL - i, ry + 1 + Math.floor(i / 2), INK);
+      px(rootR + i, ry + Math.floor(i / 2), INK);
+      px(rootR + i, ry + 1 + Math.floor(i / 2), INK);
     }
   }
   } // !formOwnsEars
+  const selfFace = !(S.battle && S.bat && form === S.bat.enemyForm && form !== S.form);
+  if (selfFace && lv >= 2 && (S.disc || 0) >= 60 && (S.careMiss || 0) <= 2 && ears !== 4) paintHorns();
+  if (selfFace && lv >= 3 && (S.careMiss || 0) <= 1 && ears !== 6 && ears !== 5) paintHair();
 
-  // Patterns once kit ≥ 1 (already inside lv>0)
-  const bellyY = met.cy + Math.max(8, Math.floor(met.r * 0.55));
-  if (m.pattern === 1) {
+
+  // Marks on torso after limbs (kit ≥ 3)
+  const bellyY = Math.min(met.cy + met.r - 5, Math.max(met.mouthY + 3, met.cy + 3));
+  if (lv >= 1 && m.pattern === 1) {
     const spots = [[-4, bellyY], [3, bellyY + 1], [-2, bellyY + 2], [5, bellyY], [1, bellyY + 3]];
     for (let i = 0; i < spots.length; i++) {
       if (spots[i][1] > met.mouthY + 5 && onPetBody(spots[i][0], spots[i][1], met)) px(spots[i][0], spots[i][1], BG);
     }
-  } else if (m.pattern === 2) {
+  } else if (lv >= 1 && m.pattern === 2) {
     if (bellyY > met.mouthY + 6 && onPetBody(0, bellyY, met)) {
       px(-1, bellyY, BG); px(0, bellyY, BG); px(1, bellyY, BG);
       px(0, bellyY + 1, BG);
     }
-  } else if (m.pattern === 3) {
+  } else if (lv >= 1 && m.pattern === 3) {
     if (bellyY > met.mouthY + 6) {
       if (onPetBody(-4, bellyY, met)) px(-4, bellyY, BG);
       if (onPetBody(4, bellyY, met)) px(4, bellyY, BG);
@@ -1991,9 +1954,8 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
   // Accents (whiskers / tuft / horn / cheek marks) only at kit ≥ 2 — clean on small LCD
   if (lv >= 2) {
     if (m.accent === 1) {
-      const wx = Math.max(8, met.r - 2);
-      px(-wx, met.cheekY, INK); px(-wx - 2, met.cheekY, INK); px(-wx - 1, met.cheekY + 1, INK);
-      px(wx, met.cheekY, INK); px(wx + 2, met.cheekY, INK); px(wx + 1, met.cheekY + 1, INK);
+      const my = met.mouthY - 2;
+      px(-4, my, BG); px(4, my, BG);
     } else if (m.accent === 2) {
       fillRect(-4, top + 1, 8, 3, BG);
       px(-5, top + 2, INK); px(4, top + 2, INK);
@@ -2013,10 +1975,7 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
     } else if (m.accent === 6 && lv >= 3) {
       px(0, top + 3, BG); px(-1, top + 4, BG); px(1, top + 4, BG);
     } else if (m.accent === 7 && lv >= 3) {
-      const sy = met.cy - 3;
-      const sx = met.r - 1;
-      fillRect(-sx - 4, sy, 5, 3, INK); px(-sx - 5, sy - 1, INK);
-      fillRect(sx - 1, sy, 5, 3, INK); px(sx + 4, sy - 1, INK);
+      /* wings off — same reason as tails */
     }
   }
 
@@ -2029,30 +1988,58 @@ function drawMorphHead(form, morphId, g, INK, BG, f) {
     if (onPetBody(gx, met.cy - 3, met)) px(gx, met.cy - 3, BG);
   }
 }
+function dollJoints(met) {
+  const tr = met.torsoR != null ? met.torsoR : met.r;
+  const ty = met.torsoCy != null ? met.torsoCy : met.cy;
+  const hip = Math.max(3, Math.floor(tr * 0.42));
+  return {
+    shL: { x: -tr, y: ty - 1 },
+    shR: { x: tr - 1, y: ty - 1 },
+    hipL: { x: -hip, y: ty + tr - 2 },
+    hipR: { x: hip - 1, y: ty + tr - 2 }
+  };
+}
+function plantFeet(cx, fy, INK, w, h) {
+  // kept for any leftover call — hips are the real feet
+  fillRect(cx - 6, fy, 5, 4, INK);
+  fillRect(cx + 2, fy, 5, 4, INK);
+}
 function drawPetArms(form, g, f, INK) {
+  return; // v5.70: no hanging arms — they fought the LCD
   if (form === 'egg' || form === 'dead') return;
   if (kitLevelNow(form) < 2) return;
-  // v5.18: arms sprout from child kit≥2; babies never (kit≤1)
   if (form === 'baby') return;
-  if (form === 'adult1' || form === 'adult9') return;
   const met = formMetrics(form, g);
-  const ax = met.armX;
-  const ay = met.armY;
+  const j = dollJoints(met);
+  let mid = S.morphId || 0;
+  if (S._morphDraw != null) mid = S._morphDraw;
+  else if (S._rivalDraw && S.bat && S.bat.enemyMorph != null) mid = S.bat.enemyMorph;
+  const style = mid % 4; // 0 stub 1 long 2 thick 3 wide-foot
+  const armW = 2;
+  const armH = style === 1 ? 7 : 5;
+  const legW = style === 2 ? 4 : 3;
+  const legH = style === 1 ? 6 : 5;
+  const footW = style === 3 ? 6 : 5;
   const waving = (S.anim === 'wave' || S._idleBit === 'wave') && (f % 10 < 5);
   let idle = (!S.sleep && S.anim !== 'sick' && !waving) ? (((f || 0) >> 3) & 1) : 0;
-  if (isNaughty() && naughtyPart(S.morphId || 0) === 'arms') idle = ((f || 0) >> 2) & 1 ? 2 : 0;
-  fillRect(-ax - 3, ay + idle, 4, 2, INK);
-  px(-ax - 3, ay + 2 + idle, INK);
-  px(-ax - 4, ay + 2 + idle, INK);
+  if (isNaughty() && naughtyPart(mid) === 'arms') idle = ((f || 0) >> 2) & 1 ? 2 : 0;
+  px(j.shL.x, j.shL.y, INK);
+  fillRect(j.shL.x - armW - 1, j.shL.y + idle, armW, armH, INK);
+  fillRect(j.shL.x - armW - 2, j.shL.y + armH - 1 + idle, armW + 2, 2, INK);
   if (waving) {
-    fillRect(ax - 1, ay - 4, 2, 5, INK);
-    px(ax + 1, ay - 5, INK);
-    px(ax + 2, ay - 6, INK);
+    px(j.shR.x, j.shR.y, INK);
+    fillRect(j.shR.x + 1, j.shR.y - armH + 1, armW, armH, INK);
+    fillRect(j.shR.x + 1, j.shR.y - armH, armW + 2, 2, INK);
   } else {
-    fillRect(ax - 1, ay + (1 - idle), 4, 2, INK);
-    px(ax + 2, ay + 2 + (1 - idle), INK);
-    px(ax + 3, ay + 2 + (1 - idle), INK);
+    px(j.shR.x, j.shR.y, INK);
+    fillRect(j.shR.x + 1, j.shR.y + (1 - idle), armW, armH, INK);
+    fillRect(j.shR.x + 1, j.shR.y + armH - 1 + (1 - idle), armW + 2, 2, INK);
   }
+  const step = (!S.sleep && !S.game && !S.battle) ? (((f || 0) >> 3) & 1) : 0;
+  fillRect(j.hipL.x - 1, j.hipL.y + step, legW, legH, INK);
+  fillRect(j.hipL.x - 2, j.hipL.y + legH - 1 + step, footW, 3, INK);
+  fillRect(j.hipR.x - 1, j.hipR.y + (1 - step), legW, legH, INK);
+  fillRect(j.hipR.x - 1, j.hipR.y + legH - 1 + (1 - step), footW, 3, INK);
 }
 function drawPetMouth(kind, my, f, BG) {
   // Tiny 3-wide mouths only. A 5x2 cutout reads as a blank bar through the face.
@@ -2064,15 +2051,20 @@ function drawPetMouth(kind, my, f, BG) {
   } else if (kind === 'sick') {
     px(-2, my + 1, BG); px(-1, my + 2, BG); px(0, my + 1, BG); px(1, my + 2, BG); px(2, my + 1, BG);
   } else if (kind === 'smile') {
-    px(-2, my, BG); px(-1, my + 1, BG); px(0, my + 1, BG); px(1, my + 1, BG); px(2, my, BG);
+    px(-3, my, BG); px(-2, my + 1, BG); px(-1, my + 1, BG); px(0, my + 1, BG); px(1, my + 1, BG); px(2, my + 1, BG); px(3, my, BG);
   } else if (kind === 'frown') {
-    px(-2, my + 1, BG); px(-1, my, BG); px(0, my, BG); px(1, my, BG); px(2, my + 1, BG);
+    px(-3, my + 1, BG); px(-2, my, BG); px(-1, my, BG); px(0, my, BG); px(1, my, BG); px(2, my, BG); px(3, my + 1, BG);
   } else if (kind === 'plead') {
-    px(-1, my, BG); px(0, my, BG); px(1, my, BG);
+    px(-2, my, BG); px(-1, my, BG); px(0, my, BG); px(1, my, BG); px(2, my, BG);
     px(0, my + 2, BG);
   } else if (kind === 'tongue') {
-    px(-2, my, BG); px(-1, my + 1, BG); px(0, my + 1, BG); px(1, my + 1, BG); px(2, my, BG);
-    px(0, my + 2, BG); px(0, my + 3, BG);
+    px(-3, my, BG); px(-2, my + 1, BG); px(-1, my + 1, BG); px(0, my + 1, BG); px(1, my + 1, BG); px(2, my + 1, BG); px(3, my, BG);
+    px(-1, my + 2, BG); px(0, my + 2, BG); px(1, my + 2, BG);
+    const INK = '#0f380f';
+    px(-1, my + 3, INK); px(0, my + 3, INK); px(1, my + 3, INK);
+    px(0, my + 4, INK); px(0, my + 5, INK);
+  } else if (kind === 'rest') {
+    px(-1, my + 1, BG); px(0, my + 2, BG); px(1, my + 1, BG);
   } else {
     px(-1, my + 1, BG); px(0, my + 1, BG); px(1, my + 1, BG);
   }
@@ -2248,7 +2240,7 @@ function careStillDue(type) {
   return true;
 }
 function careSnapshotBody(sub, enabled) {
-  // v5.32: paused/frozen only for intentional Away/Pause — not visibility hidden.
+  // v5.70: paused/frozen only for intentional Away/Pause — not visibility hidden.
   // backgrounded marks closed/background so Worker can project; SW still gets frozen via pushCareSnapshotToSW.
   const visHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
   const visVisible = typeof document !== 'undefined' && document.visibilityState === 'visible';
@@ -2988,22 +2980,71 @@ function tickHomeIdle(f) {
 }
 function careNeedKind() {
   if (S.sleep || S.stage === 'egg' || S.stage === 'dead') return null;
+  // ! is ONLY a real tantrum. A leftover attention flag is not Discipline.
   if (S._falseCall && S.call) return 'false';
   if (S.sick || S.injured) return 'sick';
   if (S.poop && (S.poopCount || 0) >= 1) return 'poop';
   if (S.lightsMissPending) return 'lights';
   if (S.hunger <= 1) return 'hunger';
   if (S.happy <= 1) return 'happy';
-  if (S.call) return 'false';
   return null;
 }
 function careNeedLabel(kind) {
   return ({ hunger:'FD', happy:'PL', poop:'CL', sick:'MD', lights:'LT', false:'!' }[kind] || '!');
 }
+function drawNeedBadge(kind, x, y) {
+  const INK = '#0f380f';
+  const BG = '#9bbc0f';
+  fillRect(x, y, 24, 22, INK);
+  fillRect(x + 2, y + 2, 20, 18, BG);
+  const ox = x + 12, oy = y + 11;
+  if (kind === 'hunger') {
+    // bowl
+    fillRect(ox - 6, oy - 1, 13, 2, INK);
+    fillRect(ox - 5, oy + 1, 11, 4, INK);
+    fillRect(ox - 3, oy + 5, 7, 2, INK);
+    px(ox - 2, oy, BG); px(ox + 1, oy, BG);
+  } else if (kind === 'happy') {
+    // heart
+    fillRect(ox - 4, oy - 2, 3, 3, INK);
+    fillRect(ox + 1, oy - 2, 3, 3, INK);
+    fillRect(ox - 5, oy, 11, 3, INK);
+    fillRect(ox - 3, oy + 3, 7, 2, INK);
+    fillRect(ox - 1, oy + 5, 3, 2, INK);
+  } else if (kind === 'poop') {
+    fillCirc(ox, oy + 3, 4, INK);
+    fillCirc(ox - 4, oy + 4, 3, INK);
+    fillCirc(ox + 4, oy + 4, 3, INK);
+    fillCirc(ox, oy - 2, 3, INK);
+  } else if (kind === 'sick') {
+    // plus / pill
+    fillRect(ox - 2, oy - 6, 4, 13, INK);
+    fillRect(ox - 6, oy - 2, 13, 4, INK);
+    fillRect(ox - 1, oy - 5, 2, 11, BG);
+    fillRect(ox - 5, oy - 1, 11, 2, BG);
+  } else if (kind === 'lights') {
+    fillCirc(ox, oy, 6, INK);
+    fillCirc(ox + 3, oy - 2, 5, BG);
+  } else {
+    // tantrum bang
+    fillRect(ox - 1, oy - 7, 3, 10, INK);
+    fillRect(ox - 1, oy + 5, 3, 3, INK);
+  }
+}
+function needIconAction(kind) {
+  return ({ hunger:'feed', happy:'play', poop:'clean', sick:'med', lights:'light', false:'disc' }[kind] || null);
+}
 function careWant() {
   if (S.sleep || S.game || S.battle || S.paused) return null;
   if (S.stage === 'egg' || S.stage === 'dead') return null;
+  if (S.anim === 'care' && S._care && S._care.itemX != null) {
+    const ph = carePhase(S._care);
+    if (ph === 'show' || ph === 'approach' || ph === 'act') {
+      return { x: S._care.itemX, kind: S._care.kind || 'food', y: S._care.itemY || 118 };
+    }
+  }
   if (S.poop) return { x: S.poopX || 180, kind: 'poop' };
+  if (S.sick || S.injured) return { x: 120, kind: 'you' };
   if (S.hunger <= 1) return { x: 56, kind: 'food' };
   if (S.happy <= 1) return { x: 184, kind: 'play' };
   if (S.lightsMissPending) return { x: 120, kind: 'bed' };
@@ -3412,7 +3453,7 @@ function drawPet(cx, cy, form, f) {
     if (want && Math.random() < 0.04) S.petTargetX = want.x;
     if (Math.abs(S.petX - S.petTargetX) < 2) {
       const shyW = personalityOf(S) === 'SHY';
-      if (Math.random() < (shyW ? 0.0035 : 0.006)) {
+      if (Math.random() < (shyW ? 0.012 : 0.025)) {
         let tries = 0, tx;
         if (shyW) {
           // SHY: shorter wander from current spot
@@ -3435,7 +3476,7 @@ function drawPet(cx, cy, form, f) {
       }
     } else {
       const shyStep = personalityOf(S) === 'SHY';
-      const step = (lowEnergy || (S.poopCount || 0) >= 3) ? 0.12 : (shyStep ? 0.22 : 0.3);
+      const step = (lowEnergy || (S.poopCount || 0) >= 3) ? 0.25 : (shyStep ? 0.45 : 0.7);
       const dir = Math.sign(S.petTargetX - S.petX) || 0;
       const next = S.petX + dir * step;
       if (!blocked(next)) S.petX = next;
@@ -3449,8 +3490,8 @@ function drawPet(cx, cy, form, f) {
   const dx = Math.round(Number(cx + shift) || 120);
   const dy = Math.round(Number(cy + bob) || 100);
   ctx.translate(dx, dy);
-  // NEVER use fractional ctx.scale — it blurs/ghosts pixel art on mobile.
-  // Size differences come from sprite shapes (baby vs adult fillCirc), not canvas scale.
+  // NEVER use fractional or 2x ctx.scale — it turns 1-bit edges into blocks.
+  // Home size is extra pixels in the sprite (homeDrawBoost), not canvas zoom.
   scaleX = 1;
   scaleY = 1;
 
@@ -3502,130 +3543,57 @@ function drawPet(cx, cy, form, f) {
     let mid = S.morphId || 0;
     if (S._morphDraw != null) mid = S._morphDraw;
     else if (S.battle && S.bat && form === S.bat.enemyForm && form !== S.form && S.bat.enemyMorph != null) mid = S.bat.enemyMorph;
-    if (form === 'baby') {
-      // v5.18: Nugget → chubby — radius steps +2/phase; feet/cheeks sprout clearly
-      const r = 8 + g * 2;
-      fillCirc(0, 2, r, INK);
-      // Cheek plump from g1
-      if (g >= 1) {
-        px(-r + 2, 2, INK); px(r - 2, 2, INK);
+    const hb = homeDrawBoost();
+    const metB = formMetrics(form, g);
+    const kv = kitLevelNow(form);
+    // v5.70: one cute face-body (Tama). Battles stay Digimon-hybrid.
+    fillCirc(0, metB.cy, metB.r, INK);
+    if (kv >= 2 && (form === 'teenGood' || form === 'adult10')) {
+      const c = metB.crown;
+      px(0, c - 1, INK); px(-1, c, INK); px(1, c, INK);
+    } else if (form === 'teenBad' && kv >= 1) {
+      px(0, metB.crown - 1, INK); px(0, metB.crown - 2, INK); px(0, metB.crown - 3, INK);
+      px(-1, metB.crown - 4, INK); px(1, metB.crown - 4, INK);
+    } else if (form === 'adult1' && kv >= 2) {
+      fillRect(-metB.torsoR - 4, metB.torsoCy - 3, 5, 6, INK);
+      fillRect(metB.torsoR - 1, metB.torsoCy - 3, 5, 6, INK);
+    } else if (form === 'adult2' && kv >= 2) {
+      for (let i = 0; i < 6; i++) {
+        px(-metB.headR + 2 + Math.floor(i / 2), metB.crown - i, INK);
+        px(metB.headR - 2 - Math.floor(i / 2), metB.crown - i, INK);
       }
-      if (g >= 2) {
-        fillCirc(-r + 3, 3, 2, INK); fillCirc(r - 3, 3, 2, INK);
+    } else if (form === 'adult3' && kv >= 2) {
+      fillRect(-metB.headR - 2, metB.crown + 1, metB.headR * 2 + 4, 4, INK);
+    } else if (form === 'adult6' && kv >= 3) {
+      fillRect(-metB.headR + 1, metB.headCy - 3, metB.headR * 2 - 2, 3, INK);
+    } else if (form === 'adult7' && kv >= 2) {
+      for (let i = 0; i < 6; i++) {
+        const ang = i * Math.PI / 3;
+        px(Math.round(Math.cos(ang) * metB.torsoR), Math.round(metB.torsoCy + Math.sin(ang) * metB.torsoR), INK);
       }
-      // Tiny feet: buds at g1, clearer at g2+, planted at g3
-      if (g >= 1) { fillRect(-4, r + 1, 2, 2, INK); fillRect(2, r + 1, 2, 2, INK); }
-      if (g >= 2) { fillRect(-5, r + 1, 3, 3, INK); fillRect(3, r + 1, 3, 3, INK); }
-      if (g >= 3) { px(-2, -r + 2, BG); px(2, -r + 2, BG); } // brow nubs
-    } else if (form === 'child') {
-      const r = 12 + g * 2;
-      fillCirc(0, 1, r, INK);
-      fillCirc(-r + 5, -r + 2, 3 + (g > 1 ? 1 : 0), INK);
-      fillCirc(r - 5, -r + 2, 3 + (g > 1 ? 1 : 0), INK);
-      // Cheeks fill out
-      if (g >= 1) { px(-r + 3, 2, INK); px(r - 3, 2, INK); }
-      if (g >= 0) { fillRect(-6, r, 4, 3, INK); fillRect(3, r, 4, 3, INK); }
-      if (g >= 2) { fillRect(-7, r, 5, 3, INK); fillRect(3, r, 5, 3, INK); }
-      if (g >= 3) { px(0, -r - 1, INK); px(-1, -r, INK); px(1, -r, INK); } // little tuft
-    } else if (form === 'teenGood') {
-      const r = 14 + g;
-      fillCirc(0, 0, r, INK);
-      // Hair tuft grows from the crown (not floating above)
-      const crown = -r + 1;
-      for (let i = -6; i <= 6; i += 2) px(i, crown, INK);
-      px(0, crown - 2, INK); px(-2, crown - 1, INK); px(2, crown - 1, INK);
-      if (g >= 1) { fillRect(-7, r - 1, 4, 3, INK); fillRect(4, r - 1, 4, 3, INK); }
-      if (g >= 3) { px(-3, -r + 4, BG); px(3, -r + 4, BG); } // cheek shine
-    } else if (form === 'teenBad') {
-      const r1 = 12 + g, r2 = 10 + g;
-      fillCirc(-3, 1, r1, INK);
-      fillCirc(5, 3, r2, INK);
-      // Horns grow from the head, not floating above
-      px(-3 - r1 + 2, 1 - r1 + 1, INK); px(-3 - r1 + 1, 1 - r1, INK); px(-3 - r1, 1 - r1 - 1, INK);
-      px(5 + r2 - 2, 3 - r2 + 1, INK); px(5 + r2 - 1, 3 - r2, INK); px(5 + r2, 3 - r2 - 1, INK);
-      if (g >= 1) { fillRect(-8, r1 + 2, 4, 3, INK); fillRect(5, r1 + 2, 4, 3, INK); }
-      if (g >= 3) { px(-5, -2, BG); px(6, 0, BG); }
-    } else if (form === 'adult1') {
-      // Momo — best care, round with side fins/ears
-      fillCirc(0, 1, 16, INK);
-      fillRect(-22, -10, 6, 12, INK); fillRect(16, -10, 6, 12, INK);
-      // little feet
-      fillRect(-8, 16, 5, 3, INK); fillRect(4, 16, 5, 3, INK);
-    } else if (form === 'adult2') {
-      // Kiko — pointed ears, leaner
-      fillCirc(0, 1, 15, INK);
-      // triangle ears rooted on the crown (integer pixels)
-      for (let i = 0; i < 8; i++) {
-        px(-11 + Math.floor(i / 2), -13 - i, INK); px(-10 + Math.floor(i / 2), -13 - i, INK);
-        px(11 - Math.floor(i / 2), -13 - i, INK); px(10 - Math.floor(i / 2), -13 - i, INK);
-      }
-      fillRect(-7, 15, 4, 3, INK); fillRect(4, 15, 4, 3, INK);
-    } else if (form === 'adult3') {
-      // Taro — wide hat/head band
-      fillCirc(0, 2, 16, INK);
-      fillRect(-14, -12, 28, 8, INK);
-      px(-14, -13, INK); px(13, -13, INK);
-      fillRect(-8, 16, 5, 3, INK); fillRect(4, 16, 5, 3, INK);
-    } else if (form === 'adult4') {
-      // Poko — chubby with belly mark
-      fillCirc(0, 2, 18, INK);
-      px(-2, 12, BG); px(0, 13, BG); px(2, 12, BG);
-      px(-6, 5, INK); px(6, 5, INK);
-      fillRect(-9, 18, 6, 3, INK); fillRect(4, 18, 6, 3, INK);
-    } else if (form === 'adult5') {
-      // Nori — tall stacked / caterpillar-ish
-      fillCirc(0, -10, 10, INK);
-      fillCirc(0, 0, 12, INK);
-      fillCirc(0, 10, 11, INK);
-      fillRect(-6, 20, 4, 3, INK); fillRect(3, 20, 4, 3, INK);
-    } else if (form === 'adult6') {
-      // Zuzu — neglected, flat wide + heavy brow
-      fillCirc(0, 4, 17, INK);
-      fillRect(-12, -6, 24, 5, INK);
-      fillRect(-10, 18, 7, 3, INK); fillRect(4, 18, 7, 3, INK);
-    } else if (form === 'adult7') {
-      // Nova — rare perfect-care star form
-      fillCirc(0, 2, 15, INK);
-      // Short spikes grow from the body surface (not floating points)
-      for (let i = 0; i < 8; i++) {
-        const ang = i * Math.PI / 4;
-        const x0 = Math.round(Math.cos(ang) * 15);
-        const y0 = Math.round(2 + Math.sin(ang) * 15);
-        const x1 = Math.round(Math.cos(ang) * 18);
-        const y1 = Math.round(2 + Math.sin(ang) * 18);
-        px(x0, y0, INK); px(x1, y1, INK);
-      }
-      fillRect(-7, 16, 4, 3, INK); fillRect(4, 16, 4, 3, INK);
-    } else if (form === 'adult8') {
-      // Bibi — disciplined little horned form
-      fillCirc(0, 2, 14, INK);
-      for (let i = 0; i < 7; i++) {
-        px(-10+i, -12-i, INK); px(10-i, -12-i, INK);
-      }
-      fillRect(-9, 15, 5, 3, INK); fillRect(4, 15, 5, 3, INK);
-    } else if (form === 'adult9') {
-      // Rin — sleek athletic (good care + play/train heavy)
-      fillCirc(0, 0, 14, INK);
-      fillRect(-18, 0, 6, 3, INK); px(-19, 3, INK);
-      fillRect(12, 0, 6, 3, INK); px(18, 3, INK);
-      px(-8, -14, INK); px(8, -14, INK);
-      fillRect(-6, 14, 4, 3, INK); fillRect(3, 14, 4, 3, INK);
-    } else if (form === 'adult10') {
-      // Bolt — battle-hardened spiky adult
-      fillCirc(0, 1, 15, INK);
-      px(0, -15, INK); px(0, -17, INK); px(-1, -16, INK); px(1, -16, INK);
-      fillRect(-8, 15, 5, 3, INK); fillRect(4, 15, 5, 3, INK);
-    } else if (form === 'secret') {
-      // Elder — dignified with staff-like marks and beard
-      fillCirc(0, 0, 16, INK);
-      fillRect(-6, 8, 12, 6, INK); // beard
-      px(-12, -12, INK); px(12, -12, INK);
-      px(-14, -8, INK); px(14, -8, INK);
-      // tiny crown sitting on the head
-      fillRect(-5, -16, 11, 2, INK);
-      px(-4, -17, INK); px(0, -18, INK); px(4, -17, INK);
-    } else {
-      fillCirc(0, 0, 16, INK);
+    } else if (form === 'adult8' && kv >= 2) {
+      px(-4, metB.crown - 1, INK); px(4, metB.crown - 1, INK);
+      px(-4, metB.crown - 2, INK); px(4, metB.crown - 2, INK);
+    } else if (form === 'secret' && kv >= 3) {
+      fillRect(-4, metB.headCy + 4, 8, 4, INK);
+      fillRect(-4, metB.crown - 1, 8, 2, INK);
+    }
+    if (form === 'teenBad' || form === 'adult5' || form === 'adult6') {
+      fillRect(-metB.r + 1, metB.cy, metB.r * 2 - 2, metB.r - 1, INK);
+    }
+    if (kv >= 1) {
+      const fy = metB.cy + metB.r - 1;
+      const step = (((f || 0) >> 3) & 1);
+      fillRect(-6, fy + step, 5, 4, INK);
+      fillRect(2, fy + (1 - step), 5, 4, INK);
+    }
+    if (kv >= 2) {
+      const ay = metB.mouthY + 1;
+      const wave = (S._idleBit === 'wave' && (f % 10 < 5)) ? -3 : 0;
+      fillRect(-metB.r + 1, ay, 2, 2, INK);
+      fillRect(-metB.r - 3, ay + wave, 4, 2, INK);
+      fillRect(metB.r - 2, ay, 2, 2, INK);
+      fillRect(metB.r - 1, ay + (wave ? 0 : 1), 4, 2, INK);
     }
 
     drawMorphTail(form, mid, g, INK, f);
@@ -3704,14 +3672,23 @@ function drawPet(cx, cy, form, f) {
           else if (lookCycle === 12) { lookX = -1; lookY = 1; }
           else if (lookCycle === 13) lookX = 2;
           else lookX = 0;
+        } else if (S.anim === 'care' && S._care && S._care.itemX != null) {
+          const c = S._care;
+          const ph = carePhase(c);
+          if (ph === 'show' || ph === 'approach' || ph === 'act') {
+            lookX = (c.itemX > (S.petX || 120)) ? 2 : -2;
+            lookY = 1;
+          } else {
+            lookX = 0; lookY = -1;
+          }
         } else if (careWant()) {
           const w = careWant();
-          const phase = Math.floor(f / 36) % 6;
-          if (phase <= 1) { lookX = 0; lookY = -1; }
-          else if (phase <= 3) {
+          const phase = Math.floor(f / 36) % 8;
+          if (phase <= 1) { lookX = 0; lookY = -1; } // player first
+          else if (phase <= 5) {
             lookX = (w.x > (S.petX || 120)) ? 2 : -2;
             lookY = (w.kind === 'you' || w.kind === 'bed') ? -1 : 1;
-          } else { lookX = 0; lookY = -1; }
+          } else { lookX = 0; lookY = -1; } // back to player
         } else if (idleBit === 'peek') {
           // SHY peek: look away, then quick glance at player
           const left = Math.max(0, (S._idleUntil || f) - f);
@@ -3945,14 +3922,11 @@ function drawMain() {
     }
   }
 
-  // Attention badge — says WHAT they want. ! is only a fake call.
+  // Attention badge — unique 1-bit sprite per need (not the same box)
   const need = careNeedKind();
-  if (need && !S.sleep) {
-    fillRect(4, 126, 22, 16, INK);
-    fillRect(6, 128, 18, 12, lcdBg);
-    const tag = careNeedLabel(need);
-    drawText(tag, tag.length === 1 ? 12 : 7, 130, INK);
-  }
+  if (need && !S.sleep) drawNeedBadge(need, 4, 120);
+
+
 
   // v5.09 egg select owns the LCD until a choice is locked
   if (S.stage === 'egg' && S.eggSelect) {
@@ -4385,6 +4359,11 @@ function update() {
     }
   }
 
+  if (S.call && !S._falseCall && !S.poop && !S.sick && !S.injured &&
+      !S.lightsMissPending && (S.hunger || 0) > 1 && (S.happy || 0) > 1) {
+    S.call = false;
+  }
+
   // Advance care cinema walk / deferred clean
   if (S.anim === 'care') tickCareCinema(now);
 
@@ -4425,7 +4404,7 @@ function update() {
       // realtime keeps closer to classic 15 min grace; others use short web-friendly window
       S.careMiss += d.care; rustDisc(2);
       S.lightsMissPending = false;
-      S.sleep = true; // falls asleep anyway (but grumpy / lights still on)
+      S.sleep = true; S.playResult = null; S.playResult = null; S.anim = null; // falls asleep anyway (but grumpy / lights still on)
       S.call = false;
       S.anim = 'sleep';
       S.animTimer = now + 999999;
@@ -4467,7 +4446,6 @@ function update() {
       if (nh < 6) {
         S.shortNights = (S.shortNights || 0) + 1;
         S.careMiss = (S.careMiss || 0) + 1;
-        rustDisc(1, 'Short night — tired');
       } else {
         S.goodNights = (S.goodNights || 0) + 1;
         if (nh >= 10 && S.happy < 4) S.happy = Math.min(4, (S.happy || 0) + 1);
@@ -4489,7 +4467,7 @@ function update() {
   // Night + lights already off → bed, no miss. Day nap that runs into night becomes night sleep.
   if (night && !S.lights && !S.game && !S.battle) {
     if (!S.sleep) {
-      S.sleep = true;
+      S.sleep = true; S.playResult = null;
       S._dayNap = false;
       S._napStarted = 0;
       S.lightsMissPending = false;
@@ -4628,7 +4606,7 @@ function update() {
     // Filth escalation (classic: piles fill screen → misery → sick → death risk)
     if (S.poop && S.poopSince && now - S.poopSince > 6 * 60000 / sp) {
       const stacks = Math.max(1, S.poopCount || 1);
-      S.careMiss += d.care * stacks; rustDisc(1 + Math.min(3, stacks));
+      S.careMiss += d.care * stacks;
       if (S.happy > 0) S.happy = Math.max(0, S.happy - 1);
       // Screen full of poop (4) — pet trapped, gets sick
       if (stacks >= 4 && !S.sick && Math.random() < 0.35) {
@@ -4655,17 +4633,18 @@ function update() {
     const canTantrum = !S.call && !S.poop && !S.sick && !S.lightsMissPending &&
         !S.game && !S.battle &&
         S.stage !== 'egg' && S.stage !== 'baby' && S.stage !== 'dead' && !S.sleep &&
-        (S.hunger || 0) >= 2 && (S.happy || 0) >= 2;
+        (S.hunger || 0) >= 1 && (S.happy || 0) >= 1;
     const dayKeyFc = new Date(now).toDateString();
-    // BRATTY seed: slightly sooner first test (~5.5m vs 8m) — still 1/day quota
     const brattySeed = personalityOf(S) === 'BRATTY';
-    const naughtyGap = brattySeed ? 5.5 * 60000 : 8 * 60000;
-    if (canTantrum && quota > 0 && S.lastNaughtyDay !== dayKeyFc &&
+    const naughtyGap = brattySeed ? 3 * 60000 : 4 * 60000;
+    const testsToday = (S.lastNaughtyDay === dayKeyFc) ? (S.lastNaughtyCount || 0) : 0;
+    if (canTantrum && quota > 0 && testsToday < 2 &&
         (now - (S.lastFalseCall || 0)) > naughtyGap) {
       S.call = true;
       S._falseCall = true;
       S.lastFalseCall = now;
       S.lastNaughtyDay = dayKeyFc;
+      S.lastNaughtyCount = testsToday + 1;
       S.anim = 'call';
       S.animTimer = now + 1500;
       if (brattySeed) S._flinchUntil = now + 380;
@@ -4673,24 +4652,13 @@ function update() {
       melCall();
       careNotify('discipline', 'False call — open PocketPal and use Discipline!');
       save();
-    } else if (canTantrum && disc >= 100 &&
-        (now - (S.lastFalseCall || 0)) > 40 * 60000 && Math.random() < (brattySeed ? 0.000006 : 0.000004)) {
-      S.call = true;
-      S._falseCall = true;
-      S.lastFalseCall = now;
-      S.anim = 'call';
-      S.animTimer = now + 1500;
-      if (personalityOf(S) === 'SHY' || personalityOf(S) === 'BRATTY') S._flinchUntil = now + 380;
-      toast('Rare naughty call — Discipline?');
-      melCall();
-      save();
     }
-    // Missed tantrum window (~15 min): training miss, bar does not melt
+    // Missed tantrum: rust a little so 100% is not forever
     if (S._falseCall && S.call && (now - (S.lastFalseCall || 0)) > 15 * 60000) {
       S.call = false;
       S._falseCall = false;
       S.discMiss = (S.discMiss || 0) + 1;
-      toast('Ignored tantrum');
+      rustDisc(8, 'Ignored tantrum');
       save();
     }
   }
@@ -4824,6 +4792,7 @@ function evo(st, fm) {
   S.lastGrowthAt = Date.now();
   S.careMiss = Math.floor(S.careMiss * 0.45);
   S.lastNaughtyDay = '';
+  S.lastNaughtyCount = 0;
   if (st === 'teen') S.disc = Math.min(50, Math.max(0, S.disc || 0));
   ensureMorph(S);
   S._evoCut = {
@@ -5163,7 +5132,7 @@ function clean() {
 function med() {
   if (S.sleep) { toast('Sleeping...'); return; }
   if (S.paused) { toast('Paused'); return; }
-  if (S.sick) {
+  if (S.sick || S.injured) {
     const wasInj = S.injured;
     S.sick = false;
     S.sickSince = 0;
@@ -5181,12 +5150,10 @@ function med() {
       kind: 'med',
       result: 'refuse',
       itemX: Math.max(70, Math.min(190, (S.petX || 120) + 28)),
-      toast: 'Did not need medicine — trust faded'
+      toast: 'Not sick — LCD plus means medicine'
     });
-    // Keep refuse feel if cinema result already shakes — ensure timer matches
-    S.careMiss = (S.careMiss || 0) + 1;
-    rustDisc(3);
     beep(160, 0.08);
+    save();
   }
 }
 function clampHour(h, fallback) {
@@ -5255,7 +5222,7 @@ function light() {
       toast('Lights off');
       beep(280, 0.05);
     } else if (night) {
-      S.sleep = true;
+      S.sleep = true; S.playResult = null;
       S._dayNap = false;
       S._napStarted = 0;
       S.sleptProperly = true;
@@ -5265,7 +5232,7 @@ function light() {
       toast('Lights out... zzz');
       beep(220, 0.08);
     } else if ((S.stage === 'baby' || S.stage === 'child') && !S.sleep) {
-      S.sleep = true;
+      S.sleep = true; S.playResult = null;
       S._dayNap = true;
       S._napStarted = now;
       S.anim = 'sleep';
@@ -5451,15 +5418,16 @@ function disc() {
     S.animTimer = Date.now() + 900;
     beep(210, 0.1); beep(280, 0.08);
     toast(S.disc >= 100 ? 'Fully trained!' : 'Disciplined! Disc ' + S.disc + '%');
-  } else if (S.call || S.lightsMissPending || S.poop || S.sick || S.hunger <= 0 || S.happy <= 0) {
+  } else if (S.call || S.lightsMissPending || S.poop || S.sick || S.injured || S.hunger <= 1 || S.happy <= 1) {
     S.anim = 'sad';
     S.animTimer = Date.now() + 800;
+    const kind = careNeedKind();
     let hint = 'Needs care';
-    if (S.lightsMissPending) hint = 'Turn lights OFF';
-    else if (S.poop) hint = 'Clean first';
-    else if (S.sick) hint = 'Medicine first';
-    else if (S.hunger <= 0) hint = 'Feed first';
-    else if (S.happy <= 0) hint = 'Play first';
+    if (kind === 'lights' || S.lightsMissPending) hint = 'moon — lights OFF';
+    else if (kind === 'poop' || S.poop) hint = 'pile — Clean';
+    else if (kind === 'sick' || S.sick || S.injured) hint = 'plus — Medicine';
+    else if (kind === 'hunger' || S.hunger <= 1) hint = 'bowl — Feed';
+    else if (kind === 'happy' || S.happy <= 1) hint = 'heart — Play';
     toast('Not a tantrum — ' + hint);
     beep(140, 0.1);
   } else {
@@ -5995,8 +5963,11 @@ function finishBattle(won) {
     S.anim = 'dance';
     S.animTimer = now + 1600;
     // v5.22 coins: train +3, friend/share/p2p +5
-    if (B && (B.kind === 'friend' || B.kind === 'p2p')) earnCoins(5);
-    else earnCoins(3); // training battle
+    if (B && (B.kind === 'friend' || B.kind === 'p2p')) {
+      earnCoins(5);
+      const fi = S.selectedFriend;
+      if (S.friends[fi]) S.friends[fi].beaten = true;
+    } else earnCoins(3); // training battle
     // v5.10 B3 — brief praise beat (existing stats only)
     S._postArena = {
       kind: 'win',
@@ -7008,13 +6979,12 @@ function showFamilyAlbum() {
 }
 window.showFamilyAlbum = showFamilyAlbum;
 
-const EAR_LABEL = ['nubs','flops','perks','longs','horns','antenna','tufts','winglets'];
-const TAIL_LABEL = ['stub','long','curl','split','spike','puff','whip','fan'];
+const EAR_LABEL = ['nubs','flops','perks','longs','horns','antenna','tufts','fans'];
 const PATT_LABEL = ['plain','speckled','banded','starred'];
-const EYE_LABEL = ['square','round','tall','squint'];
+const EYE_LABEL = ['square','round','tall','squint','dots','orbs','close','wide'];
 function morphLook(id) {
   const m = morphParts(id);
-  return EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern] + '/' + EYE_LABEL[m.eyes];
+  return EAR_LABEL[m.ears] + '/' + EYE_LABEL[m.eyes] + '/' + PATT_LABEL[m.pattern];
 }
 function harvestSeenSpecies() {
   if (!S.speciesSeen || typeof S.speciesSeen !== 'object') S.speciesSeen = {};
@@ -7039,14 +7009,14 @@ function showPaldex(page) {
   let html = '<p><strong>' + ids.length + ' / ' + SPECIES_COUNT + ' seen</strong></p>';
   if (S.stage !== 'egg' && S.stage !== 'dead') {
     const m = morphParts(S.morphId);
-    html += '<p>Active ' + speciesTag(S.morphId) + ' ' + displayName(S) + ' · ' + EAR_LABEL[m.ears] + '/' + TAIL_LABEL[m.tail] + '/' + PATT_LABEL[m.pattern] + '</p>';
+    html += '<p>Active ' + speciesTag(S.morphId) + ' ' + displayName(S) + ' · ' + morphLook(S.morphId) + '</p>';
   }
   if (slice.length) {
     html += '<div class="friend-list" style="max-height:88px">';
     slice.forEach(id => {
       const m = morphParts(id);
       const you = (S.morphId === id) ? ' ★' : '';
-      html += '<div class="friend-item">' + speciesTag(id) + ' ' + generatePetName(id) + you + ' · ' + EAR_LABEL[m.ears] + ' · ' + TAIL_LABEL[m.tail] + '</div>';
+      html += '<div class="friend-item">' + speciesTag(id) + ' ' + generatePetName(id) + you + ' · ' + morphLook(id) + '</div>';
     });
     html += '</div>';
     html += '<p style="font-size:11px">Page ' + (S._dexPage + 1) + ' / ' + pages + '</p>';
@@ -7057,7 +7027,7 @@ function showPaldex(page) {
   } else {
     html += '<p style="opacity:.8">Hatch a Pal to start the dex.</p>';
   }
-  html += '<p style="font-size:11px">Train and breed to find missing looks. Same species can grow into a different body.</p>';
+  html += '<p style="font-size:11px">Your pal has ONE look (headgear + eyes + belly). Good care can add a small extra horn on top of ears. Missing IDs = other pals you have not met. Perks = temperament, not extra Paldex slots.</p>';
   html += '<div class="btn-row"><button onclick="window.showConnectMenu()">Back to Connect</button></div>';
   extra.innerHTML = html;
   show('Paldex', 'Species you have met');
@@ -7082,14 +7052,14 @@ function showConnectMenu() {
       const sel = i === S.selectedFriend ? 'selected' : '';
       const look = escapeHtml(f.petName || f.name || 'Pal') + ' ' + (f.morph != null ? speciesTag(f.morph) : '') +
         ' · ' + escapeHtml(NAMES[f.form] || f.stage || '') + ' age ' + (f.age || 0) +
-        (f.real ? '' : ' · old');
+        (f.real ? '' : ' · old') + (f.beaten ? ' · WON' : '') + (f.bred ? ' · EGG' : '');
       friendHtml += '<div class="friend-item ' + sel + '" onclick="window.selectFriend(' + i + ')">' + look + '</div>';
     });
     friendHtml += '</div>';
   }
   const shareHint = canShareBattleLink();
   extra.innerHTML =
-    '<p style="font-size:11px;opacity:0.9">Share a snapshot of the pal on screen. Friend opens the link to add or refresh them.</p>' +
+    '<p style="font-size:11px;opacity:0.9">Snapshot battle — not live. Share the pal on screen. Same link later refreshes their look and stats.</p>' +
     '<div class="btn-row"><button onclick="window.shareFriendLink()"' + (shareHint ? ' style="opacity:0.55"' : '') + '>Share battle link</button></div>' +
     (shareHint ? '<p style="font-size:10px;opacity:0.75">' + shareHint + '</p>' : '') +
     '<p style="margin-top:10px">Friends</p>' +
@@ -7098,7 +7068,7 @@ function showConnectMenu() {
       '<button onclick="window.tryBreed()">Breed with selected</button>' +
       (S.friends.length ? '<button onclick="window.removeFriend()" style="background:#5a3030">Remove selected</button>' : '') +
     '</div>' +
-    '<p style="margin-top:12px;font-size:12px">Train &amp; snapshot battles (Teen+)</p>' +
+    '<p style="margin-top:12px;font-size:12px">Train &amp; snapshot battles (Teen+) — not live P2P</p>' +
     '<div class="btn-row">' +
       '<button onclick="window.startStatTraining()">Train (XP)</button>' +
       '<button onclick="window.startTrainingBattle()">Training Battle</button>' +
@@ -7230,7 +7200,7 @@ async function startFriendBattle() {
 }
 window.startTrainingBattle = startTrainingBattle;
 window.startFriendBattle = startFriendBattle;
-window.createP2PRoom=createP2PRoom; window.joinP2PRoom=joinP2PRoom; window.leaveP2PRoom=leaveP2PRoom; window.startP2PMatch=startP2PMatch;
+
 async function testPocketWorker() {
   const el = document.getElementById('worker-status');
   const base = workerBaseUrl();
@@ -7379,82 +7349,84 @@ function addFriend() {
   toast('Open the battle link they sent you');
 }
 
+function breedGeneScore(partner) {
+  const myCare = (S.careMiss || 0) < 2 ? 0.85 : (S.careMiss || 0) < 5 ? 0.5 : 0.25;
+  const q = myCare + (partner.quality || 0.4) * 0.6;
+  return q > 1.1 ? 2 : q > 0.75 ? 1 : 0;
+}
+function placeBreedEgg(slot, partner) {
+  const bonus = breedGeneScore(partner);
+  const tmp = { petId: newPetId(), generation: (S.generation || 1) + 1, eggId: S.eggId, eggChoice: S.eggChoice, morphId: null };
+  assignNewMorph(tmp, { morphId: S.morphId }, partner);
+  const now = Date.now();
+  const egg = {
+    stage: 'egg', form: 'egg', age: 0, weight: 5,
+    hunger: 4, happy: 4, disc: 0, careMiss: 0,
+    sick: false, sleep: false, lights: true, poop: false, poopCount: 0, poopSpots: [],
+    petId: tmp.petId, morphId: tmp.morphId, petName: tmp.petName,
+    generation: tmp.generation, eggId: tmp.eggId, eggChoice: tmp.eggChoice,
+    eggReadyAt: now + 5 * 60000, inheritedBonus: bonus,
+    breedNote: (partner.petName || partner.name || 'Friend') + ' × ' + displayName(S),
+    born: now, lastH: now, lastY: now, lastP: now, lastAge: now, lastSave: now,
+    bedHour: clampHour(S.bedHour, 20), wakeHour: clampHour(S.wakeHour, 8),
+    battleXP: 0, battleWins: 0, battleLosses: 0, growthPhase: 0,
+    call: false, paused: false, married: false
+  };
+  writePetToSlot(slot, egg);
+  partner.bred = true;
+  const gene = bonus >= 2 ? 'excellent' : bonus === 1 ? 'good' : 'wild';
+  toast('Breed egg in Slot ' + (slot + 1) + ' · ' + gene + ' · ' + speciesTag(egg.morphId));
+  save();
+  showPetMemory();
+}
+function confirmBreedClear(i) {
+  const pending = S._breedPending;
+  S._breedPending = null;
+  if (!pending) { showPetMemory(); return; }
+  const partner = S.friends[pending.partnerIdx] || S.friends[0];
+  if (!partner) { toast('Friend missing'); return; }
+  S.petMemory[i] = { pet: null };
+  placeBreedEgg(i, partner);
+}
 function tryBreed() {
   if (S.sleep) { toast('Sleeping...'); return; }
   if (S.stage !== 'adult') { toast('Need to be Adult first'); return; }
   if (S.friends.length === 0) { toast('Add a friend first'); return; }
-  if (S.married) { toast('Already has offspring'); return; }
-
   const partner = S.friends[S.selectedFriend] || S.friends[0];
+  if (!partner) { toast('Pick a friend'); return; }
+  if (!partner.beaten) { toast('Win a snapshot battle vs them first'); return; }
+  if (partner.bred) { toast('Already have an egg from this pal'); return; }
+  normalizePetMemory();
+  if (claimSlotForActive() < 0 && S.stage !== 'dead') {
+    toast('Park your pal first — memory full');
+    showPetMemory();
+    return;
+  }
+  normalizePetMemory();
+  const empty = S.petMemory.findIndex(e => !e || !e.pet);
+  if (empty < 0) {
+    S._breedPending = { partnerIdx: S.selectedFriend || 0 };
+    const extra = document.getElementById('overlay-extra');
+    let html = '<p>Memory full. CLEAR a slot to keep the breed egg (' +
+      (breedGeneScore(partner) >= 2 ? 'excellent' : breedGeneScore(partner) === 1 ? 'good' : 'wild') +
+      ' genes · ' + escapeHtml(partner.petName || partner.name || 'Friend') + ').</p><div class="friend-list">';
+    (S.petMemory || []).forEach((e, i) => {
+      html += '<div class="friend-item">Slot ' + (i + 1) + ' · ' +
+        escapeHtml(e && e.pet ? petMemoryName(e.pet) : 'empty') +
+        ' <button onclick="window.confirmBreedClear(' + i + ')">Replace</button></div>';
+    });
+    html += '</div><div class="btn-row"><button onclick="window.showConnectMenu()">Cancel</button></div>';
+    extra.innerHTML = html;
+    show('Breed egg', 'Pick a slot');
+    document.getElementById('obtn').style.display = 'none';
+    return;
+  }
   recordFamilyMember('bred');
-  storeCurrentPet();
-  S.married = true;
-  S.happy = 4;
-  // Parent care quality + partner quality → inherited bonus for next gen
-  const myCare = S.careMiss < 2 ? 0.85 : S.careMiss < 5 ? 0.5 : 0.25;
-  const parentQuality = myCare + (partner.quality || 0.4) * 0.6;
-  S.inheritedBonus = parentQuality > 1.1 ? 2 : parentQuality > 0.75 ? 1 : 0;
-
-  S.anim = 'marry';
-  S.animTimer = Date.now() + 3000;
-  spawnFx('heart', S.petX || 120, 80, 6);
-  toast('Married ' + partner.name + '! ♥');
-  beep(500, 0.1); beep(700, 0.1); beep(900, 0.15);
-
-  setTimeout(() => {
-    toast('Egg appearing...');
-    beep(400, 0.1);
-  }, 1800);
-
-  setTimeout(() => {
-    S.petId = newPetId();
-    S.stage = 'baby';
-    S.form = 'baby';
-    S.age = 0;
-    S.weight = 5;
-    S.hunger = 2 + (S.inheritedBonus > 0 ? 1 : 0);
-    S.happy = 2 + (S.inheritedBonus > 1 ? 1 : 0);
-    S.disc = Math.min(40, Math.floor((S.disc || 0) / 2));
-    S.careMiss = 0;
-    S.discMiss = 0;
-    S.sick = false;
-    S.poop = false;
-    S.poopCount = 0;
-    S.poopSpots = [];
-    S.call = false;
-    S.sleep = false;
-    S.lights = true;
-    S.paused = false;
-    S.lightsMissPending = false;
-    S.sleepStart = 0;
-    S._falseCall = false;
-    S._discPracticed = false;
-    S.born = Date.now();
-    S.married = false;
-    S.generation = (S.generation || 1) + 1;
-    S.growthPhase = 0;
-    S.lastGrowthAt = Date.now();
-    S.battleXP = 0;
-    S.battleWins = 0;
-    S.battleLosses = 0;
-    assignNewMorph(S, { morphId: S.morphId }, partner);
-    S.lastH = Date.now();
-    S.lastY = Date.now();
-    S.lastP = Date.now();
-    S.lastAge = Date.now();
-    S.lastVirtTick = Date.now();
-    S.anim = 'evo';
-    S.animTimer = Date.now() + 1800;
-    const geneTxt = S.inheritedBonus >= 2 ? ' (excellent genes!)' : S.inheritedBonus === 1 ? ' (good genes)' : '';
-    toast('Gen ' + S.generation + ' · ' + displayName(S) + ' ' + speciesTag(S.morphId) + geneTxt);
-    beep(620, 0.1); beep(820, 0.15);
-    save();
-    hide();
-  }, 3200);
+  placeBreedEgg(empty, partner);
 }
 
 window.addFriend = addFriend;
-window.tryBreed = tryBreed;
+window.tryBreed = tryBreed; window.confirmBreedClear = confirmBreedClear;
 
 // ===== REAL TAMAGOTCHI A/B/C CONTROL =====
 // A = move selection right / next icon in main menu
@@ -7469,9 +7441,12 @@ function updateIconHighlight() {
   const action = ICONS[S.sel];
   const icons = document.querySelectorAll('#icons .icon');
   let matched = false;
+  const needAct = needIconAction(careNeedKind());
   icons.forEach(el => {
-    const on = el.getAttribute('data-a') === action;
+    const act = el.getAttribute('data-a');
+    const on = act === action;
     el.classList.toggle('on', on);
+    el.classList.toggle('need', !!(needAct && act === needAct && !S.sleep));
     if (on) matched = true;
   });
   if (!matched && icons[S.sel]) icons[S.sel].classList.add('on');
@@ -7799,6 +7774,7 @@ window.addEventListener('touchstart', (e) => {
 
 function updateUI() {
   try { updateAppBadge(); } catch(e) {}
+  try { updateIconHighlight(); } catch(e) {}
   const hunUI = Math.max(0, Math.min(4, S.hunger | 0));
   const hapUI = Math.max(0, Math.min(4, S.happy | 0));
   document.getElementById('h-hearts').textContent = '♥'.repeat(hunUI) + '♡'.repeat(4 - hunUI);
@@ -7866,7 +7842,8 @@ function updateCareStreak() {
 
 function applyOfflineCatchup(now) {
   if (S.stage === 'egg' || S.stage === 'dead' || S.paused || S._away) return 0;
-  const last = Number(S.lastSave) || now;
+  const last = Number(S.lastSave);
+  if (!Number.isFinite(last) || last < 1e12 || last > now) { S.lastSave = now; return 0; }
   const elapsed = Math.max(0, now - last);
   if (elapsed < 2 * 60000) return 0;
   const activeMin = activeMinutesBetween(last, now);
@@ -7938,7 +7915,7 @@ function applyOfflineCatchup(now) {
       rustDisc(Math.min(4, nights));
       try { toast('Left lights on overnight — care miss', { pri: 2 }); } catch (e) {}
       if (typeof isNightTime === 'function' && isNightTime()) {
-        S.sleep = true;
+        S.sleep = true; S.playResult = null;
         S._dayNap = false;
         S.lightsMissPending = false;
         S.sleptProperly = false;
@@ -7953,7 +7930,8 @@ function applyOfflineCatchup(now) {
   }
   // Fallback slow age from daytime activity (very slow in realtime)
   const awakeAgeGain = Math.floor(activeMin / ageStep);
-  const ageGain = Math.min(1, Math.max(nights, awakeAgeGain));
+  let ageGain = Math.min(1, Math.max(nights, awakeAgeGain));
+  if (S.lastAgeDay === new Date(now).toDateString()) ageGain = 0;
   const stageBefore = S.stage;
   const formBefore = S.form;
   const growthBefore = S.growthPhase || 0;
@@ -8181,6 +8159,7 @@ function load() {
     if (S.battleLocked === undefined) S.battleLocked = false;
     if (S.lastFalseCall === undefined) S.lastFalseCall = 0;
     if (S.lastNaughtyDay === undefined) S.lastNaughtyDay = '';
+    if (S.lastNaughtyCount === undefined) S.lastNaughtyCount = 0;
     if (S.sleptProperly === undefined) S.sleptProperly = false;
     // Keep preference; if permission was revoked, force alerts off
     if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
@@ -8387,7 +8366,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.32', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.70', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -8395,7 +8374,7 @@ navigator.serviceWorker.register('./service-worker.js?v=5.32', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.32', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.70', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {
