@@ -33,10 +33,14 @@ Paldex 256 = 8 headgear × 8 eyes × 4 belly = 256. Good care may add a horn on 
 
 ## Battles
 
-Teen+. Training fight or **Battle Friend** with a share link. Adult: win that friend, then Breed. Your pal stays. The egg goes in a free Memory slot (or you clear one). Genes show excellent / good / wild. Same link later **updates** that friend’s pal.
+Teen+. Training fight or **Battle Friend** with a share link. Adult: win that friend, then Breed. Your pal stays. The egg goes in a free Memory slot (or you clear one). Genes show excellent / good / wild. Same link later **updates** that friend’s pal. Not live P2P.
 
 Pet Memory: **5** slots. Parked pals are frozen.
 
 ## Upload
 
 GitHub: `index.html`, `service-worker.js`, `manifest.json`, icons, `README.md`, `LICENSE`.
+
+Cloudflare: `cloudflare-worker.js` only. Cron **1 hour**. Health should say `"v":"5.71"`.
+
+Then hard-refresh the phone until cache is `pocketpal-v571`.

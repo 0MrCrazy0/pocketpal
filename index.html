@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="PocketPal">
 <meta name="twitter:description" content="Raise a handheld pixel pal. About 15 days to adult. 256 looks. Share-link battles.">
 <meta name="twitter:image" content="icon-512.png">
-<!-- Public Release - POCKETPAL v5.70 -->
+<!-- Public Release - POCKETPAL v5.71 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -426,7 +426,7 @@
    - Restart after death → Gen+1; friends/XP preferences kept where saved
    ============================================================ */
 // ============================================================
-//  POCKETPAL v5.70 FINAL — closed-app care push projection fix · prior polish kept
+//  POCKETPAL v5.71 FINAL — closed-app care push projection fix · prior polish kept
 // ============================================================
 
 const canvas = document.getElementById('c');
@@ -1814,7 +1814,7 @@ function tailAnchor(form, g) {
   };
 }
 function drawMorphTail(form, morphId, g, INK, f) {
-  return; // v5.70: tails off until a rump attach looks right
+  return; // v5.71: tails off until a rump attach looks right
   if (form === 'egg' || form === 'dead') return;
   if (kitLevelNow(form) < 3) return;
   const m = morphParts(morphId);
@@ -2005,7 +2005,7 @@ function plantFeet(cx, fy, INK, w, h) {
   fillRect(cx + 2, fy, 5, 4, INK);
 }
 function drawPetArms(form, g, f, INK) {
-  return; // v5.70: no hanging arms — they fought the LCD
+  return; // v5.71: no hanging arms — they fought the LCD
   if (form === 'egg' || form === 'dead') return;
   if (kitLevelNow(form) < 2) return;
   if (form === 'baby') return;
@@ -2240,7 +2240,7 @@ function careStillDue(type) {
   return true;
 }
 function careSnapshotBody(sub, enabled) {
-  // v5.70: paused/frozen only for intentional Away/Pause — not visibility hidden.
+  // v5.71: paused/frozen only for intentional Away/Pause — not visibility hidden.
   // backgrounded marks closed/background so Worker can project; SW still gets frozen via pushCareSnapshotToSW.
   const visHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
   const visVisible = typeof document !== 'undefined' && document.visibilityState === 'visible';
@@ -3546,7 +3546,7 @@ function drawPet(cx, cy, form, f) {
     const hb = homeDrawBoost();
     const metB = formMetrics(form, g);
     const kv = kitLevelNow(form);
-    // v5.70: one cute face-body (Tama). Battles stay Digimon-hybrid.
+    // v5.71: one cute face-body (Tama). Battles stay Digimon-hybrid.
     fillCirc(0, metB.cy, metB.r, INK);
     if (kv >= 2 && (form === 'teenGood' || form === 'adult10')) {
       const c = metB.crown;
@@ -7144,6 +7144,8 @@ function myBattleCard() {
 async function publishBattleCard() {
   const base = workerBaseUrl();
   if (!base) return false;
+  if (S._lastPublish && Date.now() - S._lastPublish < 10 * 60000) return false;
+  S._lastPublish = Date.now();
   try {
     const card = myBattleCard();
     await fetch(base + '/battle/publish', {
@@ -8057,7 +8059,7 @@ function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch(e) { noteSaveFail(); }
   pushCareSnapshotToSW();
   clearResolvedCareAlerts();
-  if (!S._lastCarePub || Date.now() - S._lastCarePub > 20000) {
+  if (!S._lastCarePub || Date.now() - S._lastCarePub > 15 * 60000) {
     S._lastCarePub = Date.now();
     publishCareCard();
   }
@@ -8366,7 +8368,7 @@ if ('serviceWorker' in navigator) {
 
   try { applyShellTheme(S.shellTheme || 0);
     try { if (S.stage !== 'egg' && S.stage !== 'dead') ensureMorph(S); } catch(e) {} } catch(e) {}
-navigator.serviceWorker.register('./service-worker.js?v=5.70', { updateViaCache: 'none' })
+navigator.serviceWorker.register('./service-worker.js?v=5.71', { updateViaCache: 'none' })
     .then(reg => reg.update())
     .catch(() => {});
 }
@@ -8374,7 +8376,7 @@ navigator.serviceWorker.register('./service-worker.js?v=5.70', { updateViaCache:
 function init() {
   const hadSave = load();
   if (!hadSave) {
-    show('PocketPal v5.70', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
+    show('PocketPal v5.71', 'A = Select  B = Confirm  C = Cancel\nHold B = Pause\nAway = 20 min idle\n\n256 looks · 15-day life\n6 eggs · Pick yours to begin.');
     document.getElementById('obtn').textContent = 'Start New Life';
     beginEggSelect({ silent: true });
   } else if (S.stage === 'egg') {
