@@ -2,7 +2,7 @@
  * CACHE carries the game version: bump it with every release so players get the update.
  * A new version installs in the background and WAITS; the page shows "New version ready"
  * and sends {type:'skipWaiting'} when the player taps it. Old caches are deleted on activate. */
-var CACHE = 'pocketpal2-v1.6.0';
+var CACHE = 'pocketpal2-v1.6.6';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png',

@@ -1,6 +1,6 @@
 {
   "name": "pocketpal2",
-  "version": "1.6.0",
+  "version": "1.6.6",
   "private": true,
   "description": "PocketPal 2 - a pocket virtual pet.",
   "scripts": {

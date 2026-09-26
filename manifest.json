@@ -1,7 +1,7 @@
 {
   "name": "PocketPal 2",
   "short_name": "PocketPal 2",
-  "version": "1.6.0",
+  "version": "1.6.6",
   "description": "Raise a pixel pets in a handheld: six animals, 18 adult forms, battles, skill trees and breeding. Works offline.",
   "id": "./",
   "start_url": "./index.html",
