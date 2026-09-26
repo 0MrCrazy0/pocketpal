@@ -3,7 +3,7 @@
 (function (root) {
   var PP = root.PP = root.PP || {};
   PP.CONFIG = {
-    relayUrl: 'https://pocketpal.crzymn05.workers.dev',        // e.g. 'https://pocketpal2-relay.yourname.workers.dev' (no trailing slash)
-    vapidPublicKey: 'f9100eb3886a40aa8a76d71cc308428b'   // public VAPID key for care-alert push notifications (optional)
+    relayUrl: 'https://pocketpal2-relay.crzymn05.workers.dev',        // e.g. 'https://pocketpal2-relay.yourname.workers.dev' (no trailing slash)
+    vapidPublicKey: 'CODES'   // public VAPID key for care-alert push notifications (optional)
   };
 })(typeof window !== 'undefined' ? window : globalThis);
