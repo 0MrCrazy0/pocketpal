@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#e85a71">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="PocketPal 2 - raise a pixel pet in a pink handheld. Six animals, 18 adult forms, battles, skill trees and breeding. Works offline.">
+<meta name="application-name" content="PocketPal 2">
+<meta name="color-scheme" content="dark">
+<!-- Link previews need an absolute image URL. Before hosting, run: node tools/set-site-url.js https://your.site/path/  (or edit og:image / twitter:image by hand). -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="PocketPal 2">
+<meta property="og:description" content="Raise a pixel pet in a handheld: six animals, 18 adult forms, battles, skill trees and breeding. Free, offline, no accounts.">
+<meta property="og:image" content="icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="PocketPal 2">
+<meta name="twitter:description" content="Raise a pixel pet in a handheld. Free, offline, no accounts.">
+<meta name="twitter:image" content="icon-512.png">
+<title>PocketPal 2</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="device" aria-label="PocketPal 2 handheld">
+  <div class="shell-controls">
+    <button type="button" id="menuBtn" class="sbtn" aria-label="Open menu">MENU</button>
+    <button type="button" id="soundBtn" class="sbtn" aria-label="Sound on or off" aria-pressed="true">&#9834; ON</button>
+    <button type="button" id="testBtn" class="sbtn" aria-label="Test panel" hidden>TEST</button>
+  </div>
+  <div class="brand" aria-hidden="true">POCKETPAL<b>2</b></div>
+  <div class="screen-side">
+    <div class="lcd-bezel">
+      <div class="lcd">
+        <canvas id="lcd" width="216" height="160" role="img" aria-label="Pet screen"></canvas>
+        <div id="bmenu" class="bmenu" hidden></div>
+        <div id="overlay" class="overlay" hidden role="dialog" aria-labelledby="ovTitle" aria-live="polite"></div>
+        <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+  <div class="control-side">
+    <nav class="icons" aria-label="Care icons">
+      <button type="button" class="icon" style="--i:0" aria-label="Status and menu" title="Status / menu"></button>
+      <button type="button" class="icon" style="--i:1" aria-label="Feed" title="Feed"></button>
+      <button type="button" class="icon" style="--i:2" aria-label="Train and play" title="Train / play"></button>
+      <button type="button" class="icon" style="--i:3" aria-label="Clean" title="Clean"></button>
+      <button type="button" class="icon" style="--i:4" aria-label="Medicine" title="Medicine"></button>
+      <button type="button" class="icon" style="--i:5" aria-label="Lights" title="Lights"></button>
+      <button type="button" class="icon" style="--i:6" aria-label="Battle" title="Battle"></button>
+      <button type="button" class="icon" style="--i:7" aria-label="Discipline" title="Discipline"></button>
+    </nav>
+    <div class="btns">
+      <div class="btn a" id="btnA" role="button" tabindex="0" aria-label="A: next (key A or arrows)" title="A - next (A / arrows)">A</div>
+      <div class="btn b" id="btnB" role="button" tabindex="0" aria-label="B: choose (key S or Enter)" title="B - choose (S / Enter)">B</div>
+      <div class="btn c" id="btnC" role="button" tabindex="0" aria-label="C: back (key D or Escape)" title="C - back (D / Esc)">C</div>
+    </div>
+  </div>
+</main>
+<div id="tabLock" class="tablock" hidden role="alertdialog" aria-modal="true" aria-labelledby="tabLockMsg">
+  <div class="tablock-box"><p id="tabLockMsg"><b>PocketPal 2 is open in another tab.</b><br>Your pal is being looked after there, so this tab is paused and will not save.</p>
+  <button type="button" id="tabLockBtn">Play here instead</button></div>
+</div>
+<button type="button" id="updateBar" class="update-bar" hidden>New version ready &mdash; tap to update</button>
+<noscript><p class="nojs">PocketPal 2 needs JavaScript.</p></noscript>
+
+<!-- Classic scripts (no modules, no build) so it also runs from file:// -->
+<script src="js/config.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/data.js"></script>
+<script src="js/core/time.js"></script>
+<script src="js/core/sleep.js"></script>
+<script src="js/data/atlas.js"></script>
+<script src="js/core/pet.js"></script>
+<script src="js/core/care.js"></script>
+<script src="js/core/evolution.js"></script>
+<script src="js/core/stats.js"></script>
+<script src="js/core/skills.js"></script>
+<script src="js/core/battle.js"></script>
+<script src="js/core/breeding.js"></script>
+<script src="js/core/cards.js"></script>
+<script src="js/core/arena.js"></script>
+<script src="js/core/collection.js"></script>
+<script src="js/core/shop.js"></script>
+<script src="js/core/behaviour.js"></script>
+<script src="js/core/save.js"></script>
+<script src="js/core/game.js"></script>
+<script src="js/ui/font.js"></script>
+<script src="js/ui/sprites.js"></script>
+<script src="js/ui/audio.js"></script>
+<script src="js/ui/shells.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/battleview.js"></script>
+<script src="js/ui/minigames.js"></script>
+<script src="js/ui/menus.js"></script>
+<script src="js/ui/input.js"></script>
+<script src="js/ui/testpanel.js"></script>
+<script src="js/ui/net.js"></script>
+<script src="js/ui/main.js"></script>
+</body>
+</html>

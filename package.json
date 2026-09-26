@@ -1,0 +1,14 @@
+{
+  "name": "pocketpal2",
+  "version": "1.6.0",
+  "private": true,
+  "description": "PocketPal 2 - a pocket virtual pet.",
+  "scripts": {
+    "test": "node --test tests/",
+    "sprites": "python3 tools/gen_sprites.py",
+    "e2e": "node tests/e2e.js",
+    "layout": "node tests/layout.js",
+    "sprite-check": "node tests/sprites.js"
+  },
+  "license": "MIT"
+}
