@@ -2,7 +2,7 @@
 
 A pocket virtual pet in the style of Tamagotchi and Digimon. You raise a little pixel animal inside a pink handheld with a green LCD screen. Hatch it, feed it, clean up after it, put it to bed and teach it some manners. How well you look after it decides which of three adult forms it grows into. Adults battle, level up, learn skills and have eggs of their own.
 
-This is **version 1.8.4**: lions have a **round eye** with a proper pupil, and every eye passes an automated check. Lifted and moving legs are complete in every pose; the wolf now scratches like a dog, with a hind leg. The home **status strip** has two rows: energy pips, discipline, weight, and icons for sick, poop, calls and sleep. Battles have **Run** (quick battles) and **Forfeit** (arena and friends). Each arena cup is now a run of 3 foes (a challenger, a rival and a boss), and there is a post-game **Myth Cup**. A cup gets a star only when you have really won it. Friend battle codes were tested end to end on two profiles. 1.8.3: a tired pal now **shows** it instead of opening a menu. Under 30 energy it gets droopy eyes, yawns and nods off, and a **Zz** shows in the top strip; if you pick a game, training or a battle without enough energy it shakes its head and yawns ("TOO TIRED..."). Lion heads are shorter and rounder, like a real big cat. **Match** cards show clear open-eyed poses at full pixel size. Stray pixels are gone from every sprite. Deploying is explained step by step in `DEPLOY.md`. 1.8.2: baby, child and teen faces now look forward (the eye sits toward the snout or beak, with clearer mouths), **Match** is a real memory game (8 cards shown for 1.8 s, then find the 4 pairs), naps recover energy twice as fast and training is cheaper. 1.8.1 made **Memory** a look-left / look-right sequence game and turned maned lions' faces forward. 1.8.0 was a full end-to-end audit of 1.7.6: side-view eyes fit every head again, the Memory game can be finished, well-fed pals no longer slowly turn "Heavy", praise can't be farmed, the battle AI uses every move, all six animals are balanced, and the admin password is no longer stored as plain text (see `CHANGELOG.md`). `DESIGN.md` explains every system and every number.
+This is **version 1.9.0**. It brings an **easier start**: a pal's first day is twice as forgiving, and short tips guide new players. There are **music jingles**, and the home screen has a **background that changes from dawn to night**, with rain and snow on some days. You get **3 daily goals** with coin rewards and streaks, rare **lucky days, visitors and golden eggs**, and **seasonal shells**. **Hard mode** is optional and for experts (no revives). **Backups** come with a gentle reminder, and an optional **end-to-end encrypted cloud save** runs on your own worker. The lion is redesigned, the eyes are round and the dotted lines are gone from the sprites. 1.8.4: lions have a **round eye** with a proper pupil, and every eye passes an automated check. Lifted and moving legs are complete in every pose; the wolf now scratches like a dog, with a hind leg. The home **status strip** has two rows: energy pips, discipline, weight, and icons for sick, poop, calls and sleep. Battles have **Run** (quick battles) and **Forfeit** (arena and friends). Each arena cup is now a run of 3 foes (a challenger, a rival and a boss), and there is a post-game **Myth Cup**. A cup gets a star only when you have really won it. Friend battle codes were tested end to end on two profiles. 1.8.3: a tired pal now **shows** it instead of opening a menu. Under 30 energy it gets droopy eyes, yawns and nods off, and a **Zz** shows in the top strip; if you pick a game, training or a battle without enough energy it shakes its head and yawns ("TOO TIRED..."). Lion heads are shorter and rounder, like a real big cat. **Match** cards show clear open-eyed poses at full pixel size. Stray pixels are gone from every sprite. Deploying is explained step by step in `DEPLOY.md`. 1.8.2: baby, child and teen faces now look forward (the eye sits toward the snout or beak, with clearer mouths), **Match** is a real memory game (8 cards shown for 1.8 s, then find the 4 pairs), naps recover energy twice as fast and training is cheaper. 1.8.1 made **Memory** a look-left / look-right sequence game and turned maned lions' faces forward. 1.8.0 was a full end-to-end audit of 1.7.6: side-view eyes fit every head again, the Memory game can be finished, well-fed pals no longer slowly turn "Heavy", praise can't be farmed, the battle AI uses every move, all six animals are balanced, and the admin password is no longer stored as plain text (see `CHANGELOG.md`). `DESIGN.md` explains every system and every number.
 
 - 6 animals: croc, lion, eagle, elephant, bear, wolf
 - 5 life stages: egg → baby → child → teen → adult (about 4 days)
@@ -15,6 +15,13 @@ This is **version 1.8.4**: lions have a **round eye** with a proper pupil, and e
   - **Sleep schedules.** Each pal has its own bedtime and wake time, which you can change within healthy limits for its age.
   - **12- or 24-hour clock**, picked from your browser's language and switchable in Settings.
   - **Status strip** on the home screen, in two rows: hunger and happiness hearts, energy pips, the stage and age; then discipline, weight and only the icons that apply right now (sick, poop count, a call, asleep or night, tired).
+- **New in 1.9.0:**
+  - **First-day grace and tips.** A pal's first 24 hours are twice as forgiving, and a small hint bar teaches the basics to eggs, babies and children. Settings ▸ Tips turns it off; **Show tips again** brings it back.
+  - **Music.** Chiptune jingles for hatching, growing up, wins, cups, goals and rare events. Turn them off in Settings ▸ Music.
+  - **Home scene.** Dawn, day, dusk and night follow the game clock, with hills, clouds, stars, the moon, and some rainy or snowy days. It stays still with "reduced motion".
+  - **Daily goals** (Main menu ▸ Daily goals). You get 3 goals a day, +5 coins each, and +10 for all three plus a streak bonus. There are rare **Lucky coin days** (double coins), **Visitors** to battle once for +25 coins, and very rarely a **Golden egg** (which unlocks the Gilded shell). **Seasonal shells:** Spooky (Oct), Frost (Dec–Jan) and Blossom (Mar–May, Sep–Nov). Finish all three goals on 3 days of the season to earn one. Turning the clock back can't farm them.
+  - **Hard mode** (optional, new eggs only, with a warning first). A hard-mode pal dies after 12 awake hours starving or 24 hours sick, and runs away after 6 mistakes in a day. It has no first-day grace and **can't be revived**. It earns 25 % more coins. Lost hard-mode pals are remembered in the Album, the family tree and the Paldex.
+  - **Backups.** After 7 days without a backup, the game offers a .json download or a save code. **Cloud save** (Settings ▸ Cloud save) is opt-in. Your save is encrypted on your device with a recovery code (and an optional passphrase) before it goes to the worker, so the server never sees your pals.
 - Works offline, installs to your phone, and has no build step
 
 ## Play it
@@ -25,7 +32,7 @@ To install it on a phone as an app, put the folder on any static web host (https
 
 ### Hosting it yourself
 
-The release zip holds only the files players need. Unzip it and upload the folder as-is to any static host. There is no build step and no server code. The source zip (`pocketpal-1.8.4-source.zip`) also has `DESIGN.md`, the tests, the tools and the sprite generator.
+The release zip holds only the files players need. Unzip it and upload the folder as-is to any static host. There is no build step and no server code. The source zip (`pocketpal-1.9.0-source.zip`) also has `DESIGN.md`, the tests, the tools and the sprite generator.
 
 - **GitHub Pages:** push the folder to a repo, then turn on *Settings → Pages* for the branch.
 - **Netlify / Cloudflare Pages / Vercel:** drag and drop the folder, or point the site at the repo with no build command and the folder as the output directory.
@@ -96,6 +103,9 @@ Every pal has a **sleep schedule**. When it hatches it gets the default for its 
 - A little speech bubble shows **what** your pal wants (food, play, medicine, lights, cleaning or a scolding).
 - The matching icon glows.
 - The handheld beeps when a new need appears (if sound is on), then again every 5 minutes while it's still waiting.
+- **Daily goals:** Main menu ▸ **Daily goals** shows today's 3 goals, your streak, any rare event (lucky day, visitor, golden egg) and your progress towards the seasonal shells. Goals start once your egg has hatched.
+- **Hard mode:** pick it in the egg picker (**Mode: Normal / HARD**) or in Settings. It only affects new eggs. A **HARD** badge shows on the screen.
+- **Backups and cloud save:** Settings ▸ **Backup** downloads a .json file or copies a save code (**Load from a file** / **Paste a code** reads it back). Settings ▸ **Cloud save** turns on an encrypted copy on the worker. Write down the recovery code it shows: you need it to **Restore** on another device. Without it, nobody can open the copy.
 - **Care alerts (optional):** the **bell** next to MENU (or **Settings → Care alerts**) turns on closed-app pings. They need the game on https and the owner's Cloudflare worker (see `DEPLOY.md`). It's off until you turn it on, and it asks your browser for permission first. Without the worker, the game still beeps while it is open.
 
 ### Battles and the arena
@@ -282,10 +292,12 @@ js/config.js          care-alert worker URL + VAPID public key (empty = fully of
 js/core/*.js          PURE game logic, no DOM: util, data (all tuning numbers), time, sleep, pet, care,
                       evolution, stats, skills, battle, breeding, cards, arena, collection
                       (Paldex + shell unlocks), shop (coins, items, slots), behaviour
-                      (blinking + idle choices), save, game
+                      (blinking + idle choices), daily (goals, rare events, seasons),
+                      hints (beginner tips), cloud (recovery code + encryption), save, game
 js/data/atlas.js      sprite sheet layout (generated)
 js/ui/*.js            screen + input: font, sprites, audio, render, battleview, minigames,
                       menus, input, testpanel, admin (hashed test-panel unlock), net (care alerts),
+                      cloudsync (cloud save uploads / restore),
                       shells (paints the handheld), main
 sprites/*.png         6 species sheets + fx sheet + icon strip (generated)
 tools/gen_sprites.py  draws every sprite from code (python3 + Pillow): python3 tools/gen_sprites.py
@@ -294,9 +306,11 @@ tools/grid.py         quick sprite line-up preview for art review
 tools/set-admin-password.js  changes the admin (test panel) password hash
 tools/gen_icons.py    menu icons + app icons
 tools/set-site-url.js makes og:image / twitter:image absolute for your host
+tools/gen-vapid.js    makes a new push (VAPID) key pair on your computer: node tools/gen-vapid.js
 service-worker.js     offline cache (versioned; http/https only)
 manifest.json         install-to-phone (with maskable icon)
-cloudflare-worker.js  OPTIONAL server: care-alert pushes (wrangler.toml / DEPLOY.md = how to deploy it)
+cloudflare-worker.js  OPTIONAL server: care-alert pushes + encrypted cloud saves. One file, paste it into
+                      the Cloudflare dashboard (DEPLOY.md). wrangler.toml (source zip only) is optional
 tests/                Node tests, Playwright play-through + audit (e2e.js), layout audit (layout.js),
                       sprite/face check (sprites.js, uses tests/fixtures/sprite-faces.json)
 ```
@@ -307,16 +321,18 @@ tests/                Node tests, Playwright play-through + audit (e2e.js), layo
 - **No accounts, ads, analytics, tracking or cookies.** The game makes no network requests of its own, apart from loading its own files.
 - **Save transfer codes** are text you copy yourself. They contain your pals and settings, and nothing about you or your device.
 - **Care alerts** are off until you switch them on, and your browser asks for permission first.
-- **The optional server** is only contacted when you turn Care alerts on. It stores only a push subscription and the time of your pal's next need (deleted when you turn alerts off, after 24 h of unanswered pings, or when the push service says the subscription is gone). Friend battle codes never leave your device.
+- **Cloud save** is off until you turn it on. Your save is encrypted **on your device** (AES-GCM, with a key made from your recovery code and optional passphrase) before upload. The server stores only that encrypted blob under a hashed ID, plus a hash of an access token. It can't read your pals, and it can't tell who you are. Copies not used for 400 days are deleted, and **Delete cloud copy** removes yours at once.
+- **The optional server** is only contacted when you turn Care alerts or Cloud save on. It stores only a push subscription and the time of your pal's next need (deleted when you turn alerts off, after 24 h of unanswered pings, or when the push service says the subscription is gone). Friend battle codes never leave your device.
 - If your browser blocks storage (some private modes), the game still runs and tells you that progress will be lost when the tab closes.
 
 ## Optional server
 
-The game never needs a server. If you want phone reminders while the app is closed, deploy `cloudflare-worker.js` to your own Cloudflare account:
+The game never needs a server. If you want phone reminders while the app is closed, or cloud saves, deploy `cloudflare-worker.js` to your own Cloudflare account. Everything can be done in the **Cloudflare dashboard**, with no tools to install (step by step in `DEPLOY.md`):
 
-1. Create a KV namespace and bind it as `CODES`.
-2. Set `ALLOWED_ORIGIN` to your game's origin (for example `https://you.github.io`).
-3. For reminders, also set `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT`, add the **secret** `VAPID_PRIVATE_KEY` with `wrangler secret put`, and add a cron trigger that runs once an hour (`0 * * * *`).
+1. Paste `cloudflare-worker.js` into the worker's **Edit code** and **Deploy**. It's one file, with no imports or build step.
+2. **Settings ▸ Bindings:** bind KV namespaces as `CODES` (care alerts) and `SAVES` (cloud save).
+3. **Settings ▸ Variables and Secrets:** add `ALLOWED_ORIGIN` (your game's origin, for example `https://you.github.io`). For reminders, also add `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT` (Text) and `VAPID_PRIVATE_KEY` (type **Secret**).
+4. **Settings ▸ Triggers:** add a cron trigger that runs once an hour (`0 * * * *`).
 
 Then put the worker URL (and the VAPID public key) in `js/config.js`. Care alerts use the worker. No secrets are stored in the code: the VAPID **private** key only ever goes into the worker's encrypted Secret.
 

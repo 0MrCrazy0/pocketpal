@@ -128,6 +128,7 @@
     var c = PP.Collection.counts(st());
     return { title: 'MENU', items: [
       { label: 'Status', sub: 'Needs, stats, care report', act: function () { push(statusScreen(0)); } },
+      dailyItem(),
       { label: 'Skills', sub: 'Skill tree (adults)', act: function () { push(skillsScreen); } },
       { label: 'Paldex', sub: c.adults + '/18 adult forms \u00b7 ' + c.total + '/36 in all', right: c.adults + '/18', act: function () { push(paldexScreen(0)); } },
       { label: 'Shell colour', sub: 'Repaint your handheld', act: openShells },
@@ -141,6 +142,36 @@
       { label: 'How to play', sub: 'All the rules on one page', act: function () { push(helpScreen); } },
       { label: 'About', sub: 'Version ' + D.VERSION + ', privacy', act: function () { push(aboutScreen); } }
     ] };
+  }
+
+  /* ------------------------------------------------------------ 1.9.0 daily goals */
+  function dailyItem() {
+    var d = PP.Daily.today(st(), G.now(st())), n = d ? d.goals.filter(function (g) { return g.done; }).length : 0;
+    return { label: 'Daily goals', sub: d ? n + '/3 done' + (d.streak > 1 ? ' \u00b7 ' + d.streak + '-day streak' : '') + (d.event ? ' \u00b7 ' + PP.Daily.EVENTS[d.event].name : '') : 'Start once your egg hatches',
+      right: d ? n + '/3' : '', act: function () { push(dailyScreen); } };
+  }
+  function dailyScreen() {
+    var s = st(), t = G.now(s), d = PP.Daily.today(s, t), D9 = PP.Daily;
+    var h = '';
+    if (!d) h = '<p class="tip">Daily goals start when your pal has hatched. Check back soon!</p>';
+    else {
+      h += '<ul class="goals">' + d.goals.map(function (g) {
+        return '<li class="' + (g.done ? 'done' : '') + '"><span class="gk" aria-hidden="true">' + (g.done ? '\u2714' : '\u25cb') + '</span>' + esc(D9.text(g)) +
+          (g.need > 1 ? ' <small>' + g.n + '/' + g.need + '</small>' : '') + '<span class="r">+' + D9.GOAL_COINS + 'c</span></li>';
+      }).join('') + '</ul>';
+      var nb = D9.ALL_BONUS + 2 * Math.min((d.lastAll === d.day - 1 ? d.streak : 0), 5) + (pet() && pet().hard ? D9.HARD_BONUS : 0);
+      h += '<p class="tip">' + (d.allPaid ? 'All done today! Streak: <b>' + d.streak + '</b> day' + (d.streak === 1 ? '' : 's') + '.' : 'Finish all three for <b>+' + nb + 'c</b>' + (d.streak ? ' (streak ' + d.streak + ')' : '') + '.') + ' New goals tomorrow.</p>';
+      if (d.event) h += '<p class="rare"><b>' + esc(D9.EVENTS[d.event].name) + '</b> ' + esc(D9.EVENTS[d.event].text) + (d.event === 'visitor' && d.eventUsed ? ' (done)' : '') + '</p>';
+    }
+    var cur = D9.seasonsAt(t);
+    h += '<p class="tip">Seasonal shells: ' + D9.SEASONS.map(function (se) {
+      var have = PP.Collection.shellStatus(s, se.id).ok;
+      return '<b>' + esc(se.name) + '</b> ' + (have ? '\u2714' : Math.min(D9.SEASON_DAYS, D9.seasonDays(s, se.id)) + '/' + D9.SEASON_DAYS + (cur.indexOf(se.id) >= 0 ? ' (now!)' : ' (' + esc(se.window) + ')'));
+    }).join(' \u00b7 ') + '. Finish all 3 goals on ' + D9.SEASON_DAYS + ' days in the season.</p>';
+    var items = [];
+    if (d && D9.visitorReady(s, t)) items.push({ label: 'Battle the visitor', sub: 'One try today \u00b7 win for +' + D9.VISITOR_BONUS + ' coins', disabled: !!G.canBattle(pet()), reason: G.canBattle(pet()), act: function () { close(); App().startVisitor(); } });
+    items.push({ label: 'Back', act: pop });
+    return { title: 'DAILY GOALS', html: h, items: items, live: true };
   }
 
   /* ------------------------------------------------------------ Paldex */
@@ -173,13 +204,17 @@
         } };
     };
   }
+  function dexMemorial(sp, k) {
+    var lost = st().album.filter(function (e) { return e.hard && (e.fate === 'dead' || e.fate === 'gone') && e.species === sp && (e.stage === 'adult' ? e.form : e.stage) === k; });
+    return lost.length ? '<p class="memorial-note">\u2020 In memory: ' + lost.slice(-3).map(function (e) { return esc(e.name); }).join(', ') + ' (hard mode)</p>' : '';
+  }
   function dexEntry(sp, k) {
     return function () {
       var e = PP.Collection.get(st(), sp, k) || {}, known = e.r || e.s;
       var skey = k === 'bad' || k === 'good' || k === 'perfect' ? 'adult_' + k : k;
       return { title: known ? D.NAMES[sp][k].toUpperCase() : '???', html: '<div class="vs">' + thumb(sp, skey, known ? 'happy' : 'idle', 40, e.r ? '' : e.s ? 'dim' : 'sil') + '</div>' +
         '<p><b>' + esc(D.SPECIES_INFO[sp].label) + ' \u00b7 ' + DEX_TAG[k] + '</b>' + (e.r ? ' \u00b7 raised ' + new Date(e.r).toLocaleDateString() : e.s ? ' \u00b7 seen, not raised yet' : ' \u00b7 not found yet') + '</p>' +
-        '<p class="tip">How to get it: ' + esc(PP.Collection.hint(sp, k)) + '</p>', items: [{ label: 'Back', act: pop }] };
+        '<p class="tip">How to get it: ' + esc(PP.Collection.hint(sp, k)) + '</p>' + dexMemorial(sp, k), items: [{ label: 'Back', act: pop }] };
     };
   }
 
@@ -425,6 +460,7 @@
       { label: 'My battle code', sub: 'Share your pal', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
       { label: 'Add friend code', sub: 'Paste a code (battle or breed)', act: function () { push(addCodeScreen); } }
     ];
+    if (PP.Daily.visitorReady(st(), G.now(st()))) items.unshift({ label: 'Visitor!', sub: 'A wild pal came by: one try today, +' + PP.Daily.VISITOR_BONUS + ' coins for a win', right: 'NEW', disabled: !!why, reason: why, act: function () { close(); App().startVisitor(); } });
     return { title: 'BATTLE', html: why ? '<p class="tip">' + esc(why) + '</p>' : '', items: items };
   }
   /* 1.8.4: per-cup progress. A star only for a cup really won (state.arena.cups[i].won). */
@@ -549,7 +585,7 @@
 
   function slotLine(p) {
     if (!p) return 'empty';
-    return PP.Pet.formName(p) + ' \u00b7 ' + (p.stage === 'adult' ? FORM_LABEL[p.form] + ' Lv' + p.level : p.stage) + (p.fate ? ' \u00b7 ' + (p.fate === 'dead' ? 'R.I.P.' : 'gone') : '');
+    return PP.Pet.formName(p) + ' \u00b7 ' + (p.stage === 'adult' ? FORM_LABEL[p.form] + ' Lv' + p.level : p.stage) + (p.hard ? ' \u00b7 HARD' : '') + (p.golden ? ' \u00b7 golden' : '') + (p.fate ? ' \u00b7 ' + (p.fate === 'dead' ? 'R.I.P.' : 'gone') : '');
   }
   function palBox() {
     var s = st();
@@ -575,7 +611,7 @@
       var s = st(), p = s.slots[i]; if (!p) return null;
       var items = [];
       if (i !== s.active && !p.fate) items.push({ label: 'Take out', sub: 'Switch to this pal', act: function () { var r = G.setActive(s, i, Date.now()); App().toast(r.msg); App().resetWalker(); App().save(); close(); } });
-      if (p.fate && p.fate !== 'released') items.push({ label: 'Revive', sub: 'Costs ' + G.reviveCost(p) + ' coins', right: G.reviveCost(p) + 'c', act: function () {
+      if (p.fate && p.fate !== 'released' && !p.hard) items.push({ label: 'Revive', sub: 'Costs ' + G.reviveCost(p) + ' coins', right: G.reviveCost(p) + 'c', act: function () {
         push(confirmScreen('Revive ' + p.name + '?', 'Costs ' + G.reviveCost(p) + ' coins. You have ' + PP.Shop.coins(s) + '.', function () {
           var r = G.revive(s, { slot: i, now: Date.now() }); App().toast(r.msg); PP.Audio.play(r.ok ? 'level' : 'no'); if (r.ok) { App().resetWalker(); App().save(); } pop();
         }));
@@ -589,13 +625,30 @@
   }
   function speciesPicker(onPick, title) {
     return function () {
+      var hard = !!st().settings.hardNext;
       var items = D.SPECIES.map(function (sp) {
         var info = D.SPECIES_INFO[sp];
         return { icon: thumb(sp, 'adult_good', 'idle', 20), label: info.label, sub: info.blurb, act: function () { onPick(sp); } };
       });
       items.push({ label: 'Surprise me', sub: 'Random egg', act: function () { onPick(D.SPECIES[Math.floor(Math.random() * D.SPECIES.length)]); } });
-      return { title: title || 'CHOOSE AN EGG', items: items };
+      items.push({ label: 'Mode: ' + (hard ? 'HARD' : 'Normal'), right: hard ? 'HARD' : 'NORMAL', sub: hard ? 'Harsh rules, no revives. Tap for normal mode' : 'Tap to try hard mode (for experts)', cls: hard ? 'hardsel' : '',
+        act: function () { toggleHard(); } });
+      return { title: (title || 'CHOOSE AN EGG') + (hard ? ' \u00b7 HARD' : ''), html: hard ? '<p class="tip warn">Hard mode is ON for this egg.</p>' : '', items: items };
     };
+  }
+  /* 1.9.0 hard mode: confirm with a clear warning before switching it on (new eggs only). */
+  var HARD_TEXT = 'Hard mode is for experts. A hard-mode pal: dies after 12 awake hours starving or 24 hours sick, ' +
+    'runs away after 6 care mistakes in 24 hours, gets no first-day grace, and can NEVER be revived. ' +
+    'Its memory stays in your Album. In return it earns 25% more coins from play and +5 on daily goals. Only NEW eggs are affected.';
+  function hardWarning() {
+    return { title: 'HARD MODE?', html: '<p class="warn"><b>\u26a0 Warning</b></p><p>' + esc(HARD_TEXT) + '</p>', items: [
+      { label: 'Yes, hard mode for new eggs', act: function () { st().settings.hardNext = true; App().save(); App().toast('Hard mode ON for new eggs'); pop(); } },
+      { label: 'No, keep normal', act: pop }] };
+  }
+  function toggleHard() {
+    var s = st();
+    if (s.settings.hardNext) { s.settings.hardNext = false; App().save(); App().toast('Normal mode for new eggs'); refresh(); }
+    else push(hardWarning);
   }
 
   function breedScreen() {
@@ -641,7 +694,8 @@
     var items = list.map(function (e) {
       var sk = e.stage === 'adult' ? 'adult_' + (e.form || 'good') : (e.stage || 'baby');
       return { icon: thumb(e.species, sk, e.fate === 'dead' ? 'faint' : 'idle', 15), label: e.name + ' ' + (e.sex === 'M' ? '\u2642' : '\u2640') + ' G' + e.gen,
-        sub: D.NAMES[e.species][e.stage === 'adult' ? e.form : e.stage] + (e.level ? ' Lv' + e.level : '') + (e.fate ? ' \u00b7 ' + e.fate : ''), act: function () { push(treeScreen(e.id)); } };
+        sub: D.NAMES[e.species][e.stage === 'adult' ? e.form : e.stage] + (e.level ? ' Lv' + e.level : '') + (e.fate ? ' \u00b7 ' + e.fate : '') + (e.hard && (e.fate === 'dead' || e.fate === 'gone') ? ' \u00b7 \u2020 in memoriam (hard mode)' : e.hard ? ' \u00b7 HARD' : '') + (e.golden ? ' \u00b7 golden' : ''),
+        cls: e.hard && (e.fate === 'dead' || e.fate === 'gone') ? 'memorial' : '', act: function () { push(treeScreen(e.id)); } };
     });
     items.push({ label: 'Back', act: pop });
     return { title: 'ALBUM (' + list.length + ')', html: list.length ? '' : '<p class="tip">Pals appear here once they hatch.</p>', items: items };
@@ -664,6 +718,7 @@
         h += '</div><div class="tlabel">Parents</div><div class="trow">' + ps.map(nodeHtml).join('') + '</div>';
       } else h += '<p class="tip">Wild egg - no known parents.</p>';
       h += '<div class="trow me">' + nodeHtml(t) + '</div></div>';
+      if (e.hard && (e.fate === 'dead' || e.fate === 'gone')) h += '<p class="memorial-note">\u2020 In memory of <b>' + esc(e.name) + '</b>, raised in hard mode' + (e.days != null ? ' for ' + e.days + ' day' + (e.days === 1 ? '' : 's') : '') + ' (' + esc(e.cause || e.fate) + '). Hard-mode pals cannot be revived.</p>';
       return { title: 'FAMILY OF ' + String(e.name).toUpperCase(), html: h, items: [{ label: 'Back', act: pop }] };
     };
   }
@@ -713,6 +768,12 @@
     var canNotify = typeof Notification !== 'undefined';
     return { title: 'SETTINGS', items: [
       { label: 'Sound', right: s.settings.sound ? 'ON' : 'OFF', sub: 'Beeps, calls and music', act: function () { s.settings.sound = !s.settings.sound; PP.Audio.setEnabled(s.settings.sound); App().updateSoundBtn(); App().save(); refresh(); } },
+      { label: 'Music', right: s.settings.music !== false ? 'ON' : 'OFF', sub: 'Jingles for hatching, growing up, wins and goals (needs Sound)', act: function () { s.settings.music = s.settings.music === false; PP.Audio.setMusic(s.settings.music); App().save(); refresh(); if (s.settings.music) PP.Audio.play('goal'); } },
+      { label: 'Tips', right: s.settings.hints !== false ? 'ON' : 'OFF', sub: 'Short hints for young pals', act: function () { s.settings.hints = s.settings.hints === false; App().save(); refresh(); } },
+      { label: 'Show tips again', sub: 'Bring back every beginner tip', act: function () { PP.Hints.reset(s); s.settings.hints = true; App().save(); App().toast('Tips will show again'); refresh(); } },
+      { label: 'Hard mode', right: s.settings.hardNext ? 'ON' : 'OFF', sub: 'For new eggs only. Harsh rules, no revives', act: toggleHard },
+      { label: 'Cloud save', right: s.settings.cloud ? 'ON' : 'OFF', sub: 'Encrypted copy on your worker (optional)', act: function () { push(cloudScreen); } },
+      { label: 'Backup', sub: s.backup && s.backup.lastExport ? 'Last backup ' + tDate(s.backup.lastExport) : 'No backup yet: download one', act: function () { push(backupReminder); } },
       { label: 'Clock', right: s.settings.clock === '24' ? '24-hour' : '12-hour', sub: 'Show times as ' + (s.settings.clock === '24' ? '21:30' : '9:30 pm'),
         act: function () { s.settings.clock = s.settings.clock === '24' ? '12' : '24'; App().save(); refresh(); } },
       { label: 'Sleep schedule', sub: p && p.stage !== 'egg' && !p.fate ? p.name + ': ' + schedText(PP.Sleep.of(p)) : 'Bedtime and wake time for your pal',
@@ -755,6 +816,7 @@
       { label: 'Export save code', sub: 'Copy a code, paste it on the other device', act: function () { push(exportScreen); } },
       { label: 'Import save code', sub: 'Paste a code from another device', act: function () { push(importScreen); } },
       { label: 'Save to a file', sub: 'Download the code as a .txt file', act: function () { downloadCode(); } },
+      { label: 'Download .json backup', sub: 'The plain save file (Load from a file reads it back)', act: function () { downloadJson(); } },
       { label: 'Load from a file', sub: 'Pick a saved .txt file', act: function () { pickFile(); } },
       { label: 'Back', act: pop }
     ] };
@@ -766,8 +828,87 @@
       a.href = URL.createObjectURL(new Blob([code + '\n'], { type: 'text/plain' }));
       a.download = 'pocketpal-save-' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.txt';
       document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-      App().toast('Save file downloaded');
+      App().toast('Save file downloaded'); App().markExported();
     } catch (e) { App().toast('Download not possible here - use Export save code'); }
+  }
+  function downloadJson() {
+    var json = PP.Save.serialize(st(), Date.now());
+    try {
+      var a = document.createElement('a'), d = new Date();
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = 'pocketpal-backup-' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      App().toast('Backup downloaded'); App().markExported();
+    } catch (e) { App().toast('Download not possible here - use Copy code'); }
+  }
+  /* 1.9.0 gentle backup reminder (after 7 days without an export) */
+  function backupReminder() {
+    var s = st(), last = s.backup && s.backup.lastExport;
+    return { title: 'BACK UP YOUR PALS?', html: '<p>' + (last ? 'Your last backup was ' + esc(tDate(last)) + '.' : 'You have not made a backup yet.') +
+      ' Your pals live only in this browser. If it clears its storage, they are gone.</p><p class="tip">A backup is one small file or code. Keep it somewhere safe (email it to yourself, or a cloud drive).</p>',
+      items: [
+        { label: 'Download .json file', act: function () { downloadJson(); close(); } },
+        { label: 'Copy save code', act: function () { var code = PP.Save.exportCode(st(), Date.now()); copyText(code); App().markExported(); close(); } },
+        { label: 'Later', sub: 'Remind me in 3 days', act: function () { s.backup = s.backup || {}; s.backup.snoozeUntil = Date.now() + 3 * 864e5; App().save(); close(); } }
+      ] };
+  }
+  /* 1.9.0 cloud save (opt-in, end-to-end encrypted, your own worker) */
+  function cloudScreen() {
+    var s = st(), C = PP.CloudSync, stt = C.status(), avail = C.available();
+    var h = '<p class="tip">An <b>encrypted</b> copy of your save on your PocketPal worker. Only your <b>recovery code</b> (and passphrase, if you set one) can open it: the server never sees your pals.</p>';
+    if (!avail) h += '<p class="warn">Cloud save needs the online game (https) and a worker URL in js/config.js.</p>';
+    var items = [];
+    if (stt.on && s.settings.cloud) {
+      h += '<ul class="away"><li>Status: <b>ON</b>' + (stt.hasPass ? ' \u00b7 with passphrase' : '') + '</li><li>Last upload: ' + (stt.lastUp ? esc(tDate(stt.lastUp)) : 'not yet') + '</li>' +
+        (stt.lastErr ? '<li>Last problem: ' + esc(stt.lastErr) + ' (it will retry)</li>' : '') + '<li>Uploads by itself at most every 30 minutes.</li></ul>';
+      items.push({ label: 'Upload now', disabled: !avail, reason: 'Offline or no worker', act: function () {
+        App().toast('Uploading...');
+        C.upload(s).then(function () { App().toast('Cloud save updated'); refresh(); }, function (e) { App().toast('Cloud save: ' + e.message); refresh(); });
+      } });
+      items.push({ label: 'Show recovery code', sub: 'You need it to restore on another device', act: function () { push(cloudCodeScreen(stt.code, false)); } });
+    } else {
+      items.push({ label: 'Turn on cloud save', sub: 'Makes a recovery code for you', disabled: !avail, reason: 'Needs the online game and a worker', act: function () { push(cloudEnable); } });
+    }
+    items.push({ label: 'Restore from cloud', sub: 'Enter a recovery code', disabled: !avail, reason: 'Offline or no worker', act: function () { push(cloudRestore); } });
+    if (stt.on) {
+      items.push({ label: 'Delete cloud copy', sub: 'Removes it from the server', act: function () { push(confirmScreen('Delete cloud copy?', 'The encrypted copy on the server is deleted. Your game on this device stays.', function () {
+        C.remove().then(function () { C.forget(); s.settings.cloud = false; App().save(); App().toast('Cloud copy deleted'); pop(); refresh(); }, function (e) { App().toast('Could not delete: ' + e.message); pop(); });
+      })); } });
+      items.push({ label: 'Turn off on this device', sub: 'Stops uploads and forgets the code here', act: function () { push(confirmScreen('Turn cloud save off?', 'This device forgets the recovery code and stops uploading. The cloud copy stays until it expires (400 days) unless you delete it first.', function () { C.forget(); s.settings.cloud = false; App().save(); pop(); refresh(); })); } });
+    }
+    items.push({ label: 'Back', act: pop });
+    return { title: 'CLOUD SAVE', html: h, items: items };
+  }
+  function cloudEnable() {
+    return { title: 'CLOUD SAVE: TURN ON', html: '<p>Optional passphrase (adds a second lock; you will need it to restore):</p><input id="cloudPass" type="password" maxlength="64" autocomplete="new-password" aria-label="Optional passphrase">' +
+      '<p class="tip">Next you get a recovery code. It is shown once here (and again in this menu on this device). Write it down: without it nobody can restore the cloud copy, not even the server owner.</p>', live: false, items: [
+      { label: 'Make my code', act: function () {
+        var pass = (document.getElementById('cloudPass') || {}).value || '', s = st();
+        var code = PP.CloudSync.enable(pass); s.settings.cloud = true; App().save();
+        PP.CloudSync.upload(s).then(function () { App().toast('First cloud save uploaded'); }, function (e) { App().toast('Cloud save: ' + e.message + ' (will retry)'); });
+        replace(cloudCodeScreen(code, true));
+      } },
+      { label: 'Cancel', act: pop }] };
+  }
+  function cloudCodeScreen(code, fresh) {
+    return function () {
+      return { title: 'YOUR RECOVERY CODE', html: (fresh ? '<p class="warn"><b>Write this down now.</b></p>' : '') + '<p class="rcode" aria-label="Recovery code">' + esc(code) + '</p>' +
+        '<textarea class="code" readonly rows="1" aria-label="Recovery code to copy">' + esc(code) + '</textarea><p class="tip">Use it in Settings \u25b8 Cloud save \u25b8 Restore on any device. Keep it private: anyone with it (and your passphrase) can read your save.</p>',
+        items: [{ label: 'Copy code', act: function () { copyText(code); } }, { label: 'Done', act: pop }] };
+    };
+  }
+  function cloudRestore() {
+    return { title: 'RESTORE FROM CLOUD', html: '<p>Recovery code:</p><input id="cloudCode" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Recovery code" placeholder="XXXX-XXXX-...">' +
+      '<p>Passphrase (if you set one):</p><input id="cloudPass2" type="password" maxlength="64" autocomplete="current-password" aria-label="Passphrase">', live: false, items: [
+      { label: 'Find my save', act: function () {
+        var code = (document.getElementById('cloudCode') || {}).value || '', pass = (document.getElementById('cloudPass2') || {}).value || '';
+        App().toast('Looking...');
+        PP.CloudSync.download(code, pass).then(function (r) {
+          if (!r.ok) { App().toast(r.error); return; }
+          push(importConfirm(r, function () { PP.CloudSync.setCreds({ code: PP.Cloud.format(code), pass: pass, lastUp: Date.now() }); st().settings.cloud = true; App().save(); }));
+        }, function (e) { PP.Audio.play('no'); App().toast(e.message); });
+      } },
+      { label: 'Cancel', act: pop }] };
   }
   function pickFile() {
     var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.txt,.json,text/plain,application/json';
@@ -785,7 +926,7 @@
     var code = PP.Save.exportCode(st(), Date.now()), m = /^PP2SAVE-(\d+)-(\d+)-([0-9a-f]{8})-/.exec(code);
     return { title: 'EXPORT SAVE CODE', html: '<p>Copy this code and paste it into <b>Import save code</b> on your other device. Checksum <b>' + m[3].toUpperCase() + '</b> \u00b7 ' + code.length + ' characters.</p>' +
       '<textarea class="code" readonly rows="4" aria-label="Save code">' + esc(code) + '</textarea>', items: [
-      { label: 'Copy', act: function () { copyText(code); } }, { label: 'File', act: downloadCode }, { label: 'Back', act: pop }] };
+      { label: 'Copy', act: function () { copyText(code); App().markExported(); } }, { label: 'File', act: downloadCode }, { label: 'Back', act: pop }] };
   }
   function importScreen() {
     return { title: 'IMPORT SAVE CODE', html: '<p>Paste a save code from another PocketPal device. You will see what is inside before anything changes.</p><textarea id="saveIn" class="code" rows="4" aria-label="Save code to import" placeholder="PP2SAVE-1-..."></textarea>', items: [
@@ -797,7 +938,7 @@
     if (!r.ok) { PP.Audio.play('no'); App().toast(r.error); return; }
     push(importConfirm(r));
   }
-  function importConfirm(r) {
+  function importConfirm(r, after) {
     return function () {
       var mine = st().slots.filter(Boolean).length, info = r.info;
       return { title: 'REPLACE YOUR GAME?', html: '<p>The code is valid. It contains:</p><ul class="away">' +
@@ -805,7 +946,7 @@
         '<li>' + info.album + ' album entries \u00b7 ' + info.dex + '/18 Paldex adults</li>' + (info.savedAt ? '<li>Saved ' + esc(tDate(info.savedAt)) + '</li>' : '') + '</ul>' +
         '<p class="tip">This REPLACES your current game (' + mine + ' pal' + (mine === 1 ? '' : 's') + '). A copy of it is kept in case you change your mind.</p>',
         items: [
-          { label: 'Yes, replace', act: function () { App().importState(r.state); App().toast('Save imported - welcome back!'); close(); } },
+          { label: 'Yes, replace', act: function () { App().importState(r.state); if (after) after(); App().toast('Save imported - welcome back!'); close(); } },
           { label: 'Cancel', act: pop }] };
     };
   }
@@ -845,6 +986,7 @@
           (out.unlocked ? '<li>Unlocked: <b>' + esc(out.unlocked) + '</b></li>' : '') +
           (out.shells && out.shells.length ? '<li>New shell colour: <b>' + esc(out.shells.join(', ')) + '</b>!</li>' : '') +
           (out.coins ? '<li>+' + out.coins + ' coins' + (out.capped ? ' (daily battle coin cap reached)' : '') + '</li>' : out.capped ? '<li>Daily coin cap reached - more tomorrow</li>' : '') +
+          (out.visitor ? '<li>You beat the visitor! +' + PP.Daily.VISITOR_BONUS + ' bonus coins</li>' : '') +
           (out.injured ? '<li>Got hurt and is now sick! Give medicine.</li>' : '') + '</ul>';
       }
       var nextFoe = out.kind === 'arena' && won && !out.cleared && !out.fled;
@@ -864,7 +1006,7 @@
     items.push({ label: 'Start a new egg', sub: p.name + ' moves to the album', act: function () {
       push(speciesPicker(function (sp) { G.release(s, s.active); var r = G.startEgg(s, sp, Date.now()); if (r.ok) G.setActive(s, r.slot, Date.now()); App().resetWalker(); App().save(); close(); }));
     } });
-    return { title: p.fate === 'dead' ? 'GOODBYE, ' + p.name.toUpperCase() : p.name.toUpperCase() + ' LEFT', html: '<p>' + (p.fate === 'dead' ? esc(p.name) + ' passed away (' + esc(p.fateCause || '') + ').' : esc(p.name) + ' ran away after being unhappy and undisciplined for too long.') + '</p><p class="tip">Care mistakes are counted, but pals only die or leave after long neglect.</p>', items: items };
+    return { title: p.fate === 'dead' ? 'GOODBYE, ' + p.name.toUpperCase() : p.name.toUpperCase() + ' LEFT', html: '<p>' + (p.fate === 'dead' ? esc(p.name) + ' passed away (' + esc(p.fateCause || '') + ').' : esc(p.name) + ' ran away after being unhappy and undisciplined for too long.') + '</p><p class="tip">' + (p.hard ? 'This was a hard-mode pal: it cannot be revived, but its memory stays in your Album.' : 'Care mistakes are counted, but pals only die or leave after long neglect.') + '</p>', items: items };
   }
 
   PP.UI = { init: init, open: open, push: push, pop: pop, close: close, replace: replace, refresh: refresh, isOpen: isOpen, input: input,
@@ -875,7 +1017,7 @@
       arenaPreview: arenaPreview, friendsScreen: friendsScreen, friendMenu: friendMenu, slotMenu: slotMenu, treeScreen: treeScreen,
       renameScreen: renameScreen, sleepScreen: sleepScreen, exportScreen: exportScreen, importScreen: importScreen,
       storeScreen: storeScreen, storeFood: storeList('care'), storeBoosts: storeList('boost'), storeShells: storeShells, bagScreen: bagScreen, medMenu: medMenu,
-      paldexScreen: paldexScreen, dexEntry: dexEntry, shellScreen: shellScreen, guideScreen: guideScreen, transferScreen: transferScreen, importConfirm: importConfirm },
+      paldexScreen: paldexScreen, dexEntry: dexEntry, dailyScreen: dailyScreen, backupReminder: backupReminder, cloudScreen: cloudScreen, cloudRestore: cloudRestore, hardWarning: hardWarning, shellScreen: shellScreen, guideScreen: guideScreen, transferScreen: transferScreen, importConfirm: importConfirm },
     GUIDE_PAGES: GUIDE.length,
     esc: esc };
 })(typeof window !== 'undefined' ? window : globalThis);

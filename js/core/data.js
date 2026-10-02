@@ -42,6 +42,7 @@
   };
   var RULES = {
     maxHearts: 4, maxPoop: 4,
+    firstDayGraceMin: 1440,  // 1.9.0: for this long after hatching (normal mode) every need window is doubled
     callGraceMin: 30,        // a real need (hungry/unhappy/sick call) left this long = 1 care mistake
     neglectRepeatMin: 180,   // ...and another every 3 h it stays unanswered
     poopGraceMin: 120,       // poop left 2 h = mistake
@@ -256,6 +257,11 @@
     { id: 'clear',  name: 'Crystal',   base: '#a9d8f0', dark: '#6fb0d4', lite: '#dff3fc', ring: '#5d9cc0', rim: '#e8f8ff', label: 'dark', finish: 'clear', unlock: { dex: 6 } },
     { id: 'glitter',name: 'Glitter',   base: '#c052b8', dark: '#8e2f8a', lite: '#e07ad8', ring: '#6e2170', rim: '#f4c2f0', label: 'light', finish: 'glitter', unlock: { dex: 12 } },
     { id: 'gold',   name: 'Gold',      base: '#e3b62e', dark: '#b08312', lite: '#fbe27a', ring: '#8a6508', rim: '#fff1b8', label: 'dark', finish: 'gold', unlock: { champion: true } },
+    // 1.9.0: seasonal shells (all 3 daily goals on 3 days in the season) and the golden-egg shell
+    { id: 'spooky',  name: 'Spooky',    base: '#f08a24', dark: '#b85a0c', lite: '#ffb066', ring: '#2a1f2e', rim: '#ffd9a8', label: 'dark', finish: 'spooky', unlock: { season: 'spooky' } },
+    { id: 'frost',   name: 'Frost',     base: '#bfe3f5', dark: '#86bcd8', lite: '#eef9ff', ring: '#5d95b5', rim: '#ffffff', label: 'dark', finish: 'frost', unlock: { season: 'frost' } },
+    { id: 'blossom', name: 'Blossom',   base: '#f6b8cf', dark: '#de86a8', lite: '#fde0ea', ring: '#b85c82', rim: '#fff3f7', label: 'dark', finish: 'blossom', unlock: { season: 'blossom' } },
+    { id: 'gilded',  name: 'Gilded',    base: '#d9a521', dark: '#946b0a', lite: '#f7d873', ring: '#5e4305', rim: '#fff0b8', label: 'dark', finish: 'gilded', unlock: { golden: true } },
     // extra plain colours sold in the Pal Store (special finishes above are earn-only)
     { id: 'mint',     name: 'Mint',      base: '#6fd3a8', dark: '#44ad82', lite: '#98e6c4', ring: '#2f8c66', rim: '#d0f5e4', label: 'dark',  price: 60 },
     { id: 'coral',    name: 'Coral',     base: '#f47c6a', dark: '#d35846', lite: '#fb9d8f', ring: '#b04234', rim: '#fdd0c8', label: 'light', price: 60 },
@@ -301,7 +307,7 @@
   };
 
   PP.DATA = {
-    VERSION: '1.8.4',
+    VERSION: '1.9.0',
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

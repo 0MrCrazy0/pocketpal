@@ -266,3 +266,46 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 @keyframes ovShake { 0%, 100% { transform: translateX(0); } 15%, 55% { transform: translateX(-4px); } 35%, 75% { transform: translateX(4px); } }
 @media (prefers-reduced-motion: reduce) { .overlay.shake { animation: none; outline: 2px solid #c43c55; } }
 #adminPw { letter-spacing: .15em; }
+
+/* 1.9.0 first-time hint bar: sits over the name row at the bottom of the LCD */
+.hint {
+  position: absolute; left: calc(var(--u) * 3); right: calc(var(--u) * 3); bottom: calc(var(--u) * 3); z-index: 20;
+  display: flex; align-items: center; gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 1.2) calc(var(--u) * 1.5) calc(var(--u) * 1.2) calc(var(--u) * 3.5); border-radius: calc(var(--u) * 2.5);
+  background: var(--lcd-lite); color: var(--ink); border: calc(var(--u) * 0.8) solid var(--ink);
+  font: 700 calc(var(--u) * 5.4)/1.2 'Courier New', monospace; box-shadow: 0 2px 0 rgba(0,0,0,.25);
+}
+.hint[hidden] { display: none; }
+.hint-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.hint-x {
+  flex: none; width: calc(var(--u) * 11); height: calc(var(--u) * 11); min-width: 24px; min-height: 24px; border-radius: 50%; cursor: pointer;
+  background: var(--ink); color: var(--lcd-lite); border: 0; font: 700 calc(var(--u) * 7)/1 system-ui, sans-serif; padding: 0;
+}
+.hint-x:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+/* the toast drops below the strip as usual; when a hint shows, keep the toast at the top */
+
+/* 1.9.0 seasonal + golden shells (patterns are extra background layers, so nothing covers the screen) */
+body.finish-spooky .device { background: linear-gradient(160deg, #ffb066 0%, #f08a24 35%, #c9620f 62%, #2a1f2e 100%); }
+body.finish-spooky .brand { color: #2a1f2e; }
+body.finish-frost .device { background:
+  radial-gradient(circle at 18% 22%, rgba(255,255,255,.85) 0 2px, transparent 3px) 0 0 / 38px 38px,
+  radial-gradient(circle at 70% 60%, rgba(255,255,255,.65) 0 1.5px, transparent 2.5px) 0 0 / 52px 52px,
+  linear-gradient(160deg, #ffffff 0%, #dff2fb 30%, #a9d6ee 60%, #eef9ff 80%, #86bcd8 100%); }
+body.finish-blossom .device { background:
+  radial-gradient(circle at 30% 30%, rgba(255,255,255,.8) 0 2px, rgba(222,134,168,.55) 2.5px, transparent 4px) 0 0 / 46px 46px,
+  linear-gradient(160deg, #fff3f7 0%, #fde0ea 25%, #f6b8cf 55%, #de86a8 100%); }
+body.finish-gilded .device { background:
+  repeating-linear-gradient(120deg, rgba(255,255,255,0) 0 18px, rgba(255,250,220,.35) 18px 20px),
+  linear-gradient(160deg, #fff0b8 0%, #f7d873 18%, #d9a521 42%, #946b0a 60%, #f7d873 78%, #b8860b 100%); }
+/* 1.9.0 daily goals, hard mode, cloud save */
+.goals { list-style: none; display: flex; flex-direction: column; gap: calc(var(--u) * 1.2); }
+.goals li { display: flex; gap: calc(var(--u) * 2); align-items: baseline; overflow-wrap: anywhere; }
+.goals li .gk { flex: none; color: var(--lcd-lite); width: calc(var(--u) * 6); }
+.goals li .r { margin-left: auto; flex: none; color: var(--lcd-lite); }
+.goals li.done { color: #9fb86a; } .goals li.done .gk { color: #f0d060; }
+.ov-body .rare { border: 1px solid #f0d060; border-radius: calc(var(--u) * 2); padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5); color: #f6e7a0; }
+.ov-body .warn { color: #ffb070; }
+.overlay .mi.hardsel { border-color: #ff9a5a; } .overlay .mi.hardsel .r { color: #ffb070; }
+.overlay .mi.memorial { border-style: dotted; }
+.memorial-note { color: #c8d8a0; font-style: italic; overflow-wrap: anywhere; }
+.rcode { font: 700 max(15px, calc(var(--u) * 8.5))/1.4 ui-monospace, monospace; letter-spacing: .06em; text-align: center; color: var(--lcd-lite); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }

@@ -156,7 +156,7 @@
   };
   App.resetAll = function () { PP.Save.wipe(storage); App.state = G.newState(Date.now()); App.resetWalker(); App.save(); applySettings(); App.toast('Fresh start!'); setTimeout(firstEgg, 50); };
   function applySettings() {
-    PP.Audio.setEnabled(App.state.settings.sound); App.updateSoundBtn(); App.updateBellBtn();
+    PP.Audio.setEnabled(App.state.settings.sound); PP.Audio.setMusic(App.state.settings.music !== false); App.updateSoundBtn(); App.updateBellBtn();
     PP.Shells.apply(App.state.settings.shell);
     document.getElementById('testBtn').hidden = !(App.testAllowed && App.state.settings.test);
   }
@@ -166,11 +166,11 @@
   var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is sleeping - turn the lights off!' };
   App.handleEvents = function (evs, offline) {
     var p = G.active(App.state); if (!p || !evs.length) return;
-    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null;
+    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null;
     function line(e, text) { info.lines.push(e.at ? timeAt(e.at) + ': ' + text : text); }
     evs.forEach(function (e) {
       switch (e.t) {
-        case 'hatch': lastGrow = { kind: 'hatch' }; line(e, 'Your egg hatched into ' + D.NAMES[p.species].baby + '!'); break;
+        case 'hatch': lastGrow = { kind: 'hatch' }; PP.Audio.play('hatch'); line(e, 'Your egg hatched into ' + D.NAMES[p.species].baby + '!' + (p.golden ? ' It sparkles with gold!' : '')); break;
         case 'evolve': lastGrow = { kind: 'evolve', from: e.from, to: e.to }; line(e, 'Grew into ' + D.NAMES[p.species][e.to] + '!'); break;
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
@@ -184,12 +184,17 @@
         case 'caughtUp': info.minutes = e.minutes; info.since = Date.now() - e.minutes * 60000; break;
         case 'schedFit': App.toast(p.name + ' now sleeps ' + PP.Time.hm(e.bed, App.state.settings.clock) + ' \u2013 ' + PP.Time.hm(e.wake, App.state.settings.clock)); line(e, 'New bedtime for a ' + p.stage + ': ' + PP.Time.hm(e.bed, App.state.settings.clock)); break;
         case 'clockBack': App.toast('Your device clock went back in time. ' + p.name + ' has re-synced.'); break;
+        case 'dailyGoals': App.toast("Today's goals: " + e.goals.join(' \u00b7 ') + ' (MENU \u25b8 Daily goals)'); line(e, 'New daily goals'); break;
+        case 'rare': rare = e; line(e, e.name + ' ' + e.text); break;
+        case 'goldenEgg': App.toast('A golden egg is waiting in Pal Box slot ' + (e.slot + 1) + '!'); break;
+        case 'dailyClockBack': App.toast("The clock went back: today's goals stay as they were."); break;
       }
     });
     if (lastGrow && lastGrow.kind === 'hatch' && !lastGrow.done) queueCut({ kind: 'hatch', species: p.species, name: p.name });
     if (lastGrow && lastGrow.kind === 'evolve') App.playEvolve(p, spriteKey(lastGrow.from), spriteKey(lastGrow.to));
+    if (rare) { PP.Audio.play('rare'); App.toast(rare.name + ' ' + rare.text); }
     if (died) {
-      PP.Audio.play('die');
+      PP.Audio.play(died.hard || p.hard ? 'gameover' : 'die');
       if (died.t === 'died') queueCut({ kind: 'die', species: p.species, key: PP.Sprites.stageKeyOf(p), title: 'R.I.P. ' + p.name.toUpperCase() });
       App.pendingFate = true;
     }
@@ -303,6 +308,7 @@
     App.scene = 'mini';
     PP.Mini.start(kind, p, function (success) {
       App.scene = 'home';
+      if (success !== null) PP.Hints.learn(App.state, kind === 'dummy' ? 'train' : kind);
       if (success === null) { App.toast('Quit - no energy used'); return; }
       var r = G.exercise(App.state, kind === 'dummy' ? 'train' : kind, success);
       App.toast(r.msg);
@@ -327,8 +333,9 @@
   App.startArena = function (rank) { beginBattle(G.startArena(App.state, rank, rndSeed()), D.ARENA[rank].name.toUpperCase()); };
   App.startFriend = function (card, title) { beginBattle(G.startFriend(App.state, card, rndSeed()), title || 'FRIEND'); };
   /* 1.8.4: cup-cleared celebration on the LCD (after the result screen closes) */
-  App.celebrate = function (text) { App.anim = { kind: 'cup', t0: performance.now(), dur: 3600, text: text }; PP.Audio.play('win'); };
+  App.celebrate = function (text) { App.anim = { kind: 'cup', t0: performance.now(), dur: 3600, text: text }; PP.Audio.play('cup'); };
   App.startQuick = function (card, title) { beginBattle(G.startQuick(App.state, card, rndSeed()), title || 'SPAR'); };
+  App.startVisitor = function () { beginBattle(G.startVisitor(App.state, rndSeed()), 'VISITOR'); };
 
   App.afterGuide = function () { if (!G.active(App.state)) setTimeout(firstEgg, 150); };
   App.firstEgg = function () { firstEgg(); };
@@ -400,7 +407,9 @@
       lastLive = tNow;
       var top = UI.top(); if (UI.isOpen() && top && top.live && !document.activeElement.matches('input,textarea')) UI.refresh();
       PP.TestPanel.update(); refreshIcons();
-      if (Date.now() - App.lastSaveReal > 10000) App.save();
+      if (Date.now() - App.lastSaveReal > 10000) { App.save(); if (PP.CloudSync && !App.passive) PP.CloudSync.auto(App.state); }
+      pumpDaily(); updateHint();
+      if (App.scene === 'home' && !App.cut && !UI.isOpen() && !App.awayInfo && !App.pendingFate && backupDue()) { App.state.backup.snoozeUntil = Date.now() + 3 * 864e5; UI.open(UI.screens.backupReminder); }
     }
     var ctx = App.ctx;
     ctx.imageSmoothingEnabled = false;
@@ -417,6 +426,37 @@
     }
     pumpToasts(tNow);
   }
+
+  /* 1.9.0 daily goal / bonus notes from the core (PP.Daily) -> toasts + jingles */
+  function pumpDaily() {
+    PP.Daily.drain().forEach(function (n) {
+      if (n.t === 'goal') { App.toast('Goal done: ' + n.text + ' +' + n.coins + 'c'); PP.Audio.play('goal'); }
+      if (n.t === 'allGoals') {
+        App.toast('All daily goals done! +' + n.coins + 'c' + (n.streak > 1 ? ' (' + n.streak + '-day streak)' : ''));
+        (n.shells || []).forEach(function (nm) { App.toast('New shell colour unlocked: ' + nm + '!'); });
+        PP.Audio.play('allgoals');
+      }
+    });
+  }
+  /* 1.9.0 first-time hint bar (DOM, over the name row) */
+  var hintId = null;
+  function updateHint() {
+    var el = document.getElementById('hint'); if (!el || !App.state) return;
+    var p = G.active(App.state);
+    var h = App.scene === 'home' && !App.cut && !UI.isOpen() && !App.passive ? PP.Hints.next(App.state, p) : null;
+    if (!h) { if (!el.hidden) el.hidden = true; hintId = null; return; }
+    if (h.id !== hintId) { hintId = h.id; el.querySelector('.hint-text').textContent = h.text; }
+    if (el.hidden) el.hidden = false;
+  }
+  App.updateHint = updateHint;
+  /* 1.9.0 backup reminder: a week without an export (and not snoozed) */
+  function backupDue() {
+    var st = App.state, b = st.backup || (st.backup = { lastExport: null, since: Date.now(), snoozeUntil: null });
+    if (!G.active(st) || st.settings.cloud) return false;
+    var base = b.lastExport || b.since || st.createdAt || Date.now(), now = Date.now();
+    return now - base > 7 * 864e5 && now > (b.snoozeUntil || 0);
+  }
+  App.markExported = function () { App.state.backup = App.state.backup || {}; App.state.backup.lastExport = Date.now(); App.save(); };
 
   /* Everything inside the LCD is sized in LCD pixels: --u = LCD width / 216. */
   function fitLcd() {
@@ -452,6 +492,8 @@
       PP.Audio.unlock(); App.state.settings.sound = !App.state.settings.sound; PP.Audio.setEnabled(App.state.settings.sound); App.updateSoundBtn(); App.updateBellBtn(); App.save(); PP.Audio.play('ok');
     });
     document.getElementById('testBtn').addEventListener('click', function () { App.toggleTestPanel(); });
+    var hintX = document.getElementById('hintClose');
+    if (hintX) hintX.addEventListener('click', function (ev) { ev.stopPropagation(); if (hintId) { PP.Hints.dismiss(App.state, hintId); App.save(); } updateHint(); });
     document.getElementById('menuBtn').addEventListener('click', function () { PP.Audio.unlock(); if (App.scene === 'home' && !App.cut) { UI.open(UI.screens.mainMenu); } });
     document.getElementById('bellBtn').addEventListener('click', function () {
       PP.Audio.unlock();

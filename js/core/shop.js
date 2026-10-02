@@ -21,7 +21,12 @@
     var w = wallet(state), day = dayOf(t);
     if (w.day !== day) { w.day = day; w.earned = 0; }
     var give = Math.max(0, Math.round(n));
-    if (capped !== false) { give = Math.min(give, Math.max(0, E.dailyCap - w.earned)); w.earned += give; }
+    if (capped !== false) {
+      // 1.9.0: a lucky coin day doubles play coins (and the cap); hard-mode pals earn +25 %
+      var lucky = PP.Daily ? PP.Daily.coinMult(state, t) : 1, a = PP.Game.active(state);
+      give = Math.round(give * lucky * (a && a.hard && !a.fate ? 1.25 : 1));
+      give = Math.min(give, Math.max(0, E.dailyCap * lucky - w.earned)); w.earned += give;
+    }
     add(state, give);
     return give;
   }
@@ -39,7 +44,7 @@
   /* Once per game day: login bonus (+streak) and a care bonus if no new mistakes. */
   function claimDaily(state, t) {
     var w = wallet(state), day = dayOf(t);
-    if (w.lastDaily === day) return null;
+    if (w.lastDaily != null && day <= w.lastDaily) return null;   // 1.9.0: setting the clock back never pays twice
     w.streak = w.lastDaily === day - 1 ? w.streak + 1 : 1;
     var p = PP.Game.active(state), mist = p ? p.totalMistakes || 0 : null, care = 0;
     if (p && !p.fate && p.stage !== 'egg' && w.mistakesAt && w.mistakesAt.id === p.id && w.mistakesAt.n === mist) care = E.careBonus;
@@ -150,7 +155,7 @@
   function cleanWallet(w) {
     w = w && typeof w === 'object' ? w : {};
     var num = function (v) { return Number.isFinite(v) ? Math.round(v) : null; };
-    return { coins: U.int(w.coins, E.startCoins, 0, E.maxCoins), day: num(w.day), earned: U.int(w.earned, 0, 0, E.dailyCap),
+    return { coins: U.int(w.coins, E.startCoins, 0, E.maxCoins), day: num(w.day), earned: U.int(w.earned, 0, 0, E.dailyCap * 2),
       lastDaily: num(w.lastDaily), streak: U.int(w.streak, 0, 0, 9999),
       mistakesAt: w.mistakesAt && typeof w.mistakesAt.id === 'string' ? { id: w.mistakesAt.id.slice(0, 40), n: U.int(w.mistakesAt.n, 0, 0) } : null };
   }

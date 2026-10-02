@@ -34,6 +34,10 @@
     if (s.finish === 'gold') return 'background:linear-gradient(135deg,#fff4b8,#e3b62e 45%,#b08312 70%,#fbe27a)';
     if (s.finish === 'silver') return 'background:linear-gradient(135deg,#fff,#c3c9d0 45%,#8d959e 70%,#eef1f4)';
     if (s.finish === 'glitter') return 'background:radial-gradient(circle at 30% 30%,#fff 0 1px,transparent 2px) 0 0/6px 6px,linear-gradient(135deg,' + s.lite + ',' + s.base + ',' + s.dark + ')';
+    if (s.finish === 'spooky') return 'background:linear-gradient(135deg,#ffb066,#f08a24 45%,#2a1f2e 85%)';
+    if (s.finish === 'frost') return 'background:radial-gradient(circle at 30% 30%,#fff 0 1.5px,transparent 2.5px) 0 0/7px 7px,linear-gradient(135deg,#fff,#bfe3f5 50%,#86bcd8)';
+    if (s.finish === 'blossom') return 'background:radial-gradient(circle at 35% 35%,#fff 0 1.5px,#de86a8 2px,transparent 3px) 0 0/9px 9px,linear-gradient(135deg,#fde0ea,#f6b8cf 55%,#de86a8)';
+    if (s.finish === 'gilded') return 'background:repeating-linear-gradient(120deg,transparent 0 5px,rgba(255,250,220,.5) 5px 6px),linear-gradient(135deg,#fff0b8,#d9a521 45%,#946b0a 70%,#f7d873)';
     if (s.finish === 'clear') return 'background:repeating-linear-gradient(90deg,rgba(40,90,120,.25) 0 1px,transparent 1px 5px),linear-gradient(135deg,rgba(223,243,252,.7),rgba(111,176,212,.6))';
     return 'background:linear-gradient(135deg,' + s.lite + ',' + s.base + ' 55%,' + s.dark + ')';
   }

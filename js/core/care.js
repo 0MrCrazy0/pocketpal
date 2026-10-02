@@ -43,6 +43,11 @@
     p.totalMistakes++;
     if (p.stage !== 'adult') p.mistakes++;
     pushLog(p, why, (ctx && ctx.now) || p.lastTickAt);
+    if (p.hard) {                                   // 1.9.0 hard mode: remember when, for the 24 h runaway rule
+      var at = (ctx && ctx.now) || p.lastTickAt || 0;
+      p.hardMist = (p.hardMist || []).filter(function (v) { return at - v < 24 * U.HOUR; });
+      p.hardMist.push(at);
+    }
     if (ev) ev.push({ t: 'mistake', why: why });
     return true;
   }
@@ -176,7 +181,8 @@
 
     // ---- needs -> care mistakes
     var needs = realNeeds(p);
-    var grace = { hunger: R.callGraceMin, happy: R.callGraceMin, poop: R.poopGraceMin, sick: R.sickGraceMin, lights: R.lightsGraceMin };
+    var gm = firstDay(p) ? 2 : 1;                     // 1.9.0: a new pal's first day is gentler (normal mode only)
+    var grace = { hunger: R.callGraceMin * gm, happy: R.callGraceMin * gm, poop: R.poopGraceMin * gm, sick: R.sickGraceMin * gm, lights: R.lightsGraceMin * gm };
     var labels = { hunger: 'Left hungry', happy: 'Left unhappy', poop: 'Poop not cleaned', sick: 'Sickness untreated', lights: 'Lights left on at bedtime' };
     p.need = p.need || {};
     for (var k in needs) {
@@ -214,9 +220,10 @@
     if (mercy && p.health < ctx.floor) p.health = ctx.floor; // an absence under 24 h cannot push health below the floor
     if (p.health <= 0) {
       p.fate = 'dead'; p.fateCause = cause || 'neglect'; p.asleep = false;
-      ev.push({ t: 'died', cause: p.fateCause });
+      ev.push({ t: 'died', cause: p.fateCause, hard: !!p.hard });
       return;
     }
+    if (p.hard && hardRules(p, tMs, ev)) return;
 
     // ---- runaway: miserable for 24 h straight (awake), low discipline
     if (!p.asleep) {
@@ -224,7 +231,7 @@
       else if (p.happy >= 2) p.unhappyMin = 0;
     }
     if (p.unhappyMin >= R.runawayMin && !mercy) {
-      p.fate = 'gone'; p.fateCause = 'ran away'; ev.push({ t: 'ranaway' });
+      p.fate = 'gone'; p.fateCause = 'ran away'; ev.push({ t: 'ranaway', hard: !!p.hard });
       return;
     }
 
@@ -243,6 +250,24 @@
         p.sched = PP.Sleep.same(fitted, PP.Sleep.defaultFor(p.stage)) ? null : fitted;
       }
     }
+  }
+
+  /* 1.9.0 first-day grace: need windows are doubled for the first 24 h after hatching. */
+  function firstDay(p) { return !p.hard && p.stage !== 'egg' && (p.ageMin || 0) < (R.firstDayGraceMin || 0); }
+  /* 1.9.0 hard mode (opt-in, per pal). Losses are permanent. Returns true if the pal is lost. */
+  var HARD = { starveMin: 12 * 60, sickMin: 24 * 60, mistakes: 6 };
+  function hardRules(p, tMs, ev) {
+    if (p.hunger <= 0 && !p.asleep) p.hardHungry = (p.hardHungry || 0) + 1; else if (p.hunger > 0) p.hardHungry = 0;
+    if (p.sick) p.hardSick = (p.hardSick || 0) + 1; else p.hardSick = 0;
+    p.hardMist = (p.hardMist || []).filter(function (v) { return tMs - v < 24 * U.HOUR; });
+    var cause = null, fate = 'dead';
+    if (p.hardHungry >= HARD.starveMin) cause = 'starved';
+    else if (p.hardSick >= HARD.sickMin) cause = 'illness';
+    else if (p.hardMist.length >= HARD.mistakes) { fate = 'gone'; cause = 'ran away'; }
+    if (!cause) return false;
+    p.fate = fate; p.fateCause = cause; p.asleep = false;
+    ev.push(fate === 'dead' ? { t: 'died', cause: cause, hard: true } : { t: 'ranaway', hard: true });
+    return true;
   }
 
   /* Bring a pet up to date. Returns list of events.
@@ -439,6 +464,6 @@
     feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights,
     scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, moodPose: moodPose, isTired: isTired,
     baseWeight: baseWeight, isOverweight: isOverweight, isUnderweight: isUnderweight, canAct: canAct,
-    sicknessPerHour: sicknessPerHour, addMistake: addMistake, defaultHourOf: defaultHourOf, defaultMinuteOf: defaultMinuteOf
+    sicknessPerHour: sicknessPerHour, addMistake: addMistake, firstDay: firstDay, HARD: HARD, defaultHourOf: defaultHourOf, defaultMinuteOf: defaultMinuteOf
   };
 })(typeof window !== 'undefined' ? window : globalThis);

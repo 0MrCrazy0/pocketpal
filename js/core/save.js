@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 5;
+  var SCHEMA = 6;
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -35,6 +35,19 @@
     4: function (st) {
       st = st || {};
       st.arena = PP.Arena.migrate(st);
+      return st;
+    },
+    /* 5 -> 6 (1.9.0): daily goals, hints, backup reminder, music / hard-mode / cloud settings.
+     * Existing players already know the basics, so every first-time hint starts as learned
+     * (Settings > Show tips again brings them back). The backup reminder counts from now. */
+    5: function (st) {
+      st = st || {};
+      st.daily = null;
+      st.hints = { done: {} };
+      PP.Hints.TOPICS.forEach(function (t) { st.hints.done[t.id] = true; });
+      st.backup = { lastExport: null, since: Date.now(), snoozeUntil: null };
+      st.settings = st.settings || {};
+      st.settings.hints = true; st.settings.music = true; st.settings.hardNext = false; st.settings.cloud = false;
       return st;
     },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
@@ -178,7 +191,13 @@
     var st = s.settings || {};
     var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'pink';
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
-      notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock() };
+      notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
+      hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud };
+    out.daily = PP.Daily.clean(s.daily);
+    out.hints = PP.Hints.clean(s.hints);
+    var bk = s.backup && typeof s.backup === 'object' ? s.backup : {};
+    var fin = function (v) { return Number.isFinite(v) ? Math.round(v) : null; };
+    out.backup = { lastExport: fin(bk.lastExport), since: fin(bk.since) || out.createdAt || null, snoozeUntil: fin(bk.snoozeUntil) };
     out.timeOffset = U.num(s.timeOffset, 0);
     out.lastSeenAt = U.num(s.lastSeenAt, now || Date.now());
     return out;

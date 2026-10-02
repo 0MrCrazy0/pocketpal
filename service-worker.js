@@ -2,17 +2,17 @@
  * CACHE carries the game version: bump it with every release so players get the update.
  * A new version installs in the background and WAITS; the page shows "New version ready"
  * and sends {type:'skipWaiting'} when the player taps it. Old caches are deleted on activate. */
-var CACHE = 'pocketpal-v1.8.4';
+var CACHE = 'pocketpal-v1.9.0';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
   'js/config.js', 'js/data/atlas.js',
   'js/core/util.js', 'js/core/data.js', 'js/core/time.js', 'js/core/sleep.js', 'js/core/pet.js', 'js/core/care.js', 'js/core/evolution.js', 'js/core/stats.js', 'js/core/skills.js',
-  'js/core/battle.js', 'js/core/breeding.js', 'js/core/cards.js', 'js/core/arena.js', 'js/core/collection.js', 'js/core/shop.js', 'js/core/behaviour.js',
-  'js/core/save.js', 'js/core/game.js',
+  'js/core/battle.js', 'js/core/breeding.js', 'js/core/cards.js', 'js/core/arena.js', 'js/core/collection.js', 'js/core/shop.js', 'js/core/daily.js', 'js/core/hints.js', 'js/core/behaviour.js',
+  'js/core/save.js', 'js/core/game.js', 'js/core/cloud.js',
   'js/ui/font.js', 'js/ui/sprites.js', 'js/ui/audio.js', 'js/ui/shells.js', 'js/ui/render.js', 'js/ui/battleview.js', 'js/ui/minigames.js', 'js/ui/menus.js',
-  'js/ui/input.js', 'js/ui/testpanel.js', 'js/ui/admin.js', 'js/ui/net.js', 'js/ui/main.js'
+  'js/ui/input.js', 'js/ui/testpanel.js', 'js/ui/admin.js', 'js/ui/net.js', 'js/ui/cloudsync.js', 'js/ui/main.js'
 ];
 
 self.addEventListener('install', function (e) {

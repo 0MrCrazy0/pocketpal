@@ -9,13 +9,15 @@
   function newState(now) {
     now = now || Date.now();
     return {
-      schema: 4, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
+      schema: 6, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
       slots: [null, null, null, null], boxSize: 4, active: 0,
       album: [], friends: [],
       arena: { rank: 0, attempt: 0, champion: false, cups: [], run: null, note: null },
       dex: {}, unlocks: [],
       wallet: { coins: D.ECONOMY.startCoins, day: null, earned: 0, lastDaily: null, streak: 0, mistakesAt: null }, inv: {},
-      settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'pink', guideSeen: false, clock: PP.Time.defaultClock() },
+      settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'pink', guideSeen: false, clock: PP.Time.defaultClock(),
+        hints: true, music: true, hardNext: false, cloud: false },
+      daily: null, hints: { done: {} }, backup: { lastExport: null, snoozeUntil: null },
       timeOffset: 0, lastSeenAt: now
     };
   }
@@ -40,6 +42,9 @@
     });
     e.fate = p.fate || e.fate || null; e.hatchedAt = p.hatchedAt || e.hatchedAt || null;
     e.days = PP.Pet.ageDays(p);
+    if (p.hard) e.hard = true; else delete e.hard;          // 1.9.0: hard-mode memorial
+    if (p.golden) e.golden = true; else delete e.golden;
+    if (p.fateCause) e.cause = String(p.fateCause).slice(0, 30);
     // a full copy is only needed to revive a pal that died or ran away (keeps the save small)
     if (e.fate === 'dead' || e.fate === 'gone') e.snap = U.deepCopy(p); else delete e.snap;
   }
@@ -63,7 +68,9 @@
   function startEgg(state, species, realNow, opts) {
     var i = freeSlot(state);
     if (i < 0) return { ok: false, msg: 'Pal Box is full (' + state.slots.length + '). Release a pal or buy a slot in the Pal Store.' };
-    var egg = PP.Pet.createEgg(Object.assign({ species: species, now: now(state, realNow), seed: U.hash(state.seed, 'egg', state.album.length, realNow, Math.random()) }, opts || {}));
+    opts = Object.assign({ hard: !!(state.settings && state.settings.hardNext) }, opts || {});
+    if (opts.golden) opts.hard = false;                     // a golden egg is a gift: always a normal-mode pal
+    var egg = PP.Pet.createEgg(Object.assign({ species: species, now: now(state, realNow), seed: U.hash(state.seed, 'egg', state.album.length, realNow, Math.random()) }, opts));
     state.slots[i] = egg;
     var a = active(state);
     if (!a || a.fate) state.active = i;
@@ -96,13 +103,13 @@
   function lostPals(state) {
     var list = [], seen = {};
     (state.slots || []).forEach(function (p, i) {
-      if (p && p.fate && p.fate !== 'released') {
+      if (p && p.fate && p.fate !== 'released' && !p.hard) {
         seen[p.id] = true;
         list.push({ kind: 'slot', slot: i, pet: p, name: p.name, cost: reviveCost(p) });
       }
     });
     (state.album || []).forEach(function (e) {
-      if (e && (e.fate === 'dead' || e.fate === 'gone') && e.snap && !seen[e.id] && e.snap.stage !== 'egg' && !inSlots(state, e.id)) {
+      if (e && (e.fate === 'dead' || e.fate === 'gone') && e.snap && !e.hard && !seen[e.id] && e.snap.stage !== 'egg' && !inSlots(state, e.id)) {
         list.push({ kind: 'album', albumId: e.id, pet: e.snap, name: e.name, cost: reviveCost(e.snap) });
       }
     });
@@ -125,6 +132,7 @@
     }
     if (!p || !p.fate) return { ok: false, msg: 'That pal is still with you' };
     if (p.stage === 'egg') return { ok: false, msg: 'Eggs cannot be revived' };
+    if (p.hard) return { ok: false, msg: 'Hard-mode pals cannot be revived. They live on in your Album.' };
     var cost = opts.free ? 0 : reviveCost(p);
     if (!opts.free) {
       if (PP.Shop.coins(state) < cost) return { ok: false, msg: 'Need ' + cost + ' coins to revive' };
@@ -149,15 +157,20 @@
     var p = active(state);
     if (!p || p.fate) return [];
     var ev = PP.Care.tick(p, now(state, realNow), opts);
-    var grew = false;
+    var grew = false, t = now(state, realNow);
     ev.forEach(function (e) {
-      if (e.t === 'hatch' || e.t === 'evolve') { albumUpsert(state, p); if (PP.Collection.markPet(state, p, now(state, realNow))) grew = true; }
+      if (e.t === 'hatch' || e.t === 'evolve') { albumUpsert(state, p); if (PP.Collection.markPet(state, p, t)) grew = true; }
+      if (e.t === 'hatch') { PP.Hints.learn(state, 'hatch'); if (p.golden) { PP.Daily.ensure(state).golden++; grew = true; } }
       if (e.t === 'died' || e.t === 'ranaway') albumUpsert(state, p);
     });
     if (grew) unlockEvents(state, ev);
     if (p.stage !== 'egg') {
-      var d = PP.Shop.claimDaily(state, now(state, realNow));
+      var d = PP.Shop.claimDaily(state, t);
       if (d) ev.push({ t: 'daily', coins: d.coins, care: d.care, streak: d.streak });
+    }
+    if (!p.fate) {                                          // 1.9.0: daily goals / rare events
+      PP.Daily.roll(state, t, p).forEach(function (e) { ev.push(e); });
+      PP.Daily.observe(state, t);
     }
     return ev;
   }
@@ -173,13 +186,26 @@
     var map = { meal: PP.Care.feedMeal, snack: PP.Care.feedSnack, clean: PP.Care.clean, medicine: PP.Care.medicine,
       lights: PP.Care.toggleLights, scold: PP.Care.scold, praise: PP.Care.praise };
     if (!map[action]) return { ok: false, msg: 'Unknown action' };
-    return map[action](p);
+    var r = map[action](p), t = now(state);
+    if (r && r.ok) {
+      PP.Hints.learn(state, action);
+      if (action === 'meal') PP.Daily.record(state, 'meal', t);
+      if (action === 'clean') PP.Daily.record(state, 'clean', t);
+      if (action === 'praise') PP.Daily.record(state, 'praise', t);
+      if (action === 'lights' && !p.lights && p.asleep && p.sleepKind === 'night') PP.Daily.record(state, 'lights', t);
+      PP.Daily.observe(state, t);
+    }
+    return r;
   }
   function exercise(state, kind, success) {
     var r = PP.Care.exercise(active(state), kind, success);
     if (r.ok) {
       r.coins = PP.Shop.earn(state, success ? D.ECONOMY.trainWin : D.ECONOMY.trainLoss, now(state));
       if (r.coins) r.msg += ' +' + r.coins + 'c';
+      PP.Hints.learn(state, kind);
+      if (kind === 'train') PP.Daily.record(state, 'train', now(state));
+      if (kind === 'game' && success) PP.Daily.record(state, 'game', now(state));
+      PP.Daily.observe(state, now(state));
     }
     return r;
   }
@@ -219,6 +245,23 @@
     var err = PP.Cards.validateCard(card);
     if (err) return { ok: false, msg: err };
     return startBattle(state, card, { kind: 'quick' }, seed);
+  }
+  /* 1.9.0 rare event: a visiting wild pal (one try a day, +25 coins for a win). */
+  function visitorCard(state, t) {
+    var p = active(state), rank = 0;
+    if (!p || p.stage !== 'adult') return null;
+    D.ARENA.forEach(function (c, i) { if (!c.post && c.lv <= p.level) rank = i; });
+    var c = PP.Arena.opponent(rank, U.hash(state.seed, 'visitor', PP.Shop.dayOf(t || now(state))) % 1e6);
+    c.name = 'Visitor'; c.id = 'visitor' + PP.Shop.dayOf(t || now(state));
+    return c;
+  }
+  function startVisitor(state, seed) {
+    if (!PP.Daily.visitorReady(state, now(state))) return { ok: false, msg: 'No visitor today' };
+    var card = visitorCard(state);
+    if (!card) return { ok: false, msg: 'Only adults can battle' };
+    var r = startBattle(state, card, { kind: 'visitor' }, seed);
+    if (r.ok) PP.Daily.useVisitor(state, now(state));
+    return r;
   }
   function startFriend(state, card, seed) {
     var err = PP.Cards.validateCard(card);
@@ -269,7 +312,9 @@
     }
     out.levels = PP.Stats.addXp(p, out.xp);
     var bc = PP.Shop.battleCoins(won, oppLv, B.meta, cleared, champ, out.myth);
+    if (won && B.meta.kind === 'visitor') { bc.bonus += PP.Daily.VISITOR_BONUS; out.visitor = true; }
     out.coins = PP.Shop.earn(state, bc.capped, now(state)) + PP.Shop.earn(state, bc.bonus, now(state), false);
+    if (won) { var dr = PP.Daily.record(state, 'battle', now(state)); out.coins += dr.coins; }
     out.capped = bc.capped > 0 && out.coins < bc.capped + bc.bonus;
     albumUpsert(state, p);
     PP.Collection.markSeen(state, B.opp, now(state));
@@ -296,6 +341,7 @@
     if (i < 0) return { ok: false, msg: 'Pal Box is full - release a pal to make room for the egg' };
     var r = PP.Breeding.breed(p, partner, U.hash(state.seed, p.id, partner.id, p.clock), now(state, realNow));
     if (!r.ok) return r;
+    r.egg.hard = !!(state.settings && state.settings.hardNext);
     state.slots[i] = r.egg;
     return { ok: true, msg: r.msg + ' - it is in slot ' + (i + 1), slot: i, egg: r.egg };
   }
@@ -348,6 +394,6 @@
   };
 
   PP.Game = { newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startFriend: startFriend, startQuick: startQuick, finishBattle: finishBattle,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

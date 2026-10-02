@@ -21,7 +21,8 @@
     F.draw(ctx, clockText(st), 3, L.topText, C.ink);
     if (p && p.stage !== 'egg' && !p.fate) {
       F.draw(ctx, PP.Pet.formName(p).toUpperCase(), W / 2 + 8, L.topText, C.ink, 1, 'center');
-      if (st.settings.test && st.settings.speed > 1) F.draw(ctx, 'x' + st.settings.speed, W - 16, L.topText, C.dark, 1, 'right');
+      if (st.settings.test && st.settings.speed > 1) F.draw(ctx, 'x' + st.settings.speed, p.hard ? W - 34 : W - 16, L.topText, C.dark, 1, 'right');
+      if (p.hard) F.draw(ctx, 'HARD', W - 3, L.topText, C.ink, 1, 'right');   // 1.9.0 hard-mode badge
       // 1.8.4: the flashing "!" call moved into the status strip (row 2), next to the other "right now" icons
     }
     dotted(ctx, L.topLine);
@@ -190,6 +191,79 @@
     }
   }
 
+  /* ---- 1.9.0 home scene: time of day + the weather of the day, in light tones only so the
+   * pal, text and icons keep full contrast. Static when the player prefers reduced motion. */
+  var sceneForce = null;
+  function reducedMotion() { try { return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } }
+  function sceneInfo(st) {
+    if (sceneForce) return sceneForce;
+    var now = PP.Game.now(st), d = new Date(now), h = d.getHours() + d.getMinutes() / 60;
+    var phase = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 17.5 ? 'day' : h >= 17.5 && h < 19.5 ? 'dusk' : 'night';
+    var r = PP.util.roll(st.seed, PP.Shop.dayOf(now), 'weather');
+    return { phase: phase, weather: r < 0.18 ? 'rain' : r < 0.26 ? 'snow' : 'clear' };
+  }
+  function hills(ctx) {
+    var top = L.floorLine;
+    ctx.fillStyle = C.lite;
+    ctx.globalAlpha = 0.35;
+    for (var x = 0; x < W; x++) {                       // two soft, wide hills on the horizon
+      var hgt = Math.round(10 + 7 * Math.sin(x / 34 + 0.6) + 4 * Math.sin(x / 13 + 2));
+      ctx.fillRect(x, top - hgt, 1, hgt);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawScene(ctx, st, t) {
+    var info = sceneInfo(st), top = L.stripEnd, bottom = L.floorLine, still = reducedMotion();
+    var tt = still ? 0 : t;
+    if (info.phase === 'dawn' || info.phase === 'dusk') {   // a glow low in the sky
+      for (var i = 0; i < 4; i++) { ctx.fillStyle = 'rgba(206,224,110,' + (0.10 + i * 0.06) + ')'; ctx.fillRect(0, bottom - 54 + i * 10, W, 10); }
+      ctx.fillStyle = 'rgba(206,224,110,0.55)';
+      var sx = info.phase === 'dawn' ? 30 : W - 42;
+      for (var dy = -6; dy <= 0; dy++) { var hw = Math.round(Math.sqrt(36 - dy * dy)); ctx.fillRect(sx - hw, bottom - 20 + dy, hw * 2, 1); }
+    } else if (info.phase === 'night') {
+      ctx.fillStyle = 'rgba(48,98,48,0.16)'; ctx.fillRect(0, top, W, bottom - top);
+      ctx.fillStyle = C.lite;
+      for (var k = 0; k < 14; k++) {
+        var stx = (k * 53 + 17) % (W - 8) + 4, sty = top + 4 + (k * 29) % 46;
+        if (!still && (Math.floor(tt / 900) + k) % 5 === 0) continue;  // gentle twinkle
+        ctx.fillRect(stx, sty, 1, 1);
+      }
+      ctx.fillStyle = 'rgba(206,224,110,0.9)';                          // crescent moon
+      for (var my = -5; my <= 5; my++) for (var mx = -5; mx <= 5; mx++) {
+        if (mx * mx + my * my <= 25 && (mx - 3) * (mx - 3) + (my + 1) * (my + 1) > 18) ctx.fillRect(W - 30 + mx, top + 12 + my, 1, 1);
+      }
+    } else {                                                             // day: two slow clouds
+      ctx.fillStyle = 'rgba(206,224,110,0.6)';
+      for (var c = 0; c < 2; c++) {
+        var cxp = Math.round(((tt / 400 + c * 120) % (W + 40)) - 20), cyp = top + 8 + c * 14;
+        ctx.fillRect(cxp, cyp, 18, 3); ctx.fillRect(cxp + 4, cyp - 2, 9, 2); ctx.fillRect(cxp + 2, cyp + 3, 14, 1);
+      }
+    }
+    hills(ctx);
+    if (info.weather === 'rain') {
+      ctx.fillStyle = 'rgba(48,98,48,0.35)';
+      for (var rI = 0; rI < 26; rI++) {
+        var rx = (rI * 37 + Math.floor(tt / 30)) % W, ry = top + ((rI * 23 + Math.floor(tt / 12)) % (bottom - top - 4));
+        ctx.fillRect(rx, ry, 1, 3);
+      }
+    } else if (info.weather === 'snow') {
+      ctx.fillStyle = 'rgba(206,224,110,0.95)';
+      for (var sI = 0; sI < 22; sI++) {
+        var fx = (sI * 41 + Math.round(3 * Math.sin(tt / 900 + sI))) % W, fy = top + ((sI * 19 + Math.floor(tt / 60)) % (bottom - top - 2));
+        ctx.fillRect(fx, fy, 2, 2);
+      }
+    }
+  }
+  /* small sparkle around a golden pal (cosmetic) */
+  function goldSparkle(ctx, px, y, t) {
+    var ph = Math.floor(t / 400) % 3, spots = [[8, 18], [PS - 14, 10], [PS - 6, 46], [4, 52]];
+    ctx.fillStyle = C.lite;
+    spots.forEach(function (q, i) {
+      if ((i + ph) % 3 === 0) return;
+      var x = px + q[0], yy = y + q[1];
+      ctx.fillRect(x, yy - 2, 1, 5); ctx.fillRect(x - 2, yy, 5, 1);
+    });
+  }
   function drawHome(ctx, app, t, dt) {
     var st = app.state, p = PP.Game.active(st);
     clear(ctx);
@@ -201,6 +275,7 @@
     }
     if (app.anim && t - app.anim.t0 > app.anim.dur) app.anim = null;
     var cx = (W - PS) / 2, y = GROUND - PS;
+    if (!p.fate) drawScene(ctx, st, t);
     if (p.stage === 'egg') {
       var left = PP.Evolution.minutesToNextStage(p), fast = left <= 2;
       drawStrip(ctx, p, t);
@@ -226,6 +301,7 @@
     var px = Math.round(w.x), flip = w.dir < 0;
     if (p.asleep || p.sick) flip = false;
     S.draw(ctx, p.species, S.stageKeyOf(p), pose, frame, px, y, PET, flip);
+    if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
 
     // poop pile (bottom right)
     for (var i = 0; i < p.poop; i++) {
@@ -350,5 +426,6 @@
   function cutDuration(c) { return c.kind === 'evolve' ? 5200 : c.kind === 'hatch' ? 3600 : 3200; }
 
   PP.Render = { W: W, H: H, GROUND: GROUND, PET: PET, C: C, LAYOUT: L, clear: clear, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
-    statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI };
+    statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI,
+    sceneInfo: sceneInfo, drawScene: drawScene, forceScene: function (v) { sceneForce = v || null; } };
 })(typeof window !== 'undefined' ? window : globalThis);

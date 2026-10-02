@@ -52,6 +52,7 @@
       parents: opts.parents || null,
       genes: opts.genes ? sanitizeGenes(opts.genes) : randomGenes(rng),
       inheritedSkills: (opts.inheritedSkills || []).slice(0, 2),
+      hard: !!opts.hard, golden: !!opts.golden,                            // 1.9.0: hard mode (chosen before the egg) / golden egg (cosmetic)
       boost: { hp: 0, atk: 0, def: 0, spd: 0 },   // Pal Store boosts (capped, never inherited)
       stage: 'egg', form: null,
       clock: 0, ageMin: 0, stageMin: 0,

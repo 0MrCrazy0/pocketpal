@@ -82,6 +82,8 @@
     if (u.cup) return 'Win the ' + D.ARENA[u.cup - 1].name + ' (arena cup ' + u.cup + ')';
     if (u.champion) return 'Become Arena Champion (win all ' + D.ARENA_MAIN + ' main cups)';
     if (u.dex) return 'Raise ' + u.dex + ' different adult forms (Paldex)';
+    if (u.season) { var se = PP.Daily.season(u.season); return 'Finish all 3 daily goals on ' + PP.Daily.SEASON_DAYS + ' days in ' + (se ? se.window : u.season); }
+    if (u.golden) return 'Hatch a rare golden egg';
     return '';
   }
   /* { ok, need, have, goal } - have/goal give a progress count for the menu. */
@@ -96,6 +98,8 @@
     if (u.cup) { have = PP.Arena.won(state, u.cup - 1) ? u.cup : PP.Arena.mainWon(state, u.cup - 1); goal = u.cup; }
     else if (u.champion) { have = PP.Arena.mainWon(state); goal = D.ARENA_MAIN; }
     else if (u.dex) { have = Math.min(counts(state).adults, u.dex); goal = u.dex; }
+    else if (u.season) { have = Math.min(PP.Daily ? PP.Daily.seasonDays(state, u.season) : 0, PP.Daily ? PP.Daily.SEASON_DAYS : 3); goal = PP.Daily ? PP.Daily.SEASON_DAYS : 3; }
+    else if (u.golden) { have = state.daily && state.daily.golden > 0 ? 1 : 0; goal = 1; }
     return { ok: have >= goal, need: requirement(s), have: have, goal: goal };
   }
   /* Records newly earned specials; returns the shells unlocked just now. */
