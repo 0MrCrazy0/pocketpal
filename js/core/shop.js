@@ -113,19 +113,20 @@
     if (!p || p.fate) return res(false, 'No pal');
     if (p.stage === 'egg') return res(false, 'Still an egg!');
     var r;
+    if (p.asleep && it.kind !== 'deco') return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });   // 2.2.0: remedy / boosts were usable on a sleeping pal
     if (id === 'cake') {
-      if (p.asleep) return res(false, 'Zzz... asleep');
+      if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       r = PP.Care.feedSnack(p);                // same overfeeding rule as a free snack
       if (r.ok) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.weight += 1; if (r.anim === 'happy') r = res(true, 'Berry Cake! Happy +2', 'eat'); }
     } else if (id === 'feast') {
-      if (p.asleep) return res(false, 'Zzz... asleep');
+      if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       if (p.fake) return res(false, 'Tantrum! It refuses food', 'refuse');
       if (p.hunger >= R.maxHearts) return res(false, 'Full! It shakes its head', 'refuse');
       p.hunger = Math.min(R.maxHearts, p.hunger + 2); p.happy = Math.min(R.maxHearts, p.happy + 1);
       p.energy = Math.min(100, p.energy + 15); p.weight += 2;
       r = res(true, 'A feast! Hunger +2, happy +1', 'eat');
     } else if (id === 'tonic') {
-      if (p.asleep) return res(false, 'Zzz... asleep');
+      if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       if (p.energy >= 100) return res(false, 'Already full of energy');
       p.energy = Math.min(100, p.energy + 50);
       r = res(true, 'Energy +50!', 'happy');

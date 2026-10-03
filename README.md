@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 1.9.9**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.3.0**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -77,3 +77,14 @@ There are no ads, tracking or accounts. Your pal stays on your device unless you
 ---
 
 Made with ❤️. MIT licence (see `LICENSE`).
+
+## For developers: tests
+You need Node 18 or newer. From the source folder:
+
+```
+npm install        # installs Playwright (the only dev dependency)
+npm test           # about 300 unit tests, no browser needed, any timezone
+npm run test:e2e   # downloads Chromium for Playwright if needed, then runs the browser suites
+```
+
+If no Chromium can be launched, each browser suite prints `SKIPPED` with the reason and how to fix it, and exits 0. Set `PP_REQUIRE_BROWSER=1` to make that a failure instead. The update and reinstall suites also need an older build: set `PP_OLD=/path/to/old/pocketpal`.

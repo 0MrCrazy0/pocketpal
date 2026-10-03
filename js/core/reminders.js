@@ -85,7 +85,7 @@
     var t = type(e.type), d = new Date(e.at), mins = Math.round((e.at - realNow) / 60000);
     var hm = PP.Time && PP.Time.hm ? PP.Time.hm(d.getHours() * 60 + d.getMinutes(), clock || '12') : d.toTimeString().slice(0, 5);
     var rel = mins < 60 ? 'in ' + Math.max(1, mins) + ' min' : 'in ~' + Math.round(mins / 60) + ' h';
-    return t.label + ' \u00b7 ' + hm + ' (' + rel + ')';
+    return (t ? t.label : 'Reminder') + ' \u00b7 ' + hm + ' (' + rel + ')';   // 2.1.0: an unknown type (older schedule) no longer throws
   }
   /* For the service worker: the entry that a push arriving at `now` is most likely about. */
   function pick(list, now) {

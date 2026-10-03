@@ -8,6 +8,9 @@
 }
 [hidden] { display: none !important; }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+/* 2.0.0: the LCD's own hi-res pixel font (tools/lcd_font.py) for everything drawn as HTML on the LCD: menus, toasts, hints */
+/* 2.0.0: 'PocketPal LCD' (fonts/pp-lcd.woff) is registered by js/ui/font.js (FontFace), not @font-face - see there */
+.overlay, .bmenu, .toast { font-synthesis: none; }   /* one weight: no smeared fake bold on the pixel letters */
 html, body { height: 100%; overflow: hidden; background: #1a1a2e; color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
 body {
   display: flex; align-items: center; justify-content: center; min-height: 100dvh;
@@ -93,7 +96,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .lcd { --u: 1.6px; }
 .overlay {
   position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; overflow: hidden;
-  background: rgba(15,56,15,.97); color: var(--lcd); font: calc(var(--u) * 7)/1.3 'Courier New', ui-monospace, monospace; border-radius: 5px;
+  background: rgba(15,56,15,.97); color: var(--lcd); font: calc(var(--u) * 7)/1.3 'PocketPal LCD', 'Courier New', ui-monospace, monospace; font-synthesis: none; border-radius: 5px;
 }
 .ov-head { flex: none; }
 .ov-head h2 { font-size: calc(var(--u) * 7.4); letter-spacing: .06em; color: var(--lcd-lite); padding: calc(var(--u) * 2.6) calc(var(--u) * 5) calc(var(--u) * 1.8); border-bottom: 1px dashed #306230; line-height: 1.15; overflow-wrap: anywhere; }
@@ -186,16 +189,18 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 /* battle move menu: exactly covers the canvas message box (bottom 48 of 160 LCD px) */
 .bmenu { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; z-index: 15; background: var(--ink); padding: calc(var(--u) * 1) calc(var(--u) * 1.5) calc(var(--u) * 1.5); display: flex; flex-direction: column; gap: calc(var(--u) * 1); }
 .bmenu[hidden] { display: none; }
-.bm-q { flex: none; color: var(--lcd-lite); font: 700 calc(var(--u) * 5.6)/1.15 'Courier New', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 calc(var(--u) * 1); }
+.bmenu { font-family: 'PocketPal LCD', 'Courier New', monospace; }   /* 2.0.0: the battle menu box itself uses the LCD font too */
+.bm-q { flex: none; color: var(--lcd-lite); font: 700 calc(var(--u) * 5.6)/1.15 'PocketPal LCD', 'Courier New', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 calc(var(--u) * 1); }
 .bm-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: calc(var(--u) * 1.2); overflow-y: auto; }
 .bm { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; padding: 0 calc(var(--u) * 1); border-radius: calc(var(--u) * 2); cursor: pointer; overflow: hidden;
-  background: #1e441e; color: var(--lcd); border: 1px solid #3a5a3a; font: 700 calc(var(--u) * 5.6)/1.05 'Courier New', monospace; text-align: center; }
+  background: #1e441e; color: var(--lcd); border: 1px solid #3a5a3a; font: 700 calc(var(--u) * 5.6)/1.05 'PocketPal LCD', 'Courier New', monospace; text-align: center; }
 .bm small { font-weight: 400; font-size: calc(var(--u) * 5.4); color: #9fb86a; }
 .bm.sel { border-color: var(--lcd-lite); background: #2c5c2c; }
 .bm:disabled { opacity: .45; cursor: default; }
 .bm.auto { color: var(--lcd-lite); }
 .bm.flee { color: #f0d890; }   /* 1.8.4 Run / Forfeit */
 .foes { list-style: none; margin: calc(var(--u) * 1) 0; } .foes li { display: flex; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * .6) 0; overflow-wrap: anywhere; }
+.pips { letter-spacing: .15em; margin: calc(var(--u) * .6) 0; }
 .foes li.nextfoe { background: rgba(155, 188, 15, .14); border-radius: calc(var(--u) * 1.5); }
 .foes .ok { color: var(--lcd-lite); min-width: 1.2em; text-align: center; } .foes .no { opacity: .5; min-width: 1.2em; text-align: center; }
 .cupclear { text-align: center; font-weight: 700; color: #f0d890; padding: calc(var(--u) * 1) 0; animation: cupglow 1s ease-in-out infinite alternate; }
@@ -206,7 +211,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 /* toasts sit at the TOP of the LCD, under the clock bar, so they never cover the name bar */
 .toast {
   position: absolute; left: calc(var(--u) * 4); right: calc(var(--u) * 4); top: calc(var(--u) * 13); z-index: 25; padding: calc(var(--u) * 1.5) calc(var(--u) * 4); text-align: center; border-radius: calc(var(--u) * 2.5);
-  background: var(--ink); color: var(--lcd-lite); font: 700 calc(var(--u) * 6.2)/1.25 'Courier New', monospace; box-shadow: 0 2px 0 rgba(0,0,0,.3); pointer-events: none; overflow-wrap: anywhere;
+  background: var(--ink); color: var(--lcd-lite); font: 700 calc(var(--u) * 6.2)/1.25 'PocketPal LCD', 'Courier New', monospace; font-synthesis: none; box-shadow: 0 2px 0 rgba(0,0,0,.3); pointer-events: none; overflow-wrap: anywhere;
 }
 /* while a menu is open the toast drops to the bottom hint row, so it never hides a menu's title or first lines */
 #overlay:not([hidden]) ~ .toast { top: auto; bottom: calc(var(--u) * 1.5); font-size: calc(var(--u) * 5.6); padding: calc(var(--u) * 1) calc(var(--u) * 3); opacity: .96; }

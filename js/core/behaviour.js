@@ -16,7 +16,8 @@
     dance:   { pose: 'dance',   dur: [1800, 2600], frameMs: 260 },
     quirk:   { pose: 'quirk',   dur: [1200, 1600], frameMs: 320 },  // species habit: mane shake, howl, belly scratch, jaw snap, wing stretch, trunk spray
     sleepy:  { pose: 'sleepy',  dur: [2400, 3600], frameMs: 600 },  // nodding off
-    droop:   { pose: 'bored',   dur: [2400, 3600], frameMs: 1200 }  // 1.8.3: tired - stands with heavy, half-shut eyes
+    droop:   { pose: 'bored',   dur: [2400, 3600], frameMs: 1200 }, // 1.8.3: tired - stands with heavy, half-shut eyes
+    front:   { pose: 'front',   dur: [1600, 2400], frameMs: 600 }   // 2.0.0: turns to look at you (true front view, frames 0/1)
   };
 
   /* Weighted choice that reacts to mood: tired pals yawn and sit, sad pals mope,
@@ -25,10 +26,10 @@
     var e = p ? p.energy : 80, hap = p ? p.happy : 2, young = p && p.stage === 'baby';
     var tired = e < ((PP.DATA && PP.DATA.RULES && PP.DATA.RULES.tiredEnergy) || 30);
     var w = tired ? {     // 1.8.3: a tired pal droops, yawns and nods off instead of standing around bright-eyed
-      stand: 0, look: 0.6, sit: 3, yawn: 4, scratch: 0.3, bored: 0, dance: 0, quirk: 0.3, sleepy: 4, droop: 4
+      stand: 0, look: 0.6, sit: 3, yawn: 4, scratch: 0.3, bored: 0, dance: 0, quirk: 0.3, sleepy: 4, droop: 4, front: 0.4
     } : {
       stand: 4, look: 3, sit: e < 40 ? 4 : 2, yawn: e < 35 ? 3 : 0.6, scratch: young ? 0.5 : 1.2,
-      bored: hap <= 1 ? 3 : 0.4, dance: hap >= 4 ? 1.2 : 0, quirk: young ? 0.8 : 1.4, sleepy: 0, droop: 0
+      bored: hap <= 1 ? 3 : 0.4, dance: hap >= 4 ? 1.2 : 0, quirk: young ? 0.8 : 1.4, sleepy: 0, droop: 0, front: 1.5
     };
     var total = 0, k;
     for (k in w) total += w[k];
@@ -48,6 +49,14 @@
     if (since < BLINK[0] + BLINK[1]) return 1;
     if (since < BLINK[0] + BLINK[1] + BLINK[2]) return 0;
     return -1;
+  }
+
+  /* 2.0.0 'look at you' (front view): frames 0/1 = eyes open (a breath), 2 = happy smile, 3 = eyes shut (its blink).
+   * lookFrame(el, smileAt): open breathing until smileAt ms (never if null), then the smile. */
+  function lookFrame(el, smileAt) {
+    el = Math.max(0, el || 0);
+    if (smileAt != null && el >= smileAt) return 2;
+    return Math.floor(el / 600) % 2;
   }
 
   /* Eating: bite (eat 0), swallow (eat 1), chew, chew... -> [pose, frame] */
@@ -106,9 +115,11 @@
     var darkPct = Math.round(100 * (rep.dark || 0) / rep.mins), m = rep.mistakes || 0;
     var grade = m === 0 && darkPct >= 90 ? 'A' : m === 0 && darkPct >= 50 ? 'B' : m <= 1 ? 'C' : 'D';
     var note = { A: 'Perfect night!', B: 'Good night - lights off sooner next time.', C: 'A rough night.', D: 'A bad night - check on your pal more.' }[grade];
-    return { hours: Math.round(rep.mins / 6) / 10, darkPct: darkPct, mistakes: m, grade: grade, note: note };
+    var woke = rep.woke || 0;
+    if (woke && grade === 'A') { grade = 'B'; note = 'Good night - but it was woken early.'; }   // 2.2.0: woken by the lights
+    return { hours: Math.round(rep.mins / 6) / 10, darkPct: darkPct, mistakes: m, woke: woke, grade: grade, note: note };
   }
 
   PP.Behave = { weather: weather, gloom: gloom, rainbow: rainbow, weatherReaction: weatherReaction, reportCard: reportCard, WET: WET, RAINBOW_MS: RAINBOW_MS,
-    ACTS: ACTS, pickIdle: pickIdle, nextBlinkGap: nextBlinkGap, blinkFrame: blinkFrame, eatFrame: eatFrame, BLINK_MS: 230 };
+    ACTS: ACTS, pickIdle: pickIdle, nextBlinkGap: nextBlinkGap, blinkFrame: blinkFrame, eatFrame: eatFrame, lookFrame: lookFrame, BLINK_MS: 230 };
 })(typeof window !== 'undefined' ? window : globalThis);

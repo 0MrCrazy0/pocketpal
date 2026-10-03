@@ -257,12 +257,30 @@
       var canRematch = L && !L.forfeited && B.ended !== 'left' && B.ended !== 'timeout' && B.ended !== 'lost-time';
       var items = [];
       if (canRematch) items.push({ label: waiting ? 'Waiting for ' + L.oppName + '...' : 'Rematch', sub: 'Same room, new battle', disabled: waiting, reason: 'Asked - waiting for your friend', act: rematch });
+      var fr = B.ended !== 'desync' && friendItem(s);
+      if (fr) items.push(fr);
       items.push({ label: 'Leave room', act: function () { leave(true); UI().close(); } });
       return { title: title, html: h + '<p class="tip">Room ' + esc(s ? s.room : '') + ' \u00b7 round ' + ((s ? s.round : 0) + 1) + '</p>', items: items, live: true };
     };
   }
 
+  /* 2.1.0 'Add as friend': the room already carried the opponent's battle code (hostCode / guestCode), so the opponent
+   * goes straight into the existing FRIENDS list (Battle > Friend battle) with their name, pal and code. Nothing new is
+   * stored on the worker. */
+  function oppCode(s) { return s ? (s.side === 'h' ? s.guestCode : s.hostCode) : null; }
+  function friendItem(s) {
+    var code = oppCode(s); if (!code) return null;
+    var d = PP.Cards.decode(code); if (!d.ok) return null;
+    if ((st().slots || []).some(function (p) { return p && p.id === d.card.id; })) return null;   // your own pal (addFriend would refuse it)
+    var list = st().friends || [], have = list.filter(function (f) { return f.id === d.card.id; })[0];
+    var same = have && have.level === d.card.level && have.form === d.card.form && have.name === d.card.name;
+    var nm = String(d.card.name || 'friend');
+    if (same) return { label: nm + ' is a friend', sub: 'In Battle \u25b8 Friend battle', disabled: true, reason: 'Already in your friends list', act: function () {} };
+    return { label: (have ? 'Update friend ' : 'Add as friend: ') + nm, sub: have ? 'Their pal changed - save the new card' : 'Battle ' + nm + '\'s pal again any time (Friend battle)',
+      act: function () { var r = G.addFriend(st(), code, { via: 'live' }); App().toast(r.ok ? (r.updated ? 'Updated ' : 'Added ') + nm + ' to your friends' : r.msg); if (r.ok) App().save(); UI().refresh(); } };
+  }
+
   root.addEventListener && root.addEventListener('pagehide', beacon);
-  PP.LiveUI = { enabled: enabled, liveScreen: liveScreen, joinScreen: joinScreen, create: create, join: join, leave: leave, rematch: rematch,
+  PP.LiveUI = { enabled: enabled, liveScreen: liveScreen, joinScreen: joinScreen, create: create, join: join, leave: leave, rematch: rematch, friendItem: friendItem,
     _session: function () { return L; } };
 })(typeof window !== 'undefined' ? window : globalThis);

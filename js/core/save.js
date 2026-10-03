@@ -72,6 +72,19 @@
   /* Pal Box size: the saved number of unlocked slots (4..12), but NEVER smaller than
    * what is needed to keep every pal. Pals sitting past the unlocked count (a corrupt
    * or edited save) move into free unlocked slots, or the box grows to fit them. */
+  /* 2.1.0: a friend is a battle card + (optional) the code it came from, how it was added and when */
+  function cleanFriend(c) {
+    var o = Object.assign({}, c);
+    // 2.3.0 audit: a friend from an edited / damaged save kept a non-string or 500-character name and a non-list innate
+    // (validateCard does not look at either), which broke the friend list and re-sharing its code
+    o.name = PP.Pet.cleanName(o.name) || 'Friend';
+    o.innate = Array.isArray(o.innate) ? o.innate.slice(0, 2) : [];
+    o.stage = 'adult';
+    if (!(typeof o.code === 'string' && /^PP2-[A-Za-z0-9_-]+-[0-9a-z]{4}$/.test(o.code) && o.code.length <= 2000)) delete o.code;
+    if (o.via !== 'live' && o.via !== 'code') delete o.via;
+    if (!(typeof o.added === 'number' && isFinite(o.added) && o.added >= 0)) delete o.added;
+    return o;
+  }
   function sanitizeSlots(s) {
     var raw = Array.isArray(s.slots) ? s.slots.slice(0, D.BOX.max * 2).map(sanitizePet) : [];
     var size = U.int(s.boxSize != null ? s.boxSize : raw.length, D.BOX.start, D.BOX.start, D.BOX.max);
@@ -164,7 +177,11 @@
     // 1.9.1: an asleep pal always has a sleep kind (an unknown one could never wake up)
     out.sleepKind = out.asleep ? (p.sleepKind === 'nap' ? 'nap' : 'night') : null;
     var nl = p.night, nn = function (v) { return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0; };   // 1.9.1 night log (report card)
-    out.night = nl && typeof nl === 'object' && out.asleep && out.sleepKind === 'night' ? { mins: nn(nl.mins), dark: nn(nl.dark), lit: nn(nl.lit), mist: nn(nl.mist) } : null;
+    // 2.2.0: woken early at night (lights on) - awake for a while, then it dozes off again; the night log is kept meanwhile
+    var woke = !out.asleep && out.stage !== 'egg' && Number.isFinite(p.wokeAt) && p.wokeAt >= 0 && (!Number.isFinite(out.clock) || p.wokeAt <= out.clock) ? Math.round(p.wokeAt) : null;
+    if (woke != null) out.wokeAt = woke; else delete out.wokeAt;
+    out.night = nl && typeof nl === 'object' && ((out.asleep && out.sleepKind === 'night') || woke != null) ? { mins: nn(nl.mins), dark: nn(nl.dark), lit: nn(nl.lit), mist: nn(nl.mist) } : null;
+    if (out.night && nn(nl.woke) > 0) out.night.woke = nn(nl.woke);
     ['hard', 'golden'].forEach(function (k) { if (k in p) out[k] = !!p[k]; });
     ['hardHungry', 'hardSick'].forEach(function (k) { if (k in p) out[k] = U.int(p[k], 0, 0, 1e6); });
     if ('hardMist' in p) out.hardMist = Array.isArray(p.hardMist) ? p.hardMist.filter(Number.isFinite).slice(-12) : [];
@@ -199,7 +216,7 @@
     out.wallet = PP.Shop.cleanWallet(s.wallet);
     out.inv = PP.Shop.cleanInv(s.inv);
     out.album = Array.isArray(s.album) ? s.album.slice(-200).map(sanitizeAlbumEntry).filter(Boolean) : [];
-    out.friends = Array.isArray(s.friends) ? s.friends.filter(function (c) { return !PP.Cards.validateCard(c); }).slice(0, 12) : [];
+    out.friends = Array.isArray(s.friends) ? s.friends.filter(function (c) { return !PP.Cards.validateCard(c); }).slice(0, 12).map(cleanFriend) : [];
     out.arena = s.arena && Array.isArray(s.arena.cups) ? PP.Arena.clean(s.arena) : PP.Arena.migrate(s);   // 1.8.4 per-cup records
     out.dex = {};
     if (s.dex && typeof s.dex === 'object') Object.keys(s.dex).forEach(function (k) {

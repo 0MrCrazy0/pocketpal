@@ -16,9 +16,9 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v1.9.9';
+var CACHE = 'pocketpal-v2.3.0';
 var FILES = [
-  './', 'index.html', 'manifest.json', 'css/style.css',
+  './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
   'js/config.js', 'js/data/atlas.js', 'js/data/glyphs.js',
   'js/core/util.js', 'js/core/data.js', 'js/core/time.js', 'js/core/sleep.js', 'js/core/pet.js', 'js/core/care.js', 'js/core/evolution.js', 'js/core/stats.js', 'js/core/skills.js',

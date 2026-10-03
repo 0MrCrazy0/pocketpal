@@ -223,7 +223,7 @@
   function canBattle(p) {
     if (!p || p.fate) return 'No pal';
     if (p.stage !== 'adult') return 'Only adults can battle';
-    if (p.asleep) return 'Zzz... asleep';
+    if (p.asleep) return PP.Care.SLEEP_MSG;
     if (p.sick) return 'Too sick to battle';
     if (p.energy < R.costs.battle) return 'Too tired... (needs ' + R.costs.battle + ' energy)';
     return null;
@@ -346,13 +346,19 @@
   }
 
   /* ---------------------------------------------------------------- friends & breeding */
-  function addFriend(state, code) {
+  /* 2.1.0: opts.via = 'live' when the friend comes from a live battle (the room already carried both battle codes, so no
+   * extra storage is needed anywhere). The code itself is kept so it can be copied / re-shared later. */
+  function addFriend(state, code, opts) {
     var r = PP.Cards.decode(code);
     if (!r.ok) return { ok: false, msg: r.error };
     var mine = state.slots.some(function (s) { return s && s.id === r.card.id; });
     if (mine) return { ok: false, msg: "That's your own pal's code" };
     var existed = state.friends.some(function (f) { return f.id === r.card.id; });
+    var prev = state.friends.filter(function (f) { return f.id === r.card.id; })[0];
     state.friends = state.friends.filter(function (f) { return f.id !== r.card.id; });
+    r.card.code = String(code).replace(/\s+/g, '');
+    r.card.via = (opts && opts.via === 'live') || (prev && prev.via === 'live') ? 'live' : 'code';
+    r.card.added = now(state);
     state.friends.unshift(r.card);
     PP.Collection.markSeen(state, r.card, now(state));
     state.friends = state.friends.slice(0, 12);

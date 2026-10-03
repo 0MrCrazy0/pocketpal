@@ -191,7 +191,11 @@
       if (a.kind === 'happy') return ['happy', Math.floor(el / 250)];
       if (a.kind === 'sick') return ['sick', Math.floor(el / 300)];
       // 1.9.1 good morning: still sleepy, a big yawn, then a happy stretch
-      if (a.kind === 'wake') return el < 800 ? ['sleepy', Math.floor(el / 400)] : el < 1900 ? ['yawn', el < 1350 ? 0 : 1] : ['happy', Math.floor(el / 250)];
+      // 2.0.0: ... and finally turns to say hello (front view, smiling)
+      if (a.kind === 'wake') return el < 800 ? ['sleepy', Math.floor(el / 400)] : el < 1900 ? ['yawn', el < 1350 ? 0 : 1] : ['front', 2];
+      // 2.0.0 'look at you': tapped / greeted -> turns to face you, then smiles; praised -> a happy hop, then a smile at you
+      if (a.kind === 'look') return ['front', PP.Behave.lookFrame(el, 900)];
+      if (a.kind === 'praise') return el < 700 ? ['happy', Math.floor(el / 250)] : ['front', 2];
       if (a.kind === 'stillAsleep') return ['sleep', Math.floor(t / 700)];
       return [a.pose || a.kind, Math.floor(t / 500)];
     }
@@ -200,13 +204,14 @@
     if (moving) return ['walk', Math.floor(t / 250)];
     var w = app.walker, act = w && w.act, pose = 'idle', frame = Math.floor(t / 500);
     if (act) { pose = act.pose; frame = act.frameMs ? Math.floor((t - act.t0) / act.frameMs) : 0; }
+    if (pose === 'front') frame = PP.Behave.lookFrame(t - act.t0, null);   // 2.0.0: open-eyed breathing only (2 = smile, 3 = blink)
     if (pose === 'idle' && PP.Care.isTired(p)) return ['bored', Math.floor(t / 1200)];   // 1.8.3: heavy, half-shut eyes
     // natural blinking every 2-6 s while standing or sitting
-    if (pose === 'idle' || pose === 'sit' || pose === 'look') {
+    if (pose === 'idle' || pose === 'sit' || pose === 'look' || pose === 'front') {
       if (!w.blinkAt) w.blinkAt = t + PP.Behave.nextBlinkGap(Math.random());
       var bf = PP.Behave.blinkFrame(t - w.blinkAt);
       if (t - w.blinkAt > PP.Behave.BLINK_MS) w.blinkAt = t + PP.Behave.nextBlinkGap(Math.random());
-      else if (bf >= 0) return pose === 'sit' ? ['sit', bf === 1 ? 1 : 3] : ['blink', bf];   // open > half > closed > half > open
+      else if (bf >= 0) return pose === 'sit' ? ['sit', bf === 1 ? 1 : 3] : pose === 'front' ? ['front', bf === 1 ? 3 : frame] : ['blink', bf];   // open > half > closed > half > open
     }
     return [pose, frame];
   }
@@ -346,17 +351,18 @@
       for (i = 0; i < drops; i++) {
         var yo = ((i * 53 + Math.floor(tt / speed)) % fall), x0 = (i * 37 + (i % 3) * 11) % W - Math.floor(yo * slant / 3);
         var xs = ((x0 % W) + W) % W, ys = top + 14 + yo;
-        for (var k = 0; k < len; k++) {
-          var dx = -Math.floor(k * slant / 3);
-          ctx.fillStyle = RAIN; ctx.fillRect(xs + dx, ys + k, 1, 1);
-          if (k >= len - 2) { ctx.fillStyle = 'rgba(206,224,110,1)'; ctx.fillRect(xs + dx + 1, ys + k, 1, 1); }   // a bright glint at the drop's head
-        }
+        // 2.0.0: a smooth streak on the x5 grid (it was a stair of whole LCD pixels) with a bright rounded glint at its head
+        var ex = xs - len * slant / 3, ey = ys + len;
+        ctx.fillStyle = RAIN; fshape(ctx, ex - 1, ys - 1, xs + 1, ey + 1, function (u, v) { return inCap(u, v, xs + .5, ys + .5, ex + .5, ey - .5, .42); });
+        ctx.fillStyle = 'rgba(206,224,110,1)'; fshape(ctx, ex, ey - 2.4, ex + 2, ey + .4, function (u, v) { return inCap(u, v, ex + 1.15 + slant * .25, ey - 1.6, ex + 1.0, ey - .6, .36); });
       }
       ctx.fillStyle = RAIN;
-      if (!still) for (i = 0; i < (w === 'drizzle' ? 3 : 6); i++) {   // splashes
+      if (!still) for (i = 0; i < (w === 'drizzle' ? 3 : 6); i++) {   // splashes: two little droplets jumping out (2.0.0: round, x5 grid)
         var ph = Math.floor(tt / 160 + i * 2) % 4, sx = (i * 61 + Math.floor(tt / 640) * 23) % (W - 8) + 4;
-        if (ph === 0) { ctx.fillRect(sx - 1, bottom - 2, 1, 1); ctx.fillRect(sx + 1, bottom - 2, 1, 1); }
-        else if (ph === 1) { ctx.fillRect(sx - 2, bottom - 3, 1, 1); ctx.fillRect(sx + 2, bottom - 3, 1, 1); }
+        if (ph < 2) {
+          var sd = ph === 0 ? 1.1 : 2.1, sy = bottom - (ph === 0 ? 1.6 : 2.6);
+          fshape(ctx, sx - sd - 1, sy - 1, sx + sd + 2, sy + 1.5, function (u, v) { return inDisc(u, v, sx - sd + .5, sy, .55) || inDisc(u, v, sx + sd + .5, sy, .55); });
+        }
       }
     }
     if (w === 'storm') {
@@ -374,13 +380,12 @@
       }
     }
     if (w === 'snow') {
-      // flakes: a bright five-pixel cross with darker diagonal tips (reads as a snowflake), drifting as they fall
+      // 2.0.0: a six-armed flake drawn on the x5 grid - a dark halo and bright arms (it was a 5-pixel cross of LCD pixels)
+      var flake = function (fx, fy, r) { return function (u, v) { for (var q = 0; q < 3; q++) { var a = q * Math.PI / 3, c = Math.cos(a) * 2.3, d = Math.sin(a) * 2.3; if (inCap(u, v, fx - c, fy - d, fx + c, fy + d, r)) return true; } return false; }; };
       for (i = 0; i < 20; i++) {
-        var fy = top + 8 + ((i * 19 + Math.floor(tt / 55)) % (h - 14)), fx = ((i * 41 + Math.round(4 * Math.sin(tt / 700 + i))) % W + W) % W;
-        ctx.fillStyle = 'rgba(206,224,110,1)';
-        ctx.fillRect(fx - 2, fy, 5, 1); ctx.fillRect(fx, fy - 2, 1, 5);
-        ctx.fillStyle = RAIN;
-        ctx.fillRect(fx - 1, fy - 1, 1, 1); ctx.fillRect(fx + 1, fy - 1, 1, 1); ctx.fillRect(fx - 1, fy + 1, 1, 1); ctx.fillRect(fx + 1, fy + 1, 1, 1);
+        var fy = top + 8 + ((i * 19 + Math.floor(tt / 55)) % (h - 14)) + .5, fx = ((i * 41 + Math.round(4 * Math.sin(tt / 700 + i))) % W + W) % W + .5;
+        ctx.fillStyle = RAIN; fshape(ctx, fx - 3.2, fy - 3.2, fx + 3.2, fy + 3.2, flake(fx, fy, .62));
+        ctx.fillStyle = 'rgba(206,224,110,1)'; fshape(ctx, fx - 3, fy - 3, fx + 3, fy + 3, flake(fx, fy, .3));
       }
     }
   }
@@ -390,8 +395,9 @@
     ctx.fillStyle = C.lite;
     spots.forEach(function (q, i) {
       if ((i + ph) % 3 === 0) return;
-      var x = px + q[0], yy = y + q[1];
-      ctx.fillRect(x, yy - 2, 1, 5); ctx.fillRect(x - 2, yy, 5, 1);
+      // 2.0.0: a smooth four-point twinkle on the x5 grid (it was a 5-pixel cross of LCD pixels); it pulses with ph
+      var x = px + q[0] + .5, yy = y + q[1] + .5, r = (i + ph) % 3 === 1 ? 2.9 : 2.2;
+      fshape(ctx, x - r, yy - r, x + r, yy + r, function (u, v) { var a = Math.sqrt(Math.abs(u - x)), b = Math.sqrt(Math.abs(v - yy)); return a + b <= Math.sqrt(r); });
     });
   }
   function drawHome(ctx, app, t, dt) {
@@ -481,7 +487,9 @@
     if (a.kind === 'eat') {
       var fd = PP.DATA.foodOf(species), food = a.food === 'snack' ? 'snack' : (k < 0.45 ? fd.fx : fd.bitten);   // 1.9.9: the pal's own diet
       if (k < 0.85) S.drawFx(ctx, a.food === 'snack' && k > 0.5 ? 'heart' : food, fxX, fy, 2);
-    } else if (a.kind === 'happy') {
+    } else if (a.kind === 'look') {        // 2.0.0: a little heart when it smiles at you
+      if (t - a.t0 > 900) S.drawFx(ctx, 'heart', px + PS / 2 - 16, y + 2 - Math.min(10, (t - a.t0 - 900) / 60), 2);
+    } else if (a.kind === 'happy' || a.kind === 'praise') {
       for (var i = 0; i < 3; i++) {
         var hk = (k * 2 + i / 3) % 1;
         S.drawFx(ctx, i === 1 ? 'note' : 'heart', px + 10 + i * 28, y + 20 - hk * 40, 2);
@@ -550,12 +558,13 @@
       } else {
         if (k < swapAt + 160) { clear(ctx, C.lite); return; }
         if (c.secret) {                                      // 1.9.7: a ring of light rays behind a secret form
-          ctx.save(); ctx.strokeStyle = C.dark; ctx.lineWidth = 3;
+          // 2.0.0: crisp rays on the x5 grid in the LCD tone (they were blurry anti-aliased canvas strokes)
+          ctx.fillStyle = C.dark;
           for (var q = 0; q < 12; q++) {
             var aq = q * Math.PI / 6 + (k - swapAt) / 900, r0 = 34, r1 = 34 + Math.min(70, (k - swapAt) / 12);
-            ctx.beginPath(); ctx.moveTo(W / 2 + Math.cos(aq) * r0, 96 + Math.sin(aq) * r0 * .7); ctx.lineTo(W / 2 + Math.cos(aq) * r1, 96 + Math.sin(aq) * r1 * .7); ctx.stroke();
+            var ax = W / 2 + Math.cos(aq) * r0, ay = 96 + Math.sin(aq) * r0 * .7, bx2 = W / 2 + Math.cos(aq) * r1, by2 = 96 + Math.sin(aq) * r1 * .7;
+            fshape(ctx, Math.min(ax, bx2) - 2, Math.min(ay, by2) - 2, Math.max(ax, bx2) + 2, Math.max(ay, by2) + 2, (function (ax, ay, bx2, by2) { return function (u, v) { return inCap(u, v, ax, ay, bx2, by2, 1.5); }; })(ax, ay, bx2, by2));
           }
-          ctx.restore();
         }
         var kk = k - swapAt;   // reveal: jump for joy, then show off the species habit
         S.draw(ctx, c.species, c.toKey, kk < 1200 ? 'happy' : 'quirk', kk < 1200 ? Math.floor(k / 250) : Math.floor((kk - 1200) / 300), cx, y, PET);
@@ -586,7 +595,7 @@
   }
   function cutDuration(c) { return c.kind === 'evolve' ? (c.secret ? 6400 : 5200) : c.kind === 'hatch' ? 3600 : 3200; }
 
-  PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, C: C, LAYOUT: L, clear: clear, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
+  PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
     statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI, mini: mini, poopAt: poopAt,
     sceneInfo: sceneInfo, drawScene: drawScene, forceScene: function (v) { sceneForce = v || null; } };
 })(typeof window !== 'undefined' ? window : globalThis);

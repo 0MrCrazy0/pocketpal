@@ -15,6 +15,14 @@
       .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
   }
   function b64uToBytes(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); var raw = atob(s + '==='.slice((s.length + 3) % 4)); var a = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; }
+  function sameKey(sub, key) {      // unknown (old browsers) counts as the same
+    var k = sub && sub.options && sub.options.applicationServerKey;
+    if (!k) return true;
+    var a = new Uint8Array(k);
+    if (a.length !== key.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== key[i]) return false;
+    return true;
+  }
   function pushReady() { return !!(cfg().vapidPublicKey && cfg().vapidPublicKey.length >= 80 && enabled() && root.PushManager !== undefined); }
   function hasTriggers() { return typeof root.TimestampTrigger === 'function' && typeof Notification !== 'undefined' && 'showTrigger' in Notification.prototype; }
   function isIOS() { var n = root.navigator || {}; return /iPad|iPhone|iPod/.test(n.userAgent || '') || (n.platform === 'MacIntel' && n.maxTouchPoints > 1); }
@@ -71,8 +79,14 @@
     var times = list.map(function (e) { return e.at; });
     storeLocal(list, false);
     navigator.serviceWorker.ready.then(function (reg) {
+      var key = b64uToBytes(cfg().vapidPublicKey);
+      var fresh = function () { return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); };
       return reg.pushManager.getSubscription().then(function (sub) {
-        return sub || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(cfg().vapidPublicKey) });
+        /* 2.1.0 audit: after the worker's VAPID keys are changed (config.js), the old subscription is still tied to the
+         * OLD key - every push the worker signs with the new key is refused, and subscribe() with the new key throws
+         * while it exists. Drop it and subscribe again. */
+        if (sub && !sameKey(sub, key)) return Promise.resolve(sub.unsubscribe()).catch(function () {}).then(fresh);
+        return sub || fresh();
       }).then(function (sub) {
         /* times = the 1.9.7 schedule; at = its first time, for a worker that is still on 1.9.4 */
         return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null });
@@ -128,5 +142,5 @@
     return out;
   }
 
-  var Net = PP.Net = { enabled: enabled, scheduleAlert: scheduleAlert, setAlerts: setAlerts, mode: mode, limits: limits, plan: plan, last: null, isIOS: isIOS };
+  var Net = PP.Net = { enabled: enabled, scheduleAlert: scheduleAlert, setAlerts: setAlerts, mode: mode, limits: limits, plan: plan, sameKey: sameKey, last: null, isIOS: isIOS };
 })(typeof window !== 'undefined' ? window : globalThis);

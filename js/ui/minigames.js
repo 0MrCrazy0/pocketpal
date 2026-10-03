@@ -231,15 +231,20 @@
   }
 
   function dummySack(ctx, x, y, hit) {
+    // 2.0.0: a round stuffed sack on its post, drawn on the x5 grid like the 1.9.8 FX (it was three blocky rectangles)
+    var R = PP.Render, sx = x + 24, top = y + 8, bot = y + 36;
+    var sack = function (u, v) { return R.inCap(u, v, sx, top + 9, sx, bot - 8, 9.6); };
+    var inner = function (u, v) { return R.inCap(u, v, sx, top + 9, sx, bot - 8, 8.2); };
     ctx.fillStyle = C.ink;
-    ctx.fillRect(x + 14, y + 8, 20, 28);
-    ctx.fillRect(x + 20, y + 36, 8, 10);
-    ctx.fillStyle = hit ? C.mid : C.lite;
-    ctx.fillRect(x + 16, y + 10, 16, 24);
+    R.fshape(ctx, sx - 3, bot - 2, sx + 3, y + 46, function (u, v) { return Math.abs(u - sx) <= 2.4 && v <= y + 46; });         // the post
+    R.fshape(ctx, sx - 8, y + 44, sx + 8, y + 47, function (u, v) { return R.inCap(u, v, sx - 6, y + 45.5, sx + 6, y + 45.5, 1.4); });   // its foot
+    R.fshape(ctx, sx - 11, top - 1, sx + 11, bot + 2, sack);
+    ctx.fillStyle = hit ? C.mid : C.lite; R.fshape(ctx, sx - 10, top, sx + 10, bot + 1, inner);
     ctx.fillStyle = C.ink;
-    ctx.fillRect(x + 20, y + 16, 3, 3);
-    ctx.fillRect(x + 27, y + 16, 3, 3);
-    ctx.fillRect(x + 22, y + 24, 8, 2);
+    R.fshape(ctx, sx - 10, top + 8, sx + 10, top + 15, function (u, v) { return R.inDisc(u, v, sx - 3.6, top + 11, 1.7) || R.inDisc(u, v, sx + 3.6, top + 11, 1.7); });   // button eyes
+    R.fshape(ctx, sx - 10, top + 16, sx + 10, top + 22, function (u, v) { return Math.abs(Math.hypot(u - sx, v - (top + 15)) - 4.2) < .55 && v > top + 16.6; });   // stitched smile
+    ctx.fillStyle = C.dark;
+    R.fshape(ctx, sx - 10, bot - 8, sx + 10, bot - 5, function (u, v) { return inner(u, v) && Math.abs(v - (bot - 6.5)) < .5; });   // the rope seam
   }
 
   function meter(ctx) {

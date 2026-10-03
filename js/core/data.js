@@ -55,6 +55,7 @@
     energySleepMin: 2,       // 1.8.2: +1 every 2 min asleep with lights off - naps AND night sleep (was 4)
     energySleepLitMin: 8,    // +1 every 8 min asleep with the lights left on (unchanged)
     napEnergy: 60,           // lights off in the day and energy under this = nap
+    wokenAwakeMin: 30,       // 2.2.0: lights on at night wakes the pal (grumpy, happy -1 once a night); it stays up this long, then dozes off again
     healthDrain: { hunger: 0.08, sick: 0.06, poop: 0.03, happy: 0.02 },  // per minute
     healthRegen: 0.12, healthRegenSleep: 0.2,
     runawayMin: 24 * 60,     // 24 h of being miserable (happy 0, discipline < 40) = runs away
@@ -330,7 +331,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '1.9.9',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.3.0',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

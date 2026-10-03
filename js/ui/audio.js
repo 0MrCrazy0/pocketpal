@@ -89,8 +89,19 @@
     return true;
   }
   var log = [];
+  /* 2.0.0: celebration sounds. Every moment the pal celebrates on the LCD (a happy hop or a dance with music notes,
+   * praise, a cup) plays a celebration sound - but only one: if a celebration jingle already played a moment ago
+   * (the battle 'win', a 'level', the 'cup' fanfare...), celebrate() stays quiet instead of playing on top of it. */
+  var CELEB = { happy: 1, win: 1, cup: 1, level: 1, allgoals: 1, goal: 1, hatch: 1, evolve: 1, secret: 1, morning: 1 }, lastCeleb = -1e9, CELEB_GAP = 1800;
+  function now() { return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(); }
+  function celebrate(name) {
+    if (now() - lastCeleb < CELEB_GAP) return false;
+    play(name || 'happy');
+    return true;
+  }
   function play(name) {
     log.push(name); if (log.length > 30) log.shift();
+    if (CELEB[name]) lastCeleb = now();
     try {
       if (music && JINGLES[name] && enabled && ctx && ctx.state === 'running') { jingle(name); return; }
       if (SFX[name]) SFX[name]();
@@ -99,6 +110,6 @@
   }
   function setEnabled(v) { enabled = !!v; }
   function setMusic(v) { music = !!v; }
-  PP.Audio = { unlock: unlock, play: play, setEnabled: setEnabled, setMusic: setMusic, isEnabled: function () { return enabled; }, musicOn: function () { return music; },
+  PP.Audio = { unlock: unlock, play: play, celebrate: celebrate, CELEB_GAP: CELEB_GAP, setEnabled: setEnabled, setMusic: setMusic, isEnabled: function () { return enabled; }, musicOn: function () { return music; },
     JINGLES: JINGLES, log: log };
 })(typeof window !== 'undefined' ? window : globalThis);

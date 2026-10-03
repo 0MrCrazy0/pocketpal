@@ -88,7 +88,7 @@
   function nightReport(p) {
     var n = p.night; p.night = null;
     if (!n || !(n.mins > 0)) return null;
-    return { mins: n.mins, dark: n.dark, lit: n.lit, mistakes: Math.max(0, (p.totalMistakes || 0) - (n.mist || 0)) };
+    return { mins: n.mins, dark: n.dark, lit: n.lit, woke: n.woke || 0, mistakes: Math.max(0, (p.totalMistakes || 0) - (n.mist || 0)) };
   }
   /* 1.9.1: a pal coming out of the Pal Box (it was in stasis) starts fresh at `nowMs`: no
    * catch-up, no clock-back hold, and if its night is over it is awake straight away instead
@@ -141,7 +141,15 @@
     if (p.asleep && p.sleepKind !== 'night' && p.sleepKind !== 'nap') p.sleepKind = 'night';   // 1.9.1: never an unknown sleep
 
     // ---- sleep & lights
-    if (night && !(p.asleep && p.sleepKind === 'night')) {
+    // 2.2.0: woken early (lights on at night). It stays up while the lights are on, for at most wokenAwakeMin,
+    // then dozes off again (lights off puts it straight back to bed). The night's log carries on.
+    if (p.wokeAt != null && (p.asleep || !night || !p.lights || p.clock - p.wokeAt >= R.wokenAwakeMin || p.wokeAt > p.clock)) {
+      var resleep = !p.asleep && night;
+      p.wokeAt = null;
+      if (!night && !p.asleep && p.night) { ev.push({ t: 'wake', from: 'night', report: nightReport(p), early: true }); }
+      if (resleep) { p.asleep = true; p.sleepKind = 'night'; p.fake = null; if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', again: true }); }
+    }
+    if (night && !(p.asleep && p.sleepKind === 'night') && p.wokeAt == null) {
       p.asleep = true; p.sleepKind = 'night';
       p.nightKey = p.clock;       // when this night's sleep started
       p.fake = null;
@@ -334,6 +342,11 @@
   /* ------------------------------------------------------------ player actions
    * Each returns { ok, msg, anim } and mutates the pet. */
   function res(ok, msg, anim) { return { ok: ok, msg: msg, anim: anim || null }; }
+  /* 2.2.0: one clear answer for every care action that needs the pal awake (feed, snack, medicine, play, train, scold,
+   * praise, battle, items). Cleaning is allowed in its sleep - the classic toys let you, and a mess left all night
+   * would otherwise be an unavoidable care mistake. */
+  var SLEEP_MSG = "Shh... it's asleep. Lights on wakes it";
+  function asleepRes() { return Object.assign(res(false, SLEEP_MSG), { asleep: true }); }
   function blocked(p) {
     if (!p) return res(false, 'No pal');
     if (p.fate) return res(false, 'Your pal is gone');
@@ -343,7 +356,7 @@
 
   function feedMeal(p) {
     var b = blocked(p); if (b) return b;
-    if (p.asleep) return res(false, 'Zzz... asleep');
+    if (p.asleep) return asleepRes();
     if (p.fake) return res(false, 'Tantrum! It refuses food', 'refuse');   // a tantrum is not a good deed
     if (p.hunger >= R.maxHearts) {
       // politely saying no when full is worth praise - but only once an hour, so it can't be farmed
@@ -356,7 +369,7 @@
   }
   function feedSnack(p) {
     var b = blocked(p); if (b) return b;
-    if (p.asleep) return res(false, 'Zzz... asleep');
+    if (p.asleep) return asleepRes();
     p.snacks = (p.snacks || []).filter(function (c) { return p.clock - c < R.snackWindowMin; });
     p.snacks.push(p.clock);
     p.happy = Math.min(R.maxHearts, p.happy + 1); p.weight += 2;
@@ -377,6 +390,7 @@
   }
   function medicine(p) {
     var b = blocked(p); if (b) return b;
+    if (p.asleep) return asleepRes();               // 2.2.0: it could be given medicine in its sleep
     if (!p.sick) {
       p.happy = Math.max(0, p.happy - 1);
       return res(false, "Yuck! It isn't sick", 'sad');
@@ -389,34 +403,51 @@
     }
     return res(true, 'One more dose needed', 'sick');
   }
-  /* Lights. 1.9.1: switching them ON never traps a pal in sleep:
-   *  - a nap always ends;
-   *  - a night sleep ends when it is already the pal's own waking time (for example a wake
-   *    time that has passed), and any clock-back hold is dropped;
-   *  - during the pal's real sleep hours it stays asleep, like the classic toys, and the result
-   *    says until when (r.asleepUntil = wake minute) so the game can show a clear hint.
+  /* Lights. 2.2.0: switching them ON always wakes the pal (the 1.9.1 rule kept it asleep in its sleep hours, which
+   * players read as "stuck - it won't wake up"):
+   *  - a nap ends;
+   *  - a night sleep after the pal's own wake time ends with the morning report (as before);
+   *  - a night sleep IN its sleep hours ends too, Tamagotchi-style: it wakes up grumpy (happy -1, once a night), stays
+   *    up while the lights are on - at most R.wokenAwakeMin - and then dozes off again by itself. Lights off sends it
+   *    straight back to bed. r.early = true, r.backBy = the minute of day it will doze off at the latest.
+   * Lights OFF in its sleep hours while it is up (woken early) puts it back to sleep at once.
    * nowMs / opts (minuteOf) are optional; without them the last simulated minute is used. */
   function toggleLights(p, nowMs, opts) {
     var b = blocked(p); if (b) return b;
+    var mod = nowMs != null ? minuteFn(opts)(nowMs) : p.dayMin, sch = PP.Sleep.of(p);
+    var inNight = mod != null && PP.Sleep.isNight(mod, sch);
     p.lights = !p.lights;
     if (!p.lights && p.need) p.need.lights = null;
-    if (!p.lights) return res(true, 'Lights off', null);
+    if (!p.lights) {
+      if (p.wokeAt != null && !p.asleep && inNight) {
+        p.wokeAt = null; p.asleep = true; p.sleepKind = 'night';
+        if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
+        return Object.assign(res(true, 'Lights off - back to sleep. Zzz...', null), { resleep: true });
+      }
+      return res(true, 'Lights off', null);
+    }
     if (p.asleep && p.sleepKind === 'nap') { p.asleep = false; p.sleepKind = null; return Object.assign(res(true, 'Lights on - awake again!', null), { woke: true, from: 'nap' }); }
     if (p.asleep && p.sleepKind === 'night') {
-      var sch = PP.Sleep.of(p), mod = nowMs != null ? minuteFn(opts)(nowMs) : p.dayMin;
-      if (mod != null && !PP.Sleep.isNight(mod, sch)) {
-        p.asleep = false; p.sleepKind = null; p.holdTo = null;
-        if (p.need) p.need.lights = null;
-        return Object.assign(res(true, 'Lights on - ' + (PP.Time ? PP.Time.greeting(mod).toLowerCase() : 'good morning') + '!', null), { woke: true, from: 'night', report: nightReport(p), at: mod });   // 1.9.9: by the hour
+      p.asleep = false; p.sleepKind = null; p.holdTo = null;
+      if (p.need) p.need.lights = null;
+      if (mod == null || !inNight) {
+        p.wokeAt = null;
+        return Object.assign(res(true, 'Lights on - ' + (PP.Time && mod != null ? PP.Time.greeting(mod).toLowerCase() : 'good morning') + '!', null), { woke: true, from: 'night', report: nightReport(p), at: mod });   // 1.9.9: by the hour
       }
-      return Object.assign(res(true, 'Lights on - still asleep (bedtime)', null), { asleepUntil: sch.wake });
+      p.wokeAt = p.clock;
+      if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
+      var first = !(p.night.woke > 0);
+      p.night.woke = (p.night.woke || 0) + 1;
+      if (first) p.happy = Math.max(0, p.happy - 1);
+      return Object.assign(res(true, first ? 'Lights on - it wakes up grumpy! Happy -1' : 'Lights on - awake again (still grumpy)', 'sad'),
+        { woke: true, from: 'early', early: true, grumpy: first, backBy: (mod + R.wokenAwakeMin) % 1440, wakeAt: sch.wake });
     }
     return res(true, 'Lights on', null);
   }
   function scold(p) {
     var b = blocked(p); if (b) return b;
     if (p.stage === 'baby') return res(false, 'Too young to scold');
-    if (p.asleep) return res(false, 'Zzz... asleep');
+    if (p.asleep) return asleepRes();
     if (p.fake) {
       p.fake = null;
       p.discipline = Math.min(100, p.discipline + 25);
@@ -431,7 +462,7 @@
   function praise(p) {
     var b = blocked(p); if (b) return b;
     if (p.stage === 'baby') return res(false, 'Too young to praise');
-    if (p.asleep) return res(false, 'Zzz... asleep');
+    if (p.asleep) return asleepRes();
     var open = praiseOpen(p);
     p.praiseReady = false;
     if (open && !p.fake) {
@@ -447,7 +478,7 @@
   /* Mini-game / training results. kind: 'train' | 'game'. success: bool */
   function canExercise(p, kind) {
     var b = blocked(p); if (b) return b;
-    if (p.asleep) return res(false, 'Zzz... asleep');
+    if (p.asleep) return asleepRes();
     if (p.sick) return res(false, 'Too sick to play');
     var cost = kind === 'train' ? R.costs.train : R.costs.game;
     if (p.energy < cost) { var t = res(false, 'Too tired... (needs ' + cost + ' energy)'); t.tired = cost; return t; }
@@ -512,7 +543,7 @@
     return null;
   }
 
-  PP.Care = { nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
+  PP.Care = { SLEEP_MSG: SLEEP_MSG, nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
     tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
     feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights, nightReport: nightReport, outOfBox: outOfBox,
     scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, moodPose: moodPose, isTired: isTired,

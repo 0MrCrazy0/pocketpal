@@ -177,7 +177,7 @@
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
-        case 'sleep': if (!offline) { App.toast(p.name + ' fell asleep. Lights off!'); PP.Audio.play('lullaby'); } woke = null; break;
+        case 'sleep': if (!offline) { App.toast(p.name + (e.again ? ' dozed off again. Lights off!' : ' fell asleep. Lights off!')); PP.Audio.play('lullaby'); } woke = null; break;
         case 'wake': if (e.from === 'night') woke = e; else if (offline) line(e, p.name + ' woke up from a nap'); else napWoke = true; break;
         case 'mistake': mistakes.push(e); if (!offline) App.toast('Care mistake: ' + e.why); break;
         case 'died': died = e; line(e, p.name + ' passed away (' + e.cause + ')'); break;
@@ -307,6 +307,9 @@
     var p = G.active(App.state);
     var r = G.act(App.state, action);
     if (action === 'lights' && r.asleepUntil != null) r.msg = p.name + ' is asleep until ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock) + '. Lights off lets it rest.';
+    // 2.2.0: woken early at night - say what happens next
+    if (action === 'lights' && r.early) r.msg = p.name + (r.grumpy ? ' wakes up grumpy! Happy -1. ' : ' is up again. ') + 'It dozes off again by ' + PP.Time.hm(r.backBy, App.state.settings.clock) + ' - lights off puts it back to bed.';
+    if (action === 'lights' && r.resleep) r.msg = 'Lights off - ' + p.name + ' goes back to sleep. Zzz...';
     App.toast(r.msg);
     UI.close();
     var now = performance.now();
@@ -316,10 +319,18 @@
       if (action === 'medicine' && r.ok) kind = 'med';
       if (action === 'lights') kind = null;
       if (action === 'scold') kind = r.ok ? 'scold' : 'sad';
-      if (action === 'praise') kind = 'happy';
+      if (action === 'praise') kind = r.ok ? 'praise' : 'happy';   // 2.0.0: earned praise -> a hop, then it smiles at you
       if (kind) App.anim = { kind: kind, pose: kind === 'med' ? (p.sick ? 'sick' : 'happy') : kind === 'scold' ? 'sad' : null, food: action, t0: now, dur: dur };
     }
-    if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
+    if (r.asleep) {                               // 2.2.0: a care action that needs it awake
+      App.anim = { kind: 'stillAsleep', t0: now, dur: 2200, text: 'SHH... ASLEEP' };
+      PP.Audio.play('no');
+    } else if (action === 'lights' && r.early) {  // 2.2.0: woken early - a grumpy face, then it is up
+      App.anim = { kind: 'sad', pose: 'angry', t0: now, dur: 1800 };
+      PP.Audio.play('no');
+    } else if (action === 'lights' && r.resleep) {
+      PP.Audio.play('lullaby');
+    } else if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
       if (r.from === 'night') App.morning(r.report, false);
       else App.wakeUp('nap');
     } else if (action === 'lights' && r.asleepUntil != null) {
@@ -332,6 +343,9 @@
   App.useItem = function (id) {
     var r = PP.Shop.use(App.state, id), it = D.ITEMS[id];
     App.toast(r.msg);
+    if (r.asleep) {                               // 2.2.0 audit: same answer as the care buttons - close the menu, SHH on the LCD
+      UI.close(); App.anim = { kind: 'stillAsleep', t0: performance.now(), dur: 2200, text: 'SHH... ASLEEP' }; PP.Audio.play('no'); return;
+    }
     if (r.ok || r.anim) {
       UI.close();
       var kind = r.anim || 'happy';
@@ -357,7 +371,9 @@
       if (success === null) { App.toast('Quit - no energy used'); return; }
       var r = G.exercise(App.state, kind === 'dummy' ? 'train' : kind, success);
       App.toast(r.msg);
-      App.anim = { kind: success ? 'dance' : 'sad', t0: performance.now(), dur: success ? 2100 : 1500 };
+      // 2.2.0 audit: it fell asleep during the game (bedtime came) - no victory dance for a sleeping pal
+      if (r.asleep) { App.anim = { kind: 'stillAsleep', t0: performance.now(), dur: 2200, text: 'SHH... ASLEEP' }; PP.Audio.play('no'); App.save(); refreshIcons(); return; }
+      App.anim = { kind: success && r.ok !== false ? 'dance' : 'sad', t0: performance.now(), dur: success ? 2100 : 1500 };
       if (/LEVEL UP/.test(r.msg)) PP.Audio.play('level');
       App.save(); refreshIcons();
     });
@@ -435,10 +451,28 @@
     if (App.cut) { App.cut.t0 -= 60000; return; }
     if (UI.isOpen()) return;
     if (App.scene === 'mini') { PP.Mini.tap(fx, fy); return; }
-    if (App.scene === 'home') homeB();
+    if (App.scene === 'home' && !homeB()) App.lookAtYou();
+  };
+  /* 2.0.0 'look at you': tap the pal (or the LCD) and it turns to face you, then smiles. Only when it is up and about
+   * (not asleep, sick, sulking or busy with another animation) and not an egg. */
+  App.lookAtYou = function () {
+    var p = G.active(App.state);
+    if (!p || p.fate || p.stage === 'egg' || App.anim || App.cut || PP.Care.moodPose(p) !== 'idle') return false;
+    App.anim = { kind: 'look', t0: performance.now(), dur: 1800 };
+    return true;
   };
   App.onMenuClosed = function () { if (PP.Admin) PP.Admin.onMenuClosed(); refreshIcons(); };
 
+  /* 2.0.0: an LCD celebration (happy hop / dance with music notes, earned praise) always comes with its sound, once
+   * per animation; PP.Audio.celebrate skips it when a celebration jingle (win, cup, level...) has just played. */
+  var CELEBRATE = { happy: 'happy', praise: 'happy', dance: 'win' };
+  function celebrationSound() {
+    var a = App.anim;
+    if (!a || a.sounded || !CELEBRATE[a.kind] || App.scene !== 'home' || App.cut) return;
+    a.sounded = true;
+    PP.Audio.celebrate(CELEBRATE[a.kind]);
+  }
+  App.celebrationSound = celebrationSound;
   /* ------------------------------------------------------------ main loop */
   var lastFrame = 0, lastSim = 0, lastLive = 0;
   function frame(tNow) {
@@ -471,17 +505,18 @@
       else if (App.pendingFate && !UI.isOpen()) { App.pendingFate = false; UI.open(UI.screens.fateScreen); }
       else if (App.reportInfo && !UI.isOpen() && !App.anim && !App.cutQueue.length) { UI.open(UI.screens.reportCard(App.reportInfo)); App.reportInfo = null; }
     }
+    celebrationSound();
     pumpToasts(tNow);
   }
 
   /* 1.9.0 daily goal / bonus notes from the core (PP.Daily) -> toasts + jingles */
   function pumpDaily() {
     PP.Daily.drain().forEach(function (n) {
-      if (n.t === 'goal') { App.toast('Goal done: ' + n.text + ' +' + n.coins + 'c'); PP.Audio.play('goal'); }
+      if (n.t === 'goal') { App.toast('Goal done: ' + n.text + ' +' + n.coins + 'c'); PP.Audio.celebrate('goal'); }   // 2.0.0: not on top of the win dance's sound
       if (n.t === 'allGoals') {
         App.toast('All daily goals done! +' + n.coins + 'c' + (n.streak > 1 ? ' (' + n.streak + '-day streak)' : ''));
         (n.shells || []).forEach(function (nm) { App.toast('New shell colour unlocked: ' + nm + '!'); });
-        PP.Audio.play('allgoals');
+        PP.Audio.celebrate('allgoals');
       }
     });
   }

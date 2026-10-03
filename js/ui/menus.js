@@ -527,10 +527,11 @@
     var items = D.ARENA.map(function (cup, i) {
       var status = A.status(s, i), rec = s.arena.cups[i] || A.blankRecord(i), n = cup.foes.length;
       var cur = A.runOf(s), run = cur && cur.cup === i ? cur.foe : 0, prog;
-      if (status === 'locked') prog = cup.post ? 'for Arena Champions' : 'win the ' + D.ARENA[i - 1].name + ' first';
+      if (status === 'locked') prog = cup.post ? 'locked: for Arena Champions (win all ' + D.ARENA_MAIN + ' main cups, you have ' + A.mainWon(s) + ')' : 'locked: win the ' + D.ARENA[i - 1].name + ' first';
       else if (status === 'cleared') prog = 'cleared \u00b7 ' + rec.wins + ' W / ' + rec.losses + ' L';
       else if (run) prog = 'run on: foe ' + (run + 1) + ' of ' + n;
       else prog = rec.best ? 'best ' + rec.best + ' of ' + n : 'open';
+      if (status !== 'locked' && !rec.won) prog += ' \u00b7 clear: +' + D.ECONOMY.cupClear(i + 1) + 'c';   // 2.1.0: the reward up front
       return { label: cup.name, sub: 'Lv ' + cupLevels(cup) + ' \u00b7 ' + n + ' foes \u00b7 ' + prog,
         right: status === 'cleared' ? '\u2605' : status === 'locked' ? 'LOCK' : run ? (run + 1) + '/' + n : 'OPEN',
         disabled: status === 'locked', reason: cup.post ? 'Win all ' + D.ARENA_MAIN + ' main cups first' : 'Win the ' + (D.ARENA[i - 1] || {}).name + ' first',
@@ -553,9 +554,12 @@
           '<span><b>' + esc(c.name) + '</b> \u00b7 ' + ROLE[c.role] + (j === next ? ' \u25c2 next' : '') + '<br>' + esc(D.NAMES[c.species][c.form]) + ' (' + FORM_LABEL[c.form] + ') Lv ' + c.level + ' \u00b7 BP ' + PP.Battle.fighter(c).bp + '</span></li>';
       }).join('') + '</ul>';
       var why = G.canBattle(p);
+      // 2.1.0: run progress pips (beaten / next / to go) and a plain-English matchup from the BP gap
+      var pips = '<p class="pips" aria-label="foe ' + (next + 1) + ' of ' + cup.foes.length + '">Run: ' + cup.foes.map(function (f, j) { return j < next ? '\u25cf' : j === next ? '\u25c9' : '\u25cb'; }).join(' ') + '</p>';
+      var gap = mine ? mine.bp - of.bp : 0, match = !mine ? '' : gap >= of.bp * 0.15 ? 'You should win this.' : gap >= -of.bp * 0.05 ? 'An even fight.' : gap >= -of.bp * 0.2 ? 'A tough fight - train first?' : 'Very tough - train or level up first.';
       return { title: cup.name.toUpperCase() + (rec.won ? ' \u2605' : ''), html:
         '<div class="vs">' + (p ? thumb(p.species, S.stageKeyOf(p), 'idle', 30) : '') + '<b>VS</b><span class="flip">' + thumb(opp.species, 'adult_' + opp.form, 'angry', 30) + '</span></div>' +
-        '<p><b>' + esc(opp.name) + '</b> the ' + esc(D.NAMES[opp.species][opp.form]) + ' \u00b7 foe ' + (next + 1) + '/' + cup.foes.length + '<br>Lv ' + opp.level + ' \u00b7 BP ' + of.bp + (mine ? ' (you: ' + mine.bp + ')' : '') + '</p>' +
+        '<p><b>' + esc(opp.name) + '</b> the ' + esc(D.NAMES[opp.species][opp.form]) + ' \u00b7 foe ' + (next + 1) + '/' + cup.foes.length + '<br>Lv ' + opp.level + ' \u00b7 BP ' + of.bp + (mine ? ' (you: ' + mine.bp + ')' : '') + (match ? '<br>' + match : '') + '</p>' + pips +
         list + '<p class="tip">' + (rec.won ? 'Cleared - rematches still pay XP and coins.' : 'Clear it: +' + D.ECONOMY.cupClear(rank + 1) + ' coins' + (cup.post ? ' +' + D.ECONOMY.myth : '') + ' (first time).') +
         (rec.best && !rec.won ? ' Best run: ' + rec.best + '/' + cup.foes.length + '.' : '') + (other ? ' Starting here ends your ' + esc(other) + ' run.' : '') + '</p>',
         items: [
@@ -568,7 +572,7 @@
   function friendsScreen() {
     var s = st();
     var items = s.friends.map(function (c, i) {
-      return { icon: thumb(c.species, 'adult_' + c.form, 'idle', 15), label: c.name, sub: cardLabel(c) + ' \u00b7 BP ' + PP.Battle.fighter(c).bp, act: function () { push(friendMenu(i)); } };
+      return { icon: thumb(c.species, 'adult_' + c.form, 'idle', 15), label: c.name, sub: cardLabel(c) + ' \u00b7 BP ' + PP.Battle.fighter(c).bp + (c.via === 'live' ? ' \u00b7 live' : ''), act: function () { push(friendMenu(i)); } };
     });
     items.push({ label: '+ Add a code', act: function () { push(addCodeScreen); } });
     return { title: 'FRIENDS', html: s.friends.length ? '' : '<p class="tip">No friend codes yet. Ask a friend for their battle code (Battle \u25b8 My battle code) and paste it here.</p>', items: items };
@@ -576,11 +580,10 @@
   function friendMenu(i) {
     return function () {
       var c = st().friends[i]; if (!c) return null;
-      return { title: c.name.toUpperCase(), html: '<p>' + esc(cardLabel(c)) + '</p>', items: [
-        { label: 'Battle!', disabled: !!G.canBattle(pet()), reason: G.canBattle(pet()), act: function () { close(); App().startFriend(c); } },
-        { label: 'Remove', act: function () { st().friends.splice(i, 1); App().save(); pop(); } },
-        { label: 'Back', act: pop }
-      ] };
+      var items = [{ label: 'Battle!', disabled: !!G.canBattle(pet()), reason: G.canBattle(pet()), act: function () { close(); App().startFriend(c); } }];
+      if (c.code) items.push({ label: 'Copy their code', sub: 'To share or keep', act: function () { copyText(c.code); } });   // 2.1.0
+      items.push({ label: 'Remove', act: function () { st().friends.splice(i, 1); App().save(); pop(); } }, { label: 'Back', act: pop });
+      return { title: c.name.toUpperCase(), html: '<p>' + esc(cardLabel(c)) + '</p>' + (c.via === 'live' ? '<p class="tip">Met in a live battle.</p>' : ''), items: items };
     };
   }
   function myCodeScreen() {
@@ -593,8 +596,10 @@
   }
   function copyText(text) {
     function fallback() {
-      var ta = el.querySelector('textarea.code');
+      var ta = el.querySelector('textarea.code'), tmp = null;
+      if (!ta && document.body) { tmp = ta = document.createElement('textarea'); ta.value = text; ta.className = 'offscreen-copy'; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.left = '-9999px'; document.body.appendChild(ta); }   // 2.1.0: copy from screens without a code box
       if (ta) { ta.focus(); ta.select(); try { document.execCommand('copy'); App().toast('Copied!'); } catch (e) { App().toast('Select the text and copy it'); } }
+      if (tmp && tmp.parentNode) tmp.parentNode.removeChild(tmp);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { App().toast('Copied!'); }, fallback);
     else fallback();
@@ -1035,7 +1040,7 @@
       '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed.</p>' +
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
       '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected. Snowy days still come now and then.</p>' +
-      '<p>Lights: turn them off when your pal falls asleep. Lights on wakes a nap, or wakes it after its wake time. In sleep hours it stays asleep until its wake time.</p>' +
+      '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +
       '<p>Paldex: raise all 18 adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
   }
 
@@ -1047,6 +1052,7 @@
       return { title: PP.Time.greeting(PP.Time.minuteOfDay(PP.Game.now(s))).toUpperCase() + '!', html: (p ? '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'happy', 30) + '</div>' : '') +
         '<p class="grade">Night grade: <b>' + card.grade + '</b> \u2013 ' + esc(card.note) + '</p><ul class="away">' +
         '<li>Slept ' + card.hours + ' h</li><li>Lights off ' + card.darkPct + '% of the night</li>' +
+        (card.woke ? '<li>Woken early ' + card.woke + '\u00d7 (lights on)</li>' : '') +
         '<li>' + (card.mistakes ? card.mistakes + ' care mistake' + (card.mistakes === 1 ? '' : 's') + ' overnight' : 'No care mistakes overnight') + '</li>' + goals + '</ul>',
         items: [{ label: 'OK', act: close }] };
     };

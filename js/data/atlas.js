@@ -38,7 +38,8 @@
   "refuse",
   "quirk",
   "surprised",
-  "sleepy"
+  "sleepy",
+  "front"
  ],
  "species": [
   "croc",
@@ -58,7 +59,7 @@
  },
  "sheetSize": [
   2560,
-  1840
+  1920
  ],
  "fx": {
   "cell": 40,
