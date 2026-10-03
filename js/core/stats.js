@@ -14,6 +14,16 @@
 
   function rawStats(species, form, level, genes) {
     var b = D.SPECIES_INFO[species].base, f = D.FORM_INFO[form] || D.FORM_INFO.good;
+    if (form === 'secret' && D.SECRET[species]) {          // 1.9.7: the secret form's stat spread
+      var t = D.SECRET[species].tilt, bb = Object.assign({}, b), up = null;
+      for (var k in t) { bb[k] += t[k]; if (t[k] > 0) up = k; }
+      var s = statsFrom(bb, f, level, genes), c = statsFrom(b, D.FORM_INFO.perfect, level, genes);
+      while (up && bp(s) > bp(c) && s[up] > 1) s[up]--;   // rounding can never lift it above the Champion
+      return s;
+    }
+    return statsFrom(b, f, level, genes);
+  }
+  function statsFrom(b, f, level, genes) {
     var g = genes || { hp: 0, atk: 0, def: 0, spd: 0 };
     var L = U.clamp(level | 0, 1, f.cap);
     var grow = 1 + f.growth * (L - 1), hpGrow = 1 + f.growth * HP_GROWTH * (L - 1), gl = 1 + (L - 1) / 10;

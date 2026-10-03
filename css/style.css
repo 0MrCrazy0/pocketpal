@@ -35,7 +35,7 @@ button { font: inherit; }
 .lcd { position: relative; width: 100%; aspect-ratio: 216 / 160; border-radius: 5px; background: var(--lcd); overflow: hidden; }
 .lcd::after { /* faint LCD pixel grid */
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  background: repeating-linear-gradient(0deg, rgba(15,56,15,.05) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(15,56,15,.05) 0 1px, transparent 1px 3px);
+  background: repeating-linear-gradient(0deg, rgba(15,56,15,.045) 0 1px, transparent 1px 2px), repeating-linear-gradient(90deg, rgba(15,56,15,.045) 0 1px, transparent 1px 2px);   /* 1.9.4: finer grid for the 80 px art */
 }
 canvas#lcd { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: manipulation; }
 
@@ -132,6 +132,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .thumb { display: inline-block; flex: none; image-rendering: pixelated; background-repeat: no-repeat; background-color: var(--lcd); border-radius: calc(var(--u) * 2); }
 .thumb.sil { filter: brightness(0) opacity(.55); background-color: transparent; }
 .thumb.dim { opacity: .45; }
+.thumb.sil.secret { filter: brightness(0); opacity: .92; }   /* 1.9.7: an unknown secret form is a solid dark silhouette */
 .flip .thumb { transform: scaleX(-1); }
 .st-top { display: flex; gap: calc(var(--u) * 4); align-items: center; margin-bottom: calc(var(--u) * 1.5); line-height: 1.25; }
 .st-top > div { min-width: 0; overflow-wrap: anywhere; }
@@ -177,6 +178,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .gbtn.b { border-color: #49a; } .gbtn.c { border-color: #a54; }
 .gicon { display: inline-block; width: calc(var(--u) * 12); height: calc(var(--u) * 12); background: url(../sprites/icons.png) no-repeat; background-size: calc(var(--u) * 96) calc(var(--u) * 12); background-position: calc(var(--i) * var(--u) * -12) 0; image-rendering: pixelated; vertical-align: middle; background-color: #222; border-radius: calc(var(--u) * 2); }
 .glist { list-style: none; } .glist li { display: flex; align-items: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 1) 0; }
+.sicon { flex: none; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: calc(var(--u) * 1); box-shadow: 0 0 0 calc(var(--u) * .5) #0f380f; }   /* 1.9.2 screen icons legend: the real LCD glyphs */
 .hl { animation: hlPulse 1s ease-in-out infinite; outline: 3px solid #fff !important; outline-offset: 2px; z-index: 40; position: relative; }
 @keyframes hlPulse { 50% { outline-color: var(--lcd); } }
 @media (prefers-reduced-motion: reduce) { .hl { animation: none; } }
@@ -309,3 +311,9 @@ body.finish-gilded .device { background:
 .overlay .mi.memorial { border-style: dotted; }
 .memorial-note { color: #c8d8a0; font-style: italic; overflow-wrap: anywhere; }
 .rcode { font: 700 max(15px, calc(var(--u) * 8.5))/1.4 ui-monospace, monospace; letter-spacing: .06em; text-align: center; color: var(--lcd-lite); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+
+/* 1.9.7 live battles + alerts */
+.room-code { font: 700 2.6em/1.1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .35em; text-align: center; margin: .3em 0 .2em; padding: .15em 0 .15em .35em; border: 3px dashed currentColor; border-radius: 10px; }
+.room-in { font: 700 1.8em ui-monospace, Menlo, Consolas, monospace; letter-spacing: .3em; text-transform: uppercase; width: 6.2em; text-align: center; display: block; margin: .3em auto; }
+.next-alert { font-size: 1.05em; padding: .35em .5em; border-left: 4px solid currentColor; }
+.alert-limits li, .live-limits li { font-size: .92em; }

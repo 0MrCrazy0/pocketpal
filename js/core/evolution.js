@@ -14,16 +14,34 @@
       Math.min(12, (p.evo && p.evo.trainings) || 0) + ((p.genes && p.genes.spirit) || 0);
     return Math.round(s * 10) / 10;
   }
+  /* 1.9.7: the species' secret condition (on top of Champion care). Deterministic: only
+   * fields saved on the pal itself are read, so the same save always gives the same form. */
+  function secretMet(p, score) {
+    var S = D.SECRET[p.species]; if (!S) return false;
+    var ok = function (f) { return f === 'perfect' || f === 'secret'; };
+    switch (S.rule) {
+      case 'hard': return !!p.hard;
+      case 'myth': return !!p.myth;
+      case 'streak': return ((p.evo && p.evo.best) || 0) >= S.days;
+      case 'gen': return (p.gen || 1) >= S.gen;
+      case 'parents': return !!(p.parents && p.parents.length === 2 && p.parents.every(function (q) { return q && ok(q.form); }));
+      case 'flawless': return (p.totalMistakes || 0) === 0 && p.discipline >= S.discipline && (score == null ? careScore(p) : score) >= S.score;
+    }
+    return false;
+  }
+  function championMet(p, s) { var E = D.EVO; return p.mistakes <= E.perfect.maxMistakes && s >= E.perfect.minScore && p.discipline >= E.perfect.minDiscipline; }
   function adultForm(p) {
     var s = careScore(p), E = D.EVO;
-    if (p.mistakes <= E.perfect.maxMistakes && s >= E.perfect.minScore && p.discipline >= E.perfect.minDiscipline) return 'perfect';
+    if (championMet(p, s) && secretMet(p, s)) return 'secret';
+    if (championMet(p, s)) return 'perfect';
     if (s >= E.good.minScore) return 'good';
     return 'bad';
   }
   /* What the pal is currently on track for (shown as a hint in Status). */
   function forecast(p) {
     if (p.stage === 'adult' || p.stage === 'egg') return null;
-    return adultForm(p);
+    var f = adultForm(p);
+    return f === 'secret' ? 'perfect' : f;           // the secret stays a surprise until the cut-scene
   }
 
   function advance(p) {
@@ -72,6 +90,16 @@
     return Math.max(0, D.STAGE_MIN[p.stage] - p.stageMin);
   }
 
-  PP.Evolution = { careScore: careScore, adultForm: adultForm, forecast: forecast, advance: advance,
+  /* 1.9.7: training streak for the eagle's secret: consecutive pet-days with 6+ trainings while a child/teen. */
+  function noteTraining(p) {
+    if (p.stage !== 'child' && p.stage !== 'teen') return;
+    var day = Math.floor((p.clock || 0) / 1440), e = p.evo, need = D.SECRET.eagle.perDay;
+    if (e.tday === day) return;                      // today already counts
+    if (!p.trainDay || p.trainDay.d !== day || p.trainDay.n < need) return;   // a streak day = 6+ trainings that pet-day
+    e.streak = e.tday === day - 1 ? (e.streak || 0) + 1 : 1;
+    e.tday = day; e.best = Math.max(e.best || 0, e.streak);
+  }
+
+  PP.Evolution = { careScore: careScore, adultForm: adultForm, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
     becomeAdult: becomeAdult, forceStage: forceStage, minutesToNextStage: minutesToNextStage };
 })(typeof window !== 'undefined' ? window : globalThis);

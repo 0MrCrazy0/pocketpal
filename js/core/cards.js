@@ -2,13 +2,17 @@
  * A battle code carries a pal's "battle card" so friends can fight (or breed with)
  * it completely offline:   PP2-<base64url JSON>-<4 char checksum>
  * Everything is re-validated on import and stats are recomputed locally, so an
- * edited code cannot create an impossible pal. */
+ * edited code cannot create an impossible pal.
+ * Versions: v1 = every pal up to 1.9.4. v2 (1.9.7) = the same layout, used only for a SECRET form,
+ * so a 1.9.4 client says "newer PocketPal - update" instead of failing on an unknown form;
+ * normal pals keep v1 so older friends can still read them. */
 (function (root) {
   'use strict';
   var PP = root.PP = root.PP || {};
   var U = PP.util, D = PP.DATA;
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   var MAX_LEN = 700;
+  var CARD_V = 2;            // newest card version this client understands
 
   function b64enc(str) {
     var out = '', i;
@@ -40,7 +44,7 @@
   function encode(p) {
     if (!p || p.stage !== 'adult') return null;
     var c = cardFromPet(p), tree = PP.Skills.tree(c.species).map(function (s) { return s.id; });
-    var payload = { v: 1, i: c.id, n: c.name, s: D.SPECIES.indexOf(c.species), x: c.sex, f: D.FORMS.indexOf(c.form), l: c.level,
+    var payload = { v: c.form === 'secret' ? 2 : 1, i: c.id, n: c.name, s: D.SPECIES.indexOf(c.species), x: c.sex, f: D.FORMS.indexOf(c.form), l: c.level,
       g: [c.genes.hp, c.genes.atk, c.genes.def, c.genes.spd],
       k: c.skills.map(function (id) { return tree.indexOf(id); }), in: c.innate.map(function (id) { return tree.indexOf(id); }), gen: c.gen };
     if (c.boost && PP.Shop.boostTotal(c)) payload.b = [c.boost.hp, c.boost.atk, c.boost.def, c.boost.spd];   // Pal Store boosts (optional, capped)
@@ -73,14 +77,14 @@
     if (/^PP2SAVE-/.test(code)) return fail('That is a save-transfer code, not a battle code (use Settings \u25b8 Save transfer)');
     if (/^PP[3-9]-/.test(code)) return fail('This code is from a newer PocketPal - update the game to use it');
     var m = /^PP2-([A-Za-z0-9_-]+)-([0-9a-z]{4})$/.exec(code);
-    if (!m) return fail('Not a PocketPal battle code');
+    if (!m) return fail(/^PP2-/.test(code) ? 'Code looks cut off or changed - copy the whole code again' : 'Not a PocketPal battle code');   // 1.9.3: say why
     var json;
     try { json = b64dec(m[1]); } catch (e) { return fail('Code is damaged'); }
     if (checksum(json) !== m[2]) return fail('Code is damaged (checksum)');
     var p;
     try { p = JSON.parse(json); } catch (e) { return fail('Code is damaged'); }
-    if (p && typeof p.v === 'number' && p.v > 1) return fail('This code is from a newer PocketPal - update the game to use it');
-    if (!p || p.v !== 1) return fail('Unsupported code version');
+    if (p && typeof p.v === 'number' && p.v > CARD_V) return fail('This code is from a newer PocketPal - update the game to use it');
+    if (!p || (p.v !== 1 && p.v !== 2)) return fail('Unsupported code version');
     var species = D.SPECIES[p.s];
     if (!species) return fail('Unknown species');
     var tree = PP.Skills.tree(species).map(function (s) { return s.id; });
@@ -99,5 +103,5 @@
     return { ok: true, card: card };
   }
 
-  PP.Cards = { encode: encode, decode: decode, validateCard: validateCard, cardFromPet: cardFromPet, _b64enc: b64enc, _b64dec: b64dec, _checksum: checksum };
+  PP.Cards = { CARD_V: CARD_V, encode: encode, decode: decode, validateCard: validateCard, cardFromPet: cardFromPet, _b64enc: b64enc, _b64dec: b64dec, _checksum: checksum };
 })(typeof window !== 'undefined' ? window : globalThis);

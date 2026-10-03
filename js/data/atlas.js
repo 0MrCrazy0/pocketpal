@@ -2,7 +2,7 @@
 (function (root) {
   var PP = root.PP = root.PP || {};
   PP.ATLAS = {
- "frame": 48,
+ "frame": 80,
  "base": 32,
  "framesPerPose": 4,
  "stages": [
@@ -12,7 +12,8 @@
   "teen",
   "adult_bad",
   "adult_good",
-  "adult_perfect"
+  "adult_perfect",
+  "adult_secret"
  ],
  "poses": [
   "idle",
@@ -56,11 +57,12 @@
   "wolf": "sprites/wolf.png"
  },
  "sheetSize": [
-  1344,
-  1104
+  2560,
+  1840
  ],
  "fx": {
-  "cell": 16,
+  "cell": 40,
+  "base": 16,
   "src": "sprites/fx.png",
   "cells": {
    "poop": [

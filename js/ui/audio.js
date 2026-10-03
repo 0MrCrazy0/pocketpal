@@ -77,7 +77,9 @@
     goal:    { step: 0.07, lead: 'E5 G5 B5*2', bass: 'E3*2 B3*2' },
     allgoals:{ step: 0.08, lead: 'C5 E5 G5 E5 G5 C6*3 D6 E6*4', bass: 'C3*4 G3*4 C4*4' },
     rare:    { step: 0.09, lead: 'B5 - F#5 - B5 D6 F#6*4', bass: 'B2*4 F#3*4' },
-    gameover:{ step: 0.22, lead: 'E4 D4 C4 B3 A3*4', bass: 'A2*4 E2*4' }
+    gameover:{ step: 0.22, lead: 'E4 D4 C4 B3 A3*4', bass: 'A2*4 E2*4' },
+    morning: { step: 0.1,  lead: 'G4 C5 E5 G5*2 E5 C6*3', bass: 'C3*4 G3*4' },          // 1.9.1 good morning
+    lullaby: { step: 0.24, lead: 'E5 C5 D5 G4*2 E5 D5 C5*3', bass: 'C3*4 G2*4 C3*3' }    // 1.9.1 bedtime
   };
   var music = true;
   function jingle(name) {
@@ -91,7 +93,7 @@
     try {
       if (music && JINGLES[name] && enabled && ctx && ctx.state === 'running') { jingle(name); return; }
       if (SFX[name]) SFX[name]();
-      else if (JINGLES[name]) SFX[{ cup: 'win', goal: 'ok', allgoals: 'happy', rare: 'level', gameover: 'die' }[name] || 'ok']();
+      else if (JINGLES[name]) SFX[{ cup: 'win', goal: 'ok', allgoals: 'happy', rare: 'level', gameover: 'die', morning: 'hatch', lullaby: 'sad' }[name] || 'ok']();
     } catch (e) { /* ignore */ }
   }
   function setEnabled(v) { enabled = !!v; }

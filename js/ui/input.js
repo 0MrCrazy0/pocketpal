@@ -22,7 +22,7 @@
         e.preventDefault(); PP.Audio.unlock(); el.classList.add('pressed'); holdStart(b); if (b === 'C') tapCAdmin(); press(b);
       });
       ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (t) { el.addEventListener(t, function () { el.classList.remove('pressed'); holdEnd(b); }); });
-      el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); press(b); } });
+      el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) press(b); } });
       el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     });
     Array.prototype.forEach.call(document.querySelectorAll('.icon'), function (el, i) {
@@ -43,7 +43,11 @@
       if (!k || e.ctrlKey || e.metaKey || e.altKey) return;
       // in the mini-games the arrow keys mean real left / right (Memory, Left or Right?, Match cursor)
       if (PP.App && PP.App.scene === 'mini' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) k = e.key === 'ArrowLeft' ? 'LEFT' : 'RIGHT';
-      e.preventDefault(); PP.Audio.unlock();
+      e.preventDefault();
+      // 1.9.3: a HELD key auto-repeats. A / arrows may repeat (scrolling), but B (choose) and C (back) must not:
+      // holding Enter fed meal after meal (4 in under a second) and flipped through screens.
+      if (e.repeat && (k === 'B' || k === 'C' || (PP.App && PP.App.scene === 'mini'))) return;   // mini-games: every key is an answer
+      PP.Audio.unlock();
       var map = { A: 'A', B: 'B', C: 'C' };
       if (!e.repeat && map[k]) { holdStart(k); var el = document.getElementById('btn' + k); if (el) el.classList.add('pressed'); if (k === 'C') tapCAdmin(); }
       press(k);

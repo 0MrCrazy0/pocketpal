@@ -60,11 +60,11 @@
       hunger: 4, happy: 4, energy: 100, weight: 5, discipline: 0, poop: 0,
       sick: false, sickDoses: 0, health: 100,
       asleep: false, sleepKind: null, lights: true,
-      sched: null, schedAt: null, dayMin: null, holdTo: null,                 // own sleep schedule {bed, wake} (minutes after midnight); null = stage default
+      sched: null, schedAt: null, dayMin: null, holdTo: null, stepAt: null, night: null,                 // own sleep schedule {bed, wake} (minutes after midnight); null = stage default
       acc: { hunger: 0, happy: 0, poop: 0 },
       need: {}, fake: null, snacks: [],
       mistakes: 0, totalMistakes: 0, mistakeLog: [], mistakeAt: [],
-      evo: { moodSum: 0, moodN: 0, trainings: 0 },
+      evo: { moodSum: 0, moodN: 0, trainings: 0, streak: 0, best: 0 },   // 1.9.7: + training streak (secret forms)
       unhappyMin: 0, nightKey: null,
       level: 1, xp: 0, sp: 0, skills: [], wins: 0, losses: 0,
       lastBredClock: -1e9,

@@ -7,7 +7,9 @@
   var PP = root.PP = root.PP || {};
   var U = PP.util, D = PP.DATA;
 
-  function canBreed(a, b) {
+  /* now (game ms, optional): 1.9.1 - rest also passes in game time, so a pal resting in the
+   * Pal Box (whose own clock is frozen) is not stuck at "needs rest" for ever. */
+  function canBreed(a, b, now) {
     if (!a || !b) return { ok: false, reason: 'Pick two pals' };
     if (a.id && a.id === b.id) return { ok: false, reason: 'Needs two different pals' };
     if (a.fate || b.fate) return { ok: false, reason: 'Both pals must be alive' };
@@ -19,8 +21,11 @@
       var p = own[i];
       if (p.sick) return { ok: false, reason: p.name + ' is sick' };
       if (p.health < 50) return { ok: false, reason: p.name + ' is too weak' };
-      if (p.clock - (p.lastBredClock == null ? -1e9 : p.lastBredClock) < D.RULES.breedCooldownMin) {
-        var left = Math.ceil((D.RULES.breedCooldownMin - (p.clock - p.lastBredClock)) / 60);
+      var cd = D.RULES.breedCooldownMin, byClock = cd - (p.clock - (p.lastBredClock == null ? -1e9 : p.lastBredClock));
+      var byTime = Number.isFinite(now) && Number.isFinite(p.lastBredAt) ? cd - (now - p.lastBredAt) / U.MIN : byClock;
+      var restMin = Math.min(byClock, byTime);
+      if (restMin > 0) {
+        var left = Math.ceil(restMin / 60);
         return { ok: false, reason: p.name + ' needs rest (' + left + 'h)' };
       }
     }
@@ -64,7 +69,7 @@
   }
 
   function breed(a, b, seed, now) {
-    var chk = canBreed(a, b);
+    var chk = canBreed(a, b, now);
     if (!chk.ok) return { ok: false, msg: chk.reason };
     var rng = U.makeRng(seed >>> 0 || 7);
     var inh = [];
@@ -79,7 +84,7 @@
       parents: [a, b].map(parentRef),
       inheritedSkills: inh, now: now
     });
-    [a, b].forEach(function (p) { if (p.clock != null) p.lastBredClock = p.clock; });
+    [a, b].forEach(function (p) { if (p.clock != null) { p.lastBredClock = p.clock; if (Number.isFinite(now)) p.lastBredAt = now; } });
     return { ok: true, egg: egg, msg: 'An egg! Gen ' + egg.gen };
   }
 

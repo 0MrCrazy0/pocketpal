@@ -8,7 +8,7 @@
   /* Things a pal does between walks. dur in ms; frameMs = how fast its 4 frames step. */
   var ACTS = {
     stand:   { pose: 'idle',    dur: [1500, 3500], frameMs: 500 },
-    look:    { pose: 'look',    dur: [2000, 2800], frameMs: 700 },  // back, forward, up, down
+    look:    { pose: 'look',    dur: [2000, 2800], frameMs: 700 },  // side-profile head tilt: up, ahead, down, ahead (1.9.4)
     sit:     { pose: 'sit',     dur: [3500, 7000], frameMs: 0 },    // frames 3 (half) and 1 (closed) used as its blink
     yawn:    { pose: 'yawn',    dur: [1400, 1600], frameMs: 700 },
     scratch: { pose: 'scratch', dur: [1200, 1800], frameMs: 160 },
@@ -57,5 +57,58 @@
     return EAT[i < 2 ? i : 2 + ((i - 2) % 4)];
   }
 
-  PP.Behave = { ACTS: ACTS, pickIdle: pickIdle, nextBlinkGap: nextBlinkGap, blinkFrame: blinkFrame, eatFrame: eatFrame, BLINK_MS: 230 };
+  /* ---- 1.9.1 mood weather. The sky on the home screen follows how the pal is doing:
+   *   very happy + well cared for -> sunny (a clear starry sky at night; a rainbow just after rain)
+   *   okay -> the day's own weather, softened: clear with a couple of clouds, or cloudy
+   *   sad or hungry -> grey clouds, then rain as it gets worse;  sick -> drizzle
+   *   really neglected (empty hearts AND mess or sickness) -> a storm with lightning
+   * Snow keeps its old 1.9.0 rule (the day's roll); only a darker mood replaces it.
+   * `base` is that day's roll: 'clear' | 'rain' | 'snow'. Pure, so it is unit-tested. */
+  var WET = { rain: 1, drizzle: 1, storm: 1 };
+  function gloom(p) {
+    var n = 0;
+    if (p.hunger <= 0) n += 2; else if (p.hunger === 1) n += 1;
+    if (p.happy <= 0) n += 2; else if (p.happy === 1) n += 1;
+    if (p.poop >= 2) n += 1;
+    if (p.poop >= 4) n += 1;
+    if (p.sick) n += 2;
+    return n;
+  }
+  function weather(p, base) {
+    base = base || 'clear';
+    var calm = base === 'snow' ? 'snow' : base === 'rain' ? 'cloudy' : 'clear';
+    if (!p || p.fate || p.stage === 'egg') return calm;
+    var g = gloom(p);
+    if (g >= 6) return 'storm';
+    if (p.sick) return 'drizzle';
+    if (g >= 4) return 'rain';
+    if (g >= 2) return 'grey';
+    if (base !== 'snow' && p.happy >= 4 && p.hunger >= 3 && p.poop === 0 && !p.fake) return 'sunny';
+    return calm;
+  }
+  /* A rainbow shows for a while when the sky turns sunny soon after it was wet.
+   * memo = {} kept by the renderer; t in ms. Returns true while the rainbow is up. */
+  var RAINBOW_GAP = 10 * 60e3, RAINBOW_MS = 90e3;
+  function rainbow(memo, w, t) {
+    if (WET[w]) { memo.wetAt = t; memo.bowAt = null; return false; }
+    if (w !== 'sunny') { if (memo.bowAt != null) memo.bowAt = null; return false; }
+    if (memo.bowAt == null && memo.wetAt != null && t - memo.wetAt <= RAINBOW_GAP) { memo.bowAt = t; memo.wetAt = null; }
+    return memo.bowAt != null && t - memo.bowAt < RAINBOW_MS;
+  }
+  /* How the pal reacts to its sky now and then (none with reduced motion or while busy). */
+  function weatherReaction(w) {
+    return w === 'rain' || w === 'storm' || w === 'drizzle' ? 'shiver' : w === 'sunny' ? 'hop' : w === 'snow' ? 'shiver' : null;
+  }
+
+  /* ---- 1.9.1 morning report card: rep = { mins, dark, lit, mistakes } from the night's sleep. */
+  function reportCard(rep) {
+    if (!rep || !(rep.mins > 0)) return null;
+    var darkPct = Math.round(100 * (rep.dark || 0) / rep.mins), m = rep.mistakes || 0;
+    var grade = m === 0 && darkPct >= 90 ? 'A' : m === 0 && darkPct >= 50 ? 'B' : m <= 1 ? 'C' : 'D';
+    var note = { A: 'Perfect night!', B: 'Good night - lights off sooner next time.', C: 'A rough night.', D: 'A bad night - check on your pal more.' }[grade];
+    return { hours: Math.round(rep.mins / 6) / 10, darkPct: darkPct, mistakes: m, grade: grade, note: note };
+  }
+
+  PP.Behave = { weather: weather, gloom: gloom, rainbow: rainbow, weatherReaction: weatherReaction, reportCard: reportCard, WET: WET, RAINBOW_MS: RAINBOW_MS,
+    ACTS: ACTS, pickIdle: pickIdle, nextBlinkGap: nextBlinkGap, blinkFrame: blinkFrame, eatFrame: eatFrame, BLINK_MS: 230 };
 })(typeof window !== 'undefined' ? window : globalThis);

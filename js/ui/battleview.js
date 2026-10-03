@@ -19,7 +19,8 @@
       hp: [B.f[0].hp, B.f[1].hp], hpFrom: [B.f[0].hp, B.f[1].hp], hpTo: [B.f[0].hp, B.f[1].hp], hpT0: 0,
       pose: ['idle', 'idle'], down: [false, false], lunge: -1, hurt: -1, msg: '', floats: [], fx: [],
       waiting: false, auto: !!(opts && opts.auto), cursor: 0, done: false,
-      run: null, gone: false, confirm: false, ccur: 0     // 1.8.4: run-away animation, forfeit confirm
+      run: null, gone: false, confirm: false, ccur: 0,    // 1.8.4: run-away animation, forfeit confirm
+      pending: false                                      // 1.9.7 live: our pick is sent, waiting for the other player
     };
     hideMenu();
   }
@@ -79,6 +80,11 @@
         PP.Audio.play(e.ok ? 'move' : 'no'); dur = e.ok ? 1100 : 900; break;
       case 'end':
         var won = e.winner === 0;
+        if (e.live === 'desync' || e.live === 'closed') { bv.msg = e.live === 'closed' ? 'The room closed - battle cancelled, no result.' : 'Out of sync - battle cancelled, no result. Use battle codes instead.'; PP.Audio.play('no'); dur = 2200; break; }
+        if (e.live === 'left' || e.live === 'timeout') {
+          bv.msg = nm(1) + (e.live === 'left' ? ' left the battle' : ' ran out of time') + ' - YOU WIN!'; bv.pose[0] = 'happy'; PP.Audio.play('win'); dur = 2000; break;
+        }
+        if (e.live === 'lost-time') { bv.msg = 'You ran out of time - it counts as a loss.'; bv.pose[1] = 'happy'; PP.Audio.play('lose'); dur = 2000; break; }
         if (e.fled === 'escaped') { bv.msg = 'Got away safely! (no XP or coins)'; PP.Audio.play('ok'); dur = 1300; break; }
         if (e.fled === 'forfeit') { bv.msg = 'FORFEIT - it counts as a loss. No XP or coins.'; bv.pose[1] = 'happy'; PP.Audio.play('lose'); dur = 1500; break; }
         bv.msg = (e.timeout ? 'Time up! ' : '') + (won ? 'YOU WIN!' : 'YOU LOSE...');
@@ -98,21 +104,41 @@
       var k = Math.min(1, (t - bv.hpT0) / 300);
       bv.hp[i] = Math.round(bv.hpFrom[i] + (bv.hpTo[i] - bv.hpFrom[i]) * k);
     }
-    if (bv.waiting) return;
+    if (bv.pending) { if (bv.opts.live && bv.opts.live.status) bv.msg = bv.opts.live.status(); return; }
+    if (bv.waiting) { if (bv.opts.live && bv.opts.live.menuStatus) { var ms = bv.opts.live.menuStatus(); if (ms && ms !== bv.lastMs) { bv.lastMs = ms; bv.msg = ms; showMenu(); } } return; }
     if (bv.cur && t - bv.t0 < bv.dur) return;
     if (bv.queue.length) { begin(bv.queue.shift(), t); return; }
     bv.cur = null;
     if (bv.B.over) { finish(); return; }
     if (bv.auto) { choose(null, t); return; }
-    bv.waiting = true; bv.msg = 'What will ' + nm(0) + ' do?';
+    bv.waiting = true; bv.msg = 'What will ' + nm(0) + ' do?'; bv.lastMs = null;
+    if (bv.opts.live && bv.opts.live.onMenu) bv.opts.live.onMenu();
+    if (bv.auto && bv.opts.live) { choose(null, t); return; }
     showMenu();
   }
   function choose(moveId, t) {
     if (moveId === 'flee' && PP.Battle.forfeits(bv.B) && !bv.confirm) { bv.confirm = true; bv.ccur = 0; PP.Audio.play('move'); showMenu(); return; }
     bv.confirm = false;
     bv.waiting = false; hideMenu();
+    if (bv.opts.live) {                                  // 1.9.7: live - send the pick, the turn plays when both are in
+      if (moveId === 'flee') { inject(bv.opts.live.forfeit()); return; }
+      bv.pending = true; bv.msg = 'Sent! Waiting for ' + nm(1) + '...';
+      var mine = bv;
+      bv.opts.live.submit(moveId, function (events) {
+        if (bv !== mine || bv.done) return;
+        bv.pending = false; inject(events);
+      });
+      return;
+    }
     bv.queue = PP.Battle.turn(bv.B, moveId, null);
     begin(bv.queue.shift(), t || performance.now());
+  }
+  /* 1.9.7 live: play events that came from outside (a resolved turn, a forfeit, a timeout, a desync). */
+  function inject(events) {
+    if (!bv || bv.done || !events || !events.length) return;
+    bv.waiting = false; bv.pending = false; bv.confirm = false; hideMenu();
+    bv.queue = bv.queue.concat(events);
+    if (!bv.cur || performance.now() - bv.t0 >= bv.dur) begin(bv.queue.shift(), performance.now());
   }
   function finish() {
     bv.done = true; hideMenu();
@@ -173,7 +199,7 @@
   function hideMenu() { if (menuEl) { menuEl.hidden = true; menuEl.innerHTML = ''; } }
 
   function input(btn) {
-    if (!bv || bv.done) return;
+    if (!bv || bv.done || bv.pending) return;
     if (!bv.waiting) {
       if (btn === 'C') bv.auto = true;          // C: let the pal fight on its own
       else if (btn === 'A') bv.auto = false;    // A: take control back at the next turn
@@ -247,5 +273,5 @@
   }
   function abort() { if (bv) { bv.done = true; } hideMenu(); bv = null; }
 
-  PP.BattleView = { start: start, draw: draw, input: input, active: active, abort: abort, _state: function () { return bv; } };
+  PP.BattleView = { start: start, draw: draw, input: input, active: active, abort: abort, inject: inject, _state: function () { return bv; } };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -19,7 +19,8 @@
   /* Coins from battles/training respect a daily cap; bonuses don't (capped = false). */
   function earn(state, n, t, capped) {
     var w = wallet(state), day = dayOf(t);
-    if (w.day !== day) { w.day = day; w.earned = 0; }
+    // 1.9.1: a new cap only when the day goes UP (flipping the date back and forth reset it every time)
+    if (w.day == null || day > w.day) { w.day = day; w.earned = 0; }
     var give = Math.max(0, Math.round(n));
     if (capped !== false) {
       // 1.9.0: a lucky coin day doubles play coins (and the cap); hard-mode pals earn +25 %

@@ -82,7 +82,25 @@
     return h * (1 - 0.4 * (p.genes ? p.genes.hardy : 0.5));
   }
 
+  var HOLD_MAX = 120;   // 1.9.1: longest clock-back hold (daylight saving is 60 min, Lord Howe 30)
   /* Advance one simulated minute. tMs = wall-clock time of this minute. */
+  /* 1.9.1: what the night was like, for the morning report card (null if not tracked). */
+  function nightReport(p) {
+    var n = p.night; p.night = null;
+    if (!n || !(n.mins > 0)) return null;
+    return { mins: n.mins, dark: n.dark, lit: n.lit, mistakes: Math.max(0, (p.totalMistakes || 0) - (n.mist || 0)) };
+  }
+  /* 1.9.1: a pal coming out of the Pal Box (it was in stasis) starts fresh at `nowMs`: no
+   * catch-up, no clock-back hold, and if its night is over it is awake straight away instead
+   * of sleeping on until the next simulated minute. */
+  function outOfBox(p, nowMs, opts) {
+    p.lastTickAt = nowMs; p.holdTo = null; p.stepAt = null;
+    if (p.stage !== 'egg' && !p.fate && p.asleep && p.sleepKind === 'night' && !PP.Sleep.isNight(minuteFn(opts)(nowMs), PP.Sleep.of(p))) {
+      p.asleep = false; p.sleepKind = null; p.lights = true; p.night = null;
+      return true;
+    }
+    return false;
+  }
   function stepMinute(p, tMs, ctx, ev) {
     if (p.fate) return;
     p.clock++;
@@ -100,36 +118,46 @@
     ctx.now = tMs;
     var mod = (ctx.minuteOf || defaultMinuteOf)(tMs);
     var night = PP.Sleep.isNight(mod, PP.Sleep.of(p));   // this pal's own schedule
-    // Local clock jumped BACK (daylight saving ends, travel west, manual change): hold the
-    // current sleep state until the clock is past where it was, so a pal doesn't wake up
-    // for the repeated hour and fall asleep again.
-    if (p.dayMin != null) {
+    // Local clock jumped BACK by up to 2 h between two back-to-back minutes (daylight saving
+    // ends): hold the current sleep state until the clock is past where it was, so a pal doesn't
+    // wake up for the repeated hour and fall asleep again.
+    // 1.9.1 wake-bug fix: this used to compare against the last minute this pal was simulated,
+    // however long ago. A pal brought back from the Pal Box, revived, re-synced after a clock
+    // change or capped after 14 days away looked like "the clock went back" and was frozen
+    // asleep (or awake) for up to 12 h - lights could not wake it. Now only a real clock change
+    // between consecutive simulated minutes counts, and a hold never outlives a gap.
+    var contiguous = p.stepAt != null && tMs - p.stepAt === U.MIN;
+    if (!contiguous) p.holdTo = null;
+    else if (p.dayMin != null) {
       var back = (p.dayMin - mod + 1440) % 1440;           // 1439 = the normal +1 minute
-      if (back > 0 && back < 720 && p.holdTo == null) p.holdTo = p.dayMin;
+      if (back > 0 && back <= HOLD_MAX && p.holdTo == null) p.holdTo = p.dayMin;
     }
     if (p.holdTo != null) {
       var left = (p.holdTo - mod + 1440) % 1440;
-      if (left === 0 || left > 720) p.holdTo = null;
+      if (left === 0 || left > HOLD_MAX) p.holdTo = null;
       else night = !!(p.asleep && p.sleepKind === 'night');
     }
-    p.dayMin = mod;
+    p.dayMin = mod; p.stepAt = tMs;
+    if (p.asleep && p.sleepKind !== 'night' && p.sleepKind !== 'nap') p.sleepKind = 'night';   // 1.9.1: never an unknown sleep
 
     // ---- sleep & lights
     if (night && !(p.asleep && p.sleepKind === 'night')) {
       p.asleep = true; p.sleepKind = 'night';
       p.nightKey = p.clock;       // when this night's sleep started
       p.fake = null;
+      p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };   // 1.9.1 morning report card
       ev.push({ t: 'sleep' });
     } else if (!night && p.asleep && p.sleepKind === 'night') {
       p.asleep = false; p.sleepKind = null; p.lights = true;
-      ev.push({ t: 'wake' });
+      ev.push({ t: 'wake', from: 'night', report: nightReport(p) });
     }
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
       p.asleep = true; p.sleepKind = 'nap'; ev.push({ t: 'nap' });
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
-      p.asleep = false; p.sleepKind = null; ev.push({ t: 'wake' });
+      p.asleep = false; p.sleepKind = null; ev.push({ t: 'wake', from: 'nap' });
     }
     if (ctx.offline && p.asleep && p.sleepKind === 'night' && p.lights) p.lights = false; // mercy: pal switches lights off itself while you're away
+    if (p.asleep && p.sleepKind === 'night' && p.night) { p.night.mins++; if (p.lights) p.night.lit++; else p.night.dark++; }
 
     // ---- meters
     if (!p.asleep) {
@@ -278,7 +306,14 @@
     if (!p || p.fate) return ev;
     // The device clock went backwards (manual change, time-zone travel): re-sync instead of
     // freezing the pal until the clock catches up. Nothing is simulated for the "lost" time.
-    if (nowMs < p.lastTickAt - 2 * U.MIN) { p.lastTickAt = nowMs; ev.push({ t: 'clockBack' }); return ev; }
+    if (nowMs < p.lastTickAt - 2 * U.MIN) {
+      p.lastTickAt = nowMs; p.holdTo = null; p.stepAt = null; ev.push({ t: 'clockBack' });
+      // 1.9.1: follow the new clock straight away (a night sleep that is now in the day ends)
+      if (p.stage !== 'egg' && p.asleep && p.sleepKind === 'night' && !PP.Sleep.isNight(minuteFn(opts)(nowMs), PP.Sleep.of(p))) {
+        p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'night', report: nightReport(p) });
+      }
+      return ev;
+    }
     var elapsed = Math.floor((nowMs - p.lastTickAt) / U.MIN);
     if (elapsed <= 0) return ev;
     var ctx = { minuteOf: minuteFn(opts), offline: !!opts.offline, elapsedMin: elapsed, offlineMistakes: 0,
@@ -354,12 +389,29 @@
     }
     return res(true, 'One more dose needed', 'sick');
   }
-  function toggleLights(p) {
+  /* Lights. 1.9.1: switching them ON never traps a pal in sleep:
+   *  - a nap always ends;
+   *  - a night sleep ends when it is already the pal's own waking time (for example a wake
+   *    time that has passed), and any clock-back hold is dropped;
+   *  - during the pal's real sleep hours it stays asleep, like the classic toys, and the result
+   *    says until when (r.asleepUntil = wake minute) so the game can show a clear hint.
+   * nowMs / opts (minuteOf) are optional; without them the last simulated minute is used. */
+  function toggleLights(p, nowMs, opts) {
     var b = blocked(p); if (b) return b;
     p.lights = !p.lights;
     if (!p.lights && p.need) p.need.lights = null;
-    if (p.lights && p.asleep && p.sleepKind === 'nap') { p.asleep = false; p.sleepKind = null; }
-    return res(true, p.lights ? 'Lights on' : 'Lights off', null);
+    if (!p.lights) return res(true, 'Lights off', null);
+    if (p.asleep && p.sleepKind === 'nap') { p.asleep = false; p.sleepKind = null; return Object.assign(res(true, 'Lights on - awake again!', null), { woke: true }); }
+    if (p.asleep && p.sleepKind === 'night') {
+      var sch = PP.Sleep.of(p), mod = nowMs != null ? minuteFn(opts)(nowMs) : p.dayMin;
+      if (mod != null && !PP.Sleep.isNight(mod, sch)) {
+        p.asleep = false; p.sleepKind = null; p.holdTo = null;
+        if (p.need) p.need.lights = null;
+        return Object.assign(res(true, 'Lights on - good morning!', null), { woke: true, from: 'night', report: nightReport(p) });
+      }
+      return Object.assign(res(true, 'Lights on - still asleep (bedtime)', null), { asleepUntil: sch.wake });
+    }
+    return res(true, 'Lights on', null);
   }
   function scold(p) {
     var b = blocked(p); if (b) return b;
@@ -411,6 +463,7 @@
       var day = Math.floor(p.clock / 1440);                  // 1.8.2 anti-farm: full rewards for the first N trainings a day
       if (!p.trainDay || p.trainDay.d !== day) p.trainDay = { d: day, n: 0 };
       p.trainDay.n++;
+      PP.Evolution.noteTraining(p);                         // 1.9.7: training streak (Aurorawing)
       var full = p.trainDay.n <= R.trainDayFull;
       if (success && full) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.discipline = Math.min(100, p.discipline + 3); deed(p); }
       msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +3%' : 'Nice try!';
@@ -461,7 +514,7 @@
 
   PP.Care = { nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
     tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
-    feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights,
+    feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights, nightReport: nightReport, outOfBox: outOfBox,
     scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, moodPose: moodPose, isTired: isTired,
     baseWeight: baseWeight, isOverweight: isOverweight, isUnderweight: isUnderweight, canAct: canAct,
     sicknessPerHour: sicknessPerHour, addMistake: addMistake, firstDay: firstDay, HARD: HARD, defaultHourOf: defaultHourOf, defaultMinuteOf: defaultMinuteOf

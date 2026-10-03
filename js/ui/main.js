@@ -18,7 +18,7 @@
   };
 
   /* ------------------------------------------------------------ helpers */
-  function spriteKey(k) { return k === 'bad' || k === 'good' || k === 'perfect' ? 'adult_' + k : k; }
+  function spriteKey(k) { return D.FORMS.indexOf(k) >= 0 ? 'adult_' + k : k; }
   /* Saving. A tab that lost the "tab lock" to a newer tab never saves (it would overwrite
    * the newer tab's progress). A failed write (storage full) warns once per session. */
   App.storageMode = storageMode;
@@ -166,7 +166,7 @@
   var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is sleeping - turn the lights off!' };
   App.handleEvents = function (evs, offline) {
     var p = G.active(App.state); if (!p || !evs.length) return;
-    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null;
+    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null, woke = null;
     function line(e, text) { info.lines.push(e.at ? timeAt(e.at) + ': ' + text : text); }
     evs.forEach(function (e) {
       switch (e.t) {
@@ -177,7 +177,8 @@
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
-        case 'sleep': if (!offline) App.toast(p.name + ' fell asleep. Lights off!'); break;
+        case 'sleep': if (!offline) { App.toast(p.name + ' fell asleep. Lights off!'); PP.Audio.play('lullaby'); } woke = null; break;
+        case 'wake': if (e.from === 'night') woke = e; break;
         case 'mistake': mistakes.push(e); if (!offline) App.toast('Care mistake: ' + e.why); break;
         case 'died': died = e; line(e, p.name + ' passed away (' + e.cause + ')'); break;
         case 'ranaway': died = e; line(e, p.name + ' ran away...'); break;
@@ -198,6 +199,10 @@
       if (died.t === 'died') queueCut({ kind: 'die', species: p.species, key: PP.Sprites.stageKeyOf(p), title: 'R.I.P. ' + p.name.toUpperCase() });
       App.pendingFate = true;
     }
+    if (woke && !died) {
+      if (offline) line(woke, p.name + ' woke up');
+      App.morning(woke.report, offline);
+    }
     if (offline) {
       if (poops) info.lines.push('Pooped ' + poops + 'x');
       if (mistakes.length > 3) info.lines.push(mistakes.length + ' care mistakes: ' + mistakes.map(function (m) { return m.why; }).join(', '));
@@ -208,10 +213,17 @@
     App.save();
   };
   function queueCut(c) { App.cutQueue.push(c); }
+  /* 1.9.1 good morning: yawn-and-stretch animation + jingle while you watch, and the night's
+   * report card (shown once the screen is free, after any 'while you were away' summary). */
+  App.morning = function (report, offline) {
+    if (!offline) { App.anim = { kind: 'wake', t0: performance.now(), dur: 2800 }; PP.Audio.play('morning'); }
+    var card = PP.Behave.reportCard(report);
+    if (card && App.state.settings.reportCard !== false) App.reportInfo = card;
+  };
   App.playEvolve = function (p, fromKey, toKey) {
     var stageName = toKey.indexOf('adult_') === 0 ? D.NAMES[p.species][toKey.slice(6)] : D.NAMES[p.species][toKey];
-    var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!' }[toKey] : toKey;
-    queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub });
+    var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!', adult_secret: 'SECRET FORM!' }[toKey] : toKey;
+    queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub, secret: toKey === 'adult_secret' });
     PP.Audio.play('evolve');
   };
 
@@ -268,6 +280,7 @@
   App.doAct = function (action) {
     var p = G.active(App.state);
     var r = G.act(App.state, action);
+    if (action === 'lights' && r.asleepUntil != null) r.msg = p.name + ' is asleep until ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock) + '. Lights off lets it rest.';
     App.toast(r.msg);
     UI.close();
     var now = performance.now();
@@ -280,7 +293,13 @@
       if (action === 'praise') kind = 'happy';
       if (kind) App.anim = { kind: kind, pose: kind === 'med' ? (p.sick ? 'sick' : 'happy') : kind === 'scold' ? 'sad' : null, food: action, t0: now, dur: dur };
     }
-    PP.Audio.play(!r.ok ? 'no' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
+    if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
+      if (r.from === 'night') App.morning(r.report, false);
+      else { App.anim = { kind: 'wake', t0: now, dur: 2200 }; PP.Audio.play('happy'); }
+    } else if (action === 'lights' && r.asleepUntil != null) {
+      App.anim = { kind: 'stillAsleep', t0: now, dur: 3000, text: 'ASLEEP TILL ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock, { lcd: true }) };
+      PP.Audio.play('ok');
+    } else PP.Audio.play(!r.ok ? 'no' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
     refreshIcons(); checkAttention(); App.save();
   };
   /* Items from the Pal Store bag (Feed / Medicine menus and the Bag). */
@@ -408,10 +427,11 @@
       var top = UI.top(); if (UI.isOpen() && top && top.live && !document.activeElement.matches('input,textarea')) UI.refresh();
       PP.TestPanel.update(); refreshIcons();
       if (Date.now() - App.lastSaveReal > 10000) { App.save(); if (PP.CloudSync && !App.passive) PP.CloudSync.auto(App.state); }
-      pumpDaily(); updateHint();
+      pumpDaily(); updateHint(); favicon();
       if (App.scene === 'home' && !App.cut && !UI.isOpen() && !App.awayInfo && !App.pendingFate && backupDue()) { App.state.backup.snoozeUntil = Date.now() + 3 * 864e5; UI.open(UI.screens.backupReminder); }
     }
     var ctx = App.ctx;
+    ctx.setTransform(R.DPR || 1, 0, 0, R.DPR || 1, 0, 0);   // 1.9.4: draw in LCD pixels on the x5 backing store
     ctx.imageSmoothingEnabled = false;
     if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; UI.close(); App.clearToasts(); }
     if (App.cut) {
@@ -423,6 +443,7 @@
       R.drawHome(ctx, App, tNow, dt);
       if (App.awayInfo && !UI.isOpen()) { UI.open(UI.screens.awaySummary(App.awayInfo)); App.awayInfo = null; }
       else if (App.pendingFate && !UI.isOpen()) { App.pendingFate = false; UI.open(UI.screens.fateScreen); }
+      else if (App.reportInfo && !UI.isOpen() && !App.anim && !App.cutQueue.length) { UI.open(UI.screens.reportCard(App.reportInfo)); App.reportInfo = null; }
     }
     pumpToasts(tNow);
   }
@@ -449,6 +470,9 @@
     if (el.hidden) el.hidden = false;
   }
   App.updateHint = updateHint;
+  /* 1.9.3 live tab icon: the active pal (static icon fallback) */
+  function favicon() { if (PP.Favicon) PP.Favicon.update(App.passive ? null : G.active(App.state), PP.Collection.shell(App.state.settings.shell)); }
+  App.favicon = favicon;
   /* 1.9.0 backup reminder: a week without an export (and not snoozed) */
   function backupDue() {
     var st = App.state, b = st.backup || (st.backup = { lastExport: null, since: Date.now(), snoozeUntil: null });
@@ -467,7 +491,7 @@
   App.fitLcd = fitLcd;
   function boot() {
     var cv = document.getElementById('lcd');
-    cv.width = R.W; cv.height = R.H;
+    cv.width = R.W * (R.DPR || 1); cv.height = R.H * (R.DPR || 1);   // 1.9.4: x5 backing store (80 px sprites)
     App.canvas = cv; App.ctx = cv.getContext('2d');
     UI.init(); PP.Input.init();
     fitLcd();
@@ -487,7 +511,7 @@
     if (!App.state.settings.guideSeen && !noGuide) setTimeout(function () { UI.open(UI.screens.guideScreen(0)); }, 300);
     else if (!G.active(App.state)) setTimeout(firstEgg, 300);
     // background ticks: keep the sim (and opt-in alerts) going while the tab is hidden
-    setInterval(function () { if (document.hidden) updateSim(); }, 30000);
+    setInterval(function () { if (document.hidden) { updateSim(); favicon(); } }, 30000);
     document.getElementById('soundBtn').addEventListener('click', function () {
       PP.Audio.unlock(); App.state.settings.sound = !App.state.settings.sound; PP.Audio.setEnabled(App.state.settings.sound); App.updateSoundBtn(); App.updateBellBtn(); App.save(); PP.Audio.play('ok');
     });

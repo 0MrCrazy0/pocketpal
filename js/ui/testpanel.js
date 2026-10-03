@@ -16,7 +16,7 @@
     ['Speed', [['1x', function () { setSpeed(1); }], ['60x', function () { setSpeed(60); }], ['600x', function () { setSpeed(600); }]]],
     ['Time', [['+10m', function () { skip(10); }], ['+1h', function () { skip(60); }], ['+6h', function () { skip(360); }], ['+1 day', function () { skip(1440); }]]],
     ['Stage', [['Egg', function () { stage('egg'); }], ['Baby', function () { stage('baby'); }], ['Child', function () { stage('child'); }], ['Teen', function () { stage('teen'); }]]],
-    ['Adult', [['Scrappy', function () { stage('adult', 'bad'); }], ['Solid', function () { stage('adult', 'good'); }], ['Champion', function () { stage('adult', 'perfect'); }]]],
+    ['Adult', [['Scrappy', function () { stage('adult', 'bad'); }], ['Solid', function () { stage('adult', 'good'); }], ['Champion', function () { stage('adult', 'perfect'); }], ['Secret', function () { stage('adult', 'secret'); }]]],
     ['Needs', [['Fill all', function () { T.fill(st()); done('All needs filled'); }], ['Hungry', function () { var p = pet(); if (p) { p.hunger = 0; p.happy = Math.min(p.happy, 1); } done('Hungry'); }],
       ['Poop', function () { T.poop(st()); done('Poop!'); }], ['Sick', function () { T.sick(st()); done('Sick'); }], ['Tantrum', function () { T.fake(st()); done('Tantrum started'); }]]],
     ['Battle', [['+100 XP', function () { var n = T.xp(st(), 100); done('+100 XP' + (n ? ' (+' + n + ' Lv)' : '')); }], ['+1 Lv', function () { lvl(1); }], ['Max Lv', function () { lvl(99); }],
@@ -102,7 +102,7 @@
     t += '\nH' + p.hunger + ' J' + p.happy + ' E' + Math.round(p.energy) + ' D' + Math.round(p.discipline) + ' HP' + Math.round(p.health) + ' W' + p.weight + ' poop' + p.poop + (p.sick ? ' SICK' : '') + (p.asleep ? ' asleep' : '') + (p.lights ? '' : ' dark');
     if (p.stage === 'adult') t += '\nLv' + p.level + ' xp' + p.xp + ' sp' + p.sp + ' BP' + PP.Stats.bp(PP.Stats.battleStats(p)) + ' \u00b7 arena ' + PP.Arena.mainWon(s) + '/' + D.ARENA_MAIN + ' cups';
     var need = PP.Care.attention(p);
-    t += '\nspeed x' + s.settings.speed + ' \u00b7 attention ' + (need.length ? need.join(',') : '-') + ' \u00b7 dex ' + PP.Collection.counts(s).adults + '/18';
+    t += '\nspeed x' + s.settings.speed + ' \u00b7 attention ' + (need.length ? need.join(',') : '-') + ' \u00b7 dex ' + PP.Collection.counts(s).adults + '/' + PP.DATA.SPECIES.length * PP.DATA.FORMS.length;
     info.textContent = t;
   }
   PP.TestPanel = { show: show, hide: hide, visible: visible, update: update };

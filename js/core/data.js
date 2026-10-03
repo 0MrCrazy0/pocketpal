@@ -18,19 +18,20 @@
   /* Minutes spent in each stage (simulated time, sleep included). */
   var STAGE_MIN = { egg: 5, baby: 120, child: 36 * 60, teen: 60 * 60 };
 
-  var FORMS = ['bad', 'good', 'perfect'];
+  var FORMS = ['bad', 'good', 'perfect', 'secret'];
   var FORM_INFO = {
     bad:     { label: 'Scrappy',  mult: 0.88, growth: 0.030, cap: 20 },
     good:    { label: 'Solid',    mult: 1.00, growth: 0.035, cap: 30 },
-    perfect: { label: 'Champion', mult: 1.12, growth: 0.040, cap: 40 }
+    perfect: { label: 'Champion', mult: 1.12, growth: 0.040, cap: 40 },
+    secret:  { label: 'Secret',   mult: 1.12, growth: 0.040, cap: 40 }    // 1.9.7: Champion power, a different stat spread (never stronger)
   };
   var NAMES = {
-    croc:     { egg: 'Croc Egg',     baby: 'Snip',   child: 'Nipper',   teen: 'Gatorling', bad: 'Muckjaw',   good: 'Snaptail',   perfect: 'Kingmaw' },
-    lion:     { egg: 'Lion Egg',     baby: 'Purrl',  child: 'Cubby',    teen: 'Lionel',    bad: 'Scruffpaw', good: 'Maneguard',  perfect: 'Solarion' },
-    eagle:    { egg: 'Eagle Egg',    baby: 'Peep',   child: 'Fledgy',   teen: 'Hawklet',   bad: 'Ragwing',   good: 'Skyhawk',    perfect: 'Stormtalon' },
-    elephant: { egg: 'Elephant Egg', baby: 'Tootle', child: 'Trunklet', teen: 'Tuskling',  bad: 'Dustrunk',  good: 'Tuskard',    perfect: 'Mammodon' },
-    bear:     { egg: 'Bear Egg',     baby: 'Bumble', child: 'Cubbin',   teen: 'Ursling',   bad: 'Grubbear',  good: 'Grizzmore',  perfect: 'Ursalord' },
-    wolf:     { egg: 'Wolf Egg',     baby: 'Yip',    child: 'Pupper',   teen: 'Wolfling',  bad: 'Mangefang', good: 'Howlrunner', perfect: 'Lunaris' }
+    croc:     { egg: 'Croc Egg',     baby: 'Snip',   child: 'Nipper',   teen: 'Gatorling', bad: 'Muckjaw',   good: 'Snaptail',   perfect: 'Kingmaw',    secret: 'Abyssmaw' },
+    lion:     { egg: 'Lion Egg',     baby: 'Purrl',  child: 'Cubby',    teen: 'Lionel',    bad: 'Scruffpaw', good: 'Maneguard',  perfect: 'Solarion',   secret: 'Eclipsar' },
+    eagle:    { egg: 'Eagle Egg',    baby: 'Peep',   child: 'Fledgy',   teen: 'Hawklet',   bad: 'Ragwing',   good: 'Skyhawk',    perfect: 'Stormtalon', secret: 'Aurorawing' },
+    elephant: { egg: 'Elephant Egg', baby: 'Tootle', child: 'Trunklet', teen: 'Tuskling',  bad: 'Dustrunk',  good: 'Tuskard',    perfect: 'Mammodon',   secret: 'Glaciodon' },
+    bear:     { egg: 'Bear Egg',     baby: 'Bumble', child: 'Cubbin',   teen: 'Ursling',   bad: 'Grubbear',  good: 'Grizzmore',  perfect: 'Ursalord',   secret: 'Starfur' },
+    wolf:     { egg: 'Wolf Egg',     baby: 'Yip',    child: 'Pupper',   teen: 'Wolfling',  bad: 'Mangefang', good: 'Howlrunner', perfect: 'Lunaris',    secret: 'Nightveil' }
   };
 
   /* Care tuning per stage. Rates are "minutes per heart lost while awake". */
@@ -76,6 +77,18 @@
     mistakePenalty: 5,
     perfect: { maxMistakes: 2, minScore: 90, minDiscipline: 50 },
     good: { minScore: 60 }
+  };
+  /* 1.9.7 secret adult forms: one per species. Each needs Champion-level care at the moment the
+   * teen grows up (<= 2 mistakes, score >= 90, discipline >= 50) PLUS its own special condition
+   * (checked in PP.Evolution.secretMet, fully deterministic). tilt = base stat points moved
+   * between two stats, so the BP never beats the Champion form. hint = the Paldex silhouette text. */
+  var SECRET = {
+    croc:     { rule: 'hard',    tilt: { atk: 1, def: -1 }, hint: 'Raised in hard mode with Champion care.' },
+    lion:     { rule: 'myth',    tilt: { spd: 1, def: -1 }, hint: 'Hatched after its keeper won the Myth Cup.' },
+    eagle:    { rule: 'streak',  tilt: { def: 1, atk: -1 }, hint: 'Trained 6+ times a day, 4 pet-days in a row, while young.', days: 4, perDay: 6 },
+    elephant: { rule: 'gen',     tilt: { def: 1, atk: -1 }, hint: 'A Champion of generation 3 or later.', gen: 3 },
+    bear:     { rule: 'parents', tilt: { spd: 1, atk: -1 }, hint: 'Both parents were Champion or secret forms.' },
+    wolf:     { rule: 'flawless', tilt: { def: 1, atk: -1 }, hint: 'A flawless life: 0 mistakes, discipline 90%+, score 95+.', discipline: 90, score: 95 }
   };
 
   var LEVEL = {
@@ -307,9 +320,9 @@
   };
 
   PP.DATA = {
-    VERSION: '1.9.0',
+    VERSION: '1.9.8',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
-    FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO,
+    FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,
     ECONOMY: ECONOMY, ITEMS: ITEMS, BOOST: BOOST, BOX: BOX
   };

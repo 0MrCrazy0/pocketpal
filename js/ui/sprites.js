@@ -23,7 +23,8 @@
   }
   /* stageKey: 'egg'|'baby'|'child'|'teen'|'adult_bad'|'adult_good'|'adult_perfect'.
    * scale is in "base" units: the sprite is drawn base*scale pixels wide (base 32, so
-   * scale 3 = 96 px). Cells are A.frame (48) px, so 3 -> an exact 2x blow-up. */
+   * scale 3 = 96 px). Cells are A.frame (80) px, drawn at 1.2x on the home screen (the x5 LCD
+   * backing store makes that an exact 6x of each sheet pixel) and 1:1 at scale 2.5. */
   function frameIndex(frame) { var n = A.framesPerPose; return ((Math.floor(frame) % n) + n) % n; }
   function draw(ctx, species, stageKey, pose, frame, x, y, scale, flip) {
     var im = imgs[species]; if (!im || !im.complete || !im.naturalWidth) return;
@@ -37,8 +38,9 @@
   }
   function drawFx(ctx, name, x, y, scale) {
     var c = A.fx.cells[name]; if (!c || !fxImg || !fxImg.naturalWidth) return;
-    var S = A.fx.cell, s = scale || 1;
-    ctx.drawImage(fxImg, c[0] * S, c[1] * S, S, S, Math.round(x), Math.round(y), S * s, S * s);
+    // 1.9.8: the cell is drawn over A.fx.base (16) LCD px per scale step - its 40 px art lands on whole canvas pixels
+    var S = A.fx.cell, B = A.fx.base || S, s = scale || 1;
+    ctx.drawImage(fxImg, c[0] * S, c[1] * S, S, S, Math.round(x), Math.round(y), B * s, B * s);
   }
   /* CSS background for an HTML element showing one frame, sized in LCD pixels (n x --u)
    * so menu pictures scale with the screen (no canvas needed). */
@@ -54,7 +56,8 @@
   /* Draw one 12px menu icon (index into sprites/icons.png) on the canvas. */
   function drawIcon(ctx, i, x, y, scale) {
     var im = loadIcons(); if (!im.complete || !im.naturalWidth) return;
-    var s = scale || 1; ctx.drawImage(im, i * 12, 0, 12, 12, Math.round(x), Math.round(y), 12 * s, 12 * s);
+    var s = scale || 1, S = im.naturalHeight || 12;       // 1.9.8: 60 px source cells (x5), drawn over 12 LCD px
+    ctx.drawImage(im, i * S, 0, S, S, Math.round(x), Math.round(y), 12 * s, 12 * s);
   }
   function stageKeyOf(p) {
     if (!p) return 'egg';

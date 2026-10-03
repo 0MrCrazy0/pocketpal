@@ -20,7 +20,8 @@
   function tHM(minOfDay) { return PP.Time.hm(minOfDay, clockMode()); }
   function tDate(ms) { return PP.Time.dateTime(ms, clockMode(), Date.now()); }
   function schedText(s) { return tHM(s.bed) + ' \u2013 ' + tHM(s.wake); }
-  var FORM_LABEL = { bad: 'Scrappy', good: 'Solid', perfect: 'Champion' };
+  var DEX_ADULTS = D.SPECIES.length * D.FORMS.length, DEX_ALL = D.SPECIES.length * PP.Collection.KEYS.length;   // 24 / 42 (1.9.7)
+  var FORM_LABEL = { bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret' };
 
   /* ------------------------------------------------------------ framework */
   function init() { el = document.getElementById('overlay'); }
@@ -130,7 +131,7 @@
       { label: 'Status', sub: 'Needs, stats, care report', act: function () { push(statusScreen(0)); } },
       dailyItem(),
       { label: 'Skills', sub: 'Skill tree (adults)', act: function () { push(skillsScreen); } },
-      { label: 'Paldex', sub: c.adults + '/18 adult forms \u00b7 ' + c.total + '/36 in all', right: c.adults + '/18', act: function () { push(paldexScreen(0)); } },
+      { label: 'Paldex', sub: c.adults + '/' + DEX_ADULTS + ' adult forms \u00b7 ' + c.total + '/' + DEX_ALL + ' in all', right: c.adults + '/' + DEX_ADULTS, act: function () { push(paldexScreen(0)); } },
       { label: 'Shell colour', sub: 'Repaint your handheld', act: openShells },
       { label: 'Pal Store', sub: 'Treats, boosts, colours, extra slots', right: PP.Shop.coins(st()) + 'c', act: function () { push(storeScreen); } },
       { label: 'Bag', sub: 'Items you bought', right: String(PP.Shop.owned(st()).reduce(function (n, id) { return n + PP.Shop.count(st(), id); }, 0)), act: function () { push(bagScreen); } },
@@ -140,6 +141,7 @@
       { label: 'Settings', sub: 'Sound, alerts, save transfer', act: function () { push(settingsScreen); } },
       { label: 'Guide', sub: 'Buttons, icons and the goal', act: function () { push(guideScreen(0)); } },
       { label: 'How to play', sub: 'All the rules on one page', act: function () { push(helpScreen); } },
+      { label: 'Screen icons', sub: 'What every status-strip icon means', act: function () { push(iconsScreen); } },
       { label: 'About', sub: 'Version ' + D.VERSION + ', privacy', act: function () { push(aboutScreen); } }
     ] };
   }
@@ -175,7 +177,7 @@
   }
 
   /* ------------------------------------------------------------ Paldex */
-  var DEX_TAG = { baby: 'Baby', child: 'Child', teen: 'Teen', bad: 'Scrappy', good: 'Solid', perfect: 'Champion' };
+  var DEX_TAG = { baby: 'Baby', child: 'Child', teen: 'Teen', bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret' };
   function nextDexReward(s) {
     var c = PP.Collection.counts(s), best = null;
     D.SHELLS.forEach(function (sh) { if (sh.unlock && sh.unlock.dex && c.adults < sh.unlock.dex && (!best || sh.unlock.dex < best.unlock.dex)) best = sh; });
@@ -187,16 +189,16 @@
       var keys = PP.Collection.KEYS;
       var items = keys.map(function (k) {
         var e = PP.Collection.get(s, sp, k) || {}, raised = !!e.r, seen = !!e.s;
-        var skey = k === 'bad' || k === 'good' || k === 'perfect' ? 'adult_' + k : k;
-        return { cell: true, cls: 'dex', icon: thumb(sp, skey, 'idle', 17, raised ? '' : seen ? 'dim' : 'sil'),
+        var skey = D.FORMS.indexOf(k) >= 0 ? 'adult_' + k : k;
+        return { cell: true, cls: 'dex', icon: thumb(sp, skey, 'idle', 17, raised ? '' : seen ? 'dim' : k === 'secret' ? 'sil secret' : 'sil'),
           label: raised || seen ? D.NAMES[sp][k] : '???', sub: raised ? DEX_TAG[k] : seen ? 'seen' : DEX_TAG[k],
           act: function () { push(dexEntry(sp, k)); } };
       });
       items.push({ label: '\u25b6 Next animal', act: function () { replace(paldexScreen(si + 1)); } });
       items.push({ label: '\u25c0 Previous animal', act: function () { replace(paldexScreen(si - 1)); } });
       items.push({ label: 'Back', act: pop });
-      return { title: 'PALDEX \u00b7 ' + D.SPECIES_INFO[sp].label.toUpperCase() + ' ' + c.perSpecies[sp] + '/6',
-        html: '<div class="dex-sum"><span>Adults <b>' + c.adults + '/18</b></span><span>All <b>' + c.total + '/36</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
+      return { title: 'PALDEX \u00b7 ' + D.SPECIES_INFO[sp].label.toUpperCase() + ' ' + c.perSpecies[sp] + '/' + keys.length,
+        html: '<div class="dex-sum"><span>Adults <b>' + c.adults + '/' + D.SPECIES.length * D.FORMS.length + '</b></span><span>All <b>' + c.total + '/' + D.SPECIES.length * keys.length + '</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
         items: items, detail: function (i) {
           var k = keys[i]; if (!k) return i === keys.length ? 'Show the next animal' : i === keys.length + 1 ? 'Show the previous animal' : 'Back to the menu';
           var e = PP.Collection.get(s, sp, k) || {};
@@ -211,8 +213,8 @@
   function dexEntry(sp, k) {
     return function () {
       var e = PP.Collection.get(st(), sp, k) || {}, known = e.r || e.s;
-      var skey = k === 'bad' || k === 'good' || k === 'perfect' ? 'adult_' + k : k;
-      return { title: known ? D.NAMES[sp][k].toUpperCase() : '???', html: '<div class="vs">' + thumb(sp, skey, known ? 'happy' : 'idle', 40, e.r ? '' : e.s ? 'dim' : 'sil') + '</div>' +
+      var skey = D.FORMS.indexOf(k) >= 0 ? 'adult_' + k : k;
+      return { title: known ? D.NAMES[sp][k].toUpperCase() : '???', html: '<div class="vs">' + thumb(sp, skey, known ? 'happy' : 'idle', 40, e.r ? '' : e.s ? 'dim' : k === 'secret' ? 'sil secret' : 'sil') + '</div>' +
         '<p><b>' + esc(D.SPECIES_INFO[sp].label) + ' \u00b7 ' + DEX_TAG[k] + '</b>' + (e.r ? ' \u00b7 raised ' + new Date(e.r).toLocaleDateString() : e.s ? ' \u00b7 seen, not raised yet' : ' \u00b7 not found yet') + '</p>' +
         '<p class="tip">How to get it: ' + esc(PP.Collection.hint(sp, k)) + '</p>' + dexMemorial(sp, k), items: [{ label: 'Back', act: pop }] };
     };
@@ -245,6 +247,60 @@
       } };
   }
 
+
+  /* ------------------------------------------------------------ 1.9.2 screen icons legend
+   * Every icon in the home status strip, drawn with the SAME pixel glyphs as the LCD (PP.Render.MINI + the LCD font),
+   * so the legend always matches the screen. Used by the guide, How to play, MENU > Screen icons and Status. */
+  var STRIP_LEGEND = [
+    { row: 1, parts: [['food'], ['hearts', 3]], name: 'Hunger', text: '4 hearts. Feed a meal when they run low.' },
+    { row: 1, parts: [['smile'], ['hearts', 2]], name: 'Happiness', text: '4 hearts. Play a game or give a snack.' },
+    { row: 1, parts: [['bolt'], ['pips', 3]], name: 'Energy', text: '4 pips, 25% each. They blink when your pal is tired.' },
+    { row: 1, parts: [['text', 'TEEN 3D']], name: 'Stage + age', text: 'H = hours, D = days old.' },
+    { row: 2, parts: [['flag'], ['bar', 60]], name: 'Discipline', text: 'The bar fills when you scold a tantrum or praise good behaviour.' },
+    { row: 2, parts: [['dtext', 'WT'], ['text', 'OK']], name: 'Weight', text: 'WT + LO (underweight: feed meals), OK (fine) or HI (overweight: fewer snacks, more play).' },
+    { row: 2, parts: [['sick']], name: 'Sick', text: 'The skull: give medicine.' },
+    { row: 2, parts: [['poop'], ['text', '2']], name: 'Poop + count', text: 'Clean it up. It flashes at 2 or more.' },
+    { row: 2, parts: [['attn']], name: 'Call (!)', text: 'Flashing: your pal needs you. Answer within 30 minutes.' },
+    { row: 2, parts: [['text', 'ZZ']], name: 'Asleep', text: 'Turn the lights off.' },
+    { row: 2, parts: [['moon']], name: 'Night', text: 'It is bedtime - your pal will fall asleep soon.' },
+    { row: 2, parts: [['tired']], name: 'Tired (Zz)', text: 'Low energy: lights off for a nap, or feed it.' }
+  ];
+  var iconCache = {};
+  function stripIcon(parts) {
+    var key = JSON.stringify(parts);
+    if (iconCache[key]) return iconCache[key];
+    var R = PP.Render, M = R && R.MINI, Fo = PP.Font, ink = '#0f380f', dark = '#306230';
+    if (!M || typeof document === 'undefined') return '';
+    var w = 1;
+    parts.forEach(function (q) { w += (q[0] === 'hearts' ? 23 : q[0] === 'pips' ? 19 : q[0] === 'bar' ? 24 : q[0] === 'text' || q[0] === 'dtext' ? Fo.width(q[1]) : M[q[0]][0].length) + 2; });
+    // 1.9.8: drawn on a x5 canvas with the strip's own x5 glyphs (PP.Render.mini), exactly like the LCD
+    var D = R.DPR || 5, cv = document.createElement('canvas'); cv.width = w * D; cv.height = 9 * D;
+    var c = cv.getContext('2d'); c.setTransform(D, 0, 0, D, 0, 0); c.fillStyle = '#9bbc0f'; c.fillRect(0, 0, w, 9);
+    function glyph(rows, x, y, col) {
+      if (R.mini) return R.mini(c, rows, x, y, col);
+      c.fillStyle = col; rows.forEach(function (r, ry) { for (var rx = 0; rx < r.length; rx++) if (r[rx] === '#') c.fillRect(x + rx, y + ry, 1, 1); });
+    }
+    var x = 1;
+    parts.forEach(function (q) {
+      var k = q[0];
+      if (k === 'hearts') { for (var i = 0; i < 4; i++) glyph(i < q[1] ? M.heart : M.empty, x + i * 6, 2, i < q[1] ? ink : dark); x += 25; }
+      else if (k === 'pips') { for (var j = 0; j < 4; j++) { c.fillStyle = j < q[1] ? ink : dark; if (j < q[1]) c.fillRect(x + j * 5, 2, 4, 5); else { c.fillRect(x + j * 5, 2, 4, 1); c.fillRect(x + j * 5, 6, 4, 1); c.fillRect(x + j * 5, 2, 1, 5); c.fillRect(x + j * 5 + 3, 2, 1, 5); } } x += 21; }
+      else if (k === 'bar') { c.fillStyle = ink; c.fillRect(x, 2, 24, 1); c.fillRect(x, 6, 24, 1); c.fillRect(x, 2, 1, 5); c.fillRect(x + 23, 2, 1, 5); c.fillRect(x + 1, 3, Math.round(22 * q[1] / 100), 3); x += 26; }
+      else if (k === 'text' || k === 'dtext') { Fo.draw(c, q[1], x, 1, k === 'dtext' ? dark : ink); x += Fo.width(q[1]) + 2; }
+      else { glyph(M[k], x, 1 + (k === 'poop' ? 2 : 0), ink); x += M[k][0].length + 2; }
+    });
+    return (iconCache[key] = '<img class="sicon" alt="" src="' + cv.toDataURL() + '" style="width:calc(var(--u) * ' + (w * 1.5) + ');height:calc(var(--u) * 13.5)">');
+  }
+  function legendHtml() {
+    return [1, 2].map(function (row) {
+      return '<p><b>Row ' + row + (row === 1 ? ' (always there)' : ' (discipline + weight, then only what applies right now)') + '</b></p><ul class="glist legend">' +
+        STRIP_LEGEND.filter(function (e) { return e.row === row; }).map(function (e) { return '<li>' + stripIcon(e.parts) + '<span><b>' + esc(e.name) + ':</b> ' + esc(e.text) + '</span></li>'; }).join('') + '</ul>';
+    }).join('');
+  }
+  function iconsScreen() {
+    return { title: 'SCREEN ICONS', html: '<p>The two short rows under the clock on the home screen:</p>' + legendHtml(), items: [{ label: 'Back', act: pop }] };
+  }
+
   /* ------------------------------------------------------------ first-run guide */
   var GUIDE = [
     { t: 'WELCOME TO POCKETPAL', h: function () {
@@ -266,10 +322,7 @@
         '<li><span class="gicon" style="--i:5"></span><span><b>Lights:</b> switch off when it falls asleep. Droopy eyes, yawning, blinking energy pips and <b>Zz</b> in the strip = tired: lights off for a quick <b>nap</b> (+1 energy every 2 min), or feed it.</span></li>' +
         '<li><span class="gicon" style="--i:6"></span><span><b>Battle:</b> arena and friend battles (adults).</span></li>' +
         '<li><span class="gicon" style="--i:7"></span><span><b>Discipline:</b> Scold a tantrum, or Praise after training / a refused meal.</span></li></ul>'; } },
-    { t: 'THE STATUS STRIP', h: function () {
-      return '<p>Two short rows under the clock:</p><ul class="glist">' +
-        '<li><span><b>Row 1:</b> \u2665 hunger and \u2665 happiness (4 each), a <b>bolt + 4 pips</b> for energy (25 each; they blink when tired), and the stage + age on the right.</span></li>' +
-        '<li><span><b>Row 2:</b> a <b>flag + bar</b> for discipline, the <b>weight</b> mark (thin bar = underweight, ring = fine, full ball = heavy), then only what applies now: <b>skull</b> sick, <b>poop + count</b>, a flashing <b>!</b> call, <b>ZZ</b> asleep (or a moon at night), <b>Zz</b> tired.</span></li></ul>'; } },
+    { t: 'SCREEN ICONS', h: function () { return legendHtml() + '<p class="tip">See them again any time: MENU \u25b8 Screen icons.</p>'; } },
     { t: 'WHEN YOUR PAL CALLS', h: function () {
       return '<p>A flashing <b>!</b> in the status strip means your pal needs you. A speech bubble shows <b>what</b> it wants, the matching icon glows, and it beeps (if sound is on).</p>' +
         '<p>Answer within <b>30 minutes</b>. An ignored call, overfeeding, poop left 2 h or lights left on count as <b>care mistakes</b>.</p>'; } },
@@ -313,7 +366,7 @@
           '<tr><td>Energy</td><td>' + bar(p.energy, 100, 'Energy') + '</td></tr>' +
           '<tr><td>Discipline</td><td>' + bar(p.discipline, 100, 'Discipline') + ' ' + Math.round(p.discipline) + '%</td></tr>' +
           '<tr><td>Health</td><td>' + bar(p.health, 100, 'Health') + (p.sick ? ' SICK' : '') + '</td></tr>' +
-          '<tr><td>Weight</td><td>' + p.weight + 'g' + (PP.Care.isOverweight(p) ? ' (heavy)' : PP.Care.isUnderweight(p) ? ' (skinny)' : '') + '</td></tr>' +
+          '<tr title="Status strip: WT + LO / OK / HI. All icons: MENU \u25b8 Screen icons"><td>Weight</td><td>' + p.weight + 'g' + (PP.Care.isOverweight(p) ? ' (heavy, strip: HI)' : PP.Care.isUnderweight(p) ? ' (skinny, strip: LO)' : ' (strip: OK)') + '</td></tr>' +
           (next != null && p.stage !== 'egg' ? '<tr><td>Grows in</td><td>' + hm(next) + '</td></tr>' : '') +
           (p.stage !== 'egg' ? '<tr><td>Sleeps</td><td>' + schedText(PP.Sleep.of(p)) + (p.sched ? '' : ' (default)') + '</td></tr>' : '') +
           '<tr><td>Status</td><td>' + (p.fate ? esc(p.fateCause || p.fate) : p.asleep ? (p.sleepKind === 'nap' ? 'Napping' : 'Asleep') + (p.lights ? ' (lights ON!)' : '') : p.fake ? 'Tantrum!' : 'Awake') + '</td></tr>' +
@@ -322,10 +375,10 @@
         var f = PP.Evolution.forecast(p), score = PP.Evolution.careScore(p);
         h = '<table class="kv"><tr><td>Care mistakes</td><td>' + p.mistakes + '</td></tr>' +
           '<tr><td>Care score</td><td>' + score + '</td></tr>' +
-          '<tr><td>Trainings</td><td>' + p.evo.trainings + '</td></tr>' +
+          '<tr><td>Trainings</td><td>' + p.evo.trainings + (p.evo.best ? ' \u00b7 best streak ' + p.evo.best + ' day' + (p.evo.best > 1 ? 's' : '') : '') + '</td></tr>' +
           (f ? '<tr><td>On track for</td><td><b>' + FORM_LABEL[f] + '</b> (' + esc(D.NAMES[p.species][f]) + ')</td></tr>' : '') +
           '</table><p class="tip">Champion: \u2264' + D.EVO.perfect.maxMistakes + ' mistakes, score \u2265' + D.EVO.perfect.minScore + ', discipline \u2265' + D.EVO.perfect.minDiscipline +
-          '%. Solid: score \u2265' + D.EVO.good.minScore + '.</p>' +
+          '%. Solid: score \u2265' + D.EVO.good.minScore + '. A secret form needs Champion care plus something special - see the Paldex.</p>' +
           recentMistakes(p);
       } else if (pg === 'battle') {
         var bs = PP.Stats.battleStats(p), cap = PP.Stats.levelCap(p.form), need = D.LEVEL.xpNeed(p.level);
@@ -457,6 +510,7 @@
     var items = [
       { label: 'Arena', sub: 'Computer ladder: ' + D.ARENA_MAIN + ' cups + a post-game cup', disabled: !!why, reason: why, act: function () { push(arenaScreen); } },
       { label: 'Friend battle', sub: 'Fight a pal from a battle code', disabled: !!why, reason: why, act: function () { push(friendsScreen); } },
+      { label: 'Live battle', sub: 'Room code: pick moves with a friend in real time', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
       { label: 'My battle code', sub: 'Share your pal', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
       { label: 'Add friend code', sub: 'Paste a code (battle or breed)', act: function () { push(addCodeScreen); } }
     ];
@@ -769,6 +823,7 @@
     return { title: 'SETTINGS', items: [
       { label: 'Sound', right: s.settings.sound ? 'ON' : 'OFF', sub: 'Beeps, calls and music', act: function () { s.settings.sound = !s.settings.sound; PP.Audio.setEnabled(s.settings.sound); App().updateSoundBtn(); App().save(); refresh(); } },
       { label: 'Music', right: s.settings.music !== false ? 'ON' : 'OFF', sub: 'Jingles for hatching, growing up, wins and goals (needs Sound)', act: function () { s.settings.music = s.settings.music === false; PP.Audio.setMusic(s.settings.music); App().save(); refresh(); if (s.settings.music) PP.Audio.play('goal'); } },
+      { label: 'Morning report', right: s.settings.reportCard !== false ? 'ON' : 'OFF', sub: 'A care report card when your pal wakes up', act: function () { s.settings.reportCard = s.settings.reportCard === false; App().save(); refresh(); } },
       { label: 'Tips', right: s.settings.hints !== false ? 'ON' : 'OFF', sub: 'Short hints for young pals', act: function () { s.settings.hints = s.settings.hints === false; App().save(); refresh(); } },
       { label: 'Show tips again', sub: 'Bring back every beginner tip', act: function () { PP.Hints.reset(s); s.settings.hints = true; App().save(); App().toast('Tips will show again'); refresh(); } },
       { label: 'Hard mode', right: s.settings.hardNext ? 'ON' : 'OFF', sub: 'For new eggs only. Harsh rules, no revives', act: toggleHard },
@@ -779,11 +834,8 @@
       { label: 'Sleep schedule', sub: p && p.stage !== 'egg' && !p.fate ? p.name + ': ' + schedText(PP.Sleep.of(p)) : 'Bedtime and wake time for your pal',
         disabled: !p || !!p.fate || p.stage === 'egg', reason: p && p.stage === 'egg' ? 'Eggs do not have a bedtime yet' : 'No pal', act: function () { push(sleepScreen()); } },
       { label: 'Shell colour', sub: 'Repaint your handheld', right: PP.Collection.shell(s.settings.shell).name, act: openShells },
-      { label: 'Care alerts', right: s.settings.alerts ? 'ON' : 'OFF', sub: canNotify ? 'Bell on the shell. Closed-app ping when your pal needs care' : 'Needs https + notifications',
-        disabled: !canNotify, reason: 'Notifications are not supported here', act: function () {
-          if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(!s.settings.alerts);
-          else App().toggleNotify();
-        } },
+      { label: 'Care alerts', right: s.settings.alerts ? 'ON' : 'OFF', sub: canNotify ? (s.settings.alerts ? 'Next alert: ' + nextAlertText() : 'Bell on the shell. Pick which reminders you get') : 'Needs https + notifications',
+        disabled: !canNotify, reason: 'Notifications are not supported here', act: function () { push(alertsScreen); } },
       { label: 'Guide', sub: 'Show the first-run walkthrough again', act: function () { push(guideScreen(0)); } },
       { label: 'About', sub: 'Version ' + D.VERSION + ', privacy', act: function () { push(aboutScreen); } },
       App().testAllowed && { label: 'Test mode', right: s.settings.test ? 'ON' : 'OFF', sub: 'Dev panel: speed up time, jump stages', act: function () { App().setTestMode(!s.settings.test); refresh(); } },
@@ -795,9 +847,31 @@
       { label: 'Back', act: pop }
     ].filter(Boolean) };
   }
+  /* 1.9.7 smarter reminders: the Next alert line, one switch per alert type and honest limits. */
+  function nextAlertText() {
+    var s = st();
+    if (!s.settings.alerts) return 'alerts are off';
+    return PP.Reminders.describe(PP.Reminders.next(s, Date.now()), clockMode(), Date.now());
+  }
+  function alertsScreen() {
+    var s = st(), types = s.settings.alertTypes = PP.Reminders.clean(s.settings.alertTypes);
+    var m = PP.Net && PP.Net.mode ? PP.Net.mode() : 'none';
+    var how = { push: 'Push from your worker', trigger: 'On this device (scheduled)', sync: 'On this device (background sync, coarse)', open: 'Only while the game is open', none: 'Not available here' }[m];
+    var html = '<p class="next-alert" id="nextAlert"><b>Next alert:</b> ' + esc(nextAlertText()) + '</p>' +
+      '<p class="tip">Delivery: ' + esc(how) + '</p>' +
+      '<ul class="away alert-limits">' + (PP.Net && PP.Net.limits ? PP.Net.limits() : []).map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+    var items = [{ label: 'Alerts', right: s.settings.alerts ? 'ON' : 'OFF', sub: 'Same as the bell on the shell',
+      act: function () { if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(!s.settings.alerts); else App().toggleNotify(); refresh(); } }];
+    PP.Reminders.TYPES.forEach(function (t) {
+      items.push({ label: t.label, right: types[t.id] ? 'ON' : 'OFF', sub: t.text, cls: 'alert-type',
+        act: function () { types[t.id] = !types[t.id]; App().save(); if (PP.Net) PP.Net.scheduleAlert(s); refresh(); } });
+    });
+    items.push({ label: 'Back', act: pop });
+    return { title: 'CARE ALERTS', html: html, items: items, live: true };
+  }
   function aboutScreen() {
     var saving = App().storageMode === 'local' ? 'Saved in this browser only' : 'OFF - storage is blocked here, progress ends with this tab';
-    var online = 'Snapshot friend battles on this device. Care pings use your own worker if you turned them on.';
+    var online = 'Battle codes work offline on this device. Live battles, cloud save and care alerts use your own worker, only when you use them.';
     return { title: 'ABOUT', html: '<p><b>PocketPal</b> v' + esc(D.VERSION) + '</p>' +
       '<ul class="away"><li>Saving: ' + esc(saving) + '</li><li>Online: ' + esc(online) + '</li><li>No accounts, ads, tracking or cookies</li>' +
       '<li>Works offline once loaded over http(s)</li></ul><p class="tip">Move your pals to another device with Settings \u25b8 Save transfer.</p>',
@@ -943,7 +1017,7 @@
       var mine = st().slots.filter(Boolean).length, info = r.info;
       return { title: 'REPLACE YOUR GAME?', html: '<p>The code is valid. It contains:</p><ul class="away">' +
         (info.pals.length ? info.pals.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') : '<li>No pals yet</li>') +
-        '<li>' + info.album + ' album entries \u00b7 ' + info.dex + '/18 Paldex adults</li>' + (info.savedAt ? '<li>Saved ' + esc(tDate(info.savedAt)) + '</li>' : '') + '</ul>' +
+        '<li>' + info.album + ' album entries \u00b7 ' + info.dex + '/' + DEX_ADULTS + ' Paldex adults</li>' + (info.savedAt ? '<li>Saved ' + esc(tDate(info.savedAt)) + '</li>' : '') + '</ul>' +
         '<p class="tip">This REPLACES your current game (' + mine + ' pal' + (mine === 1 ? '' : 's') + '). A copy of it is kept in case you change your mind.</p>',
         items: [
           { label: 'Yes, replace', act: function () { App().importState(r.state); if (after) after(); App().toast('Save imported - welcome back!'); close(); } },
@@ -957,10 +1031,24 @@
       '<p>A call you ignore for 30 min is a <b>care mistake</b>. So are overfed snacks, leaving poop 2h, sickness 3h, or lights on 1h after bedtime.</p>' +
       '<p>Tantrums: sometimes your pal calls for no reason. Scold during a tantrum for +25% discipline. Praise after training or a refused meal.</p>' +
       '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed.</p>' +
-      '<p>When the <b>!</b> flashes (top right), your pal needs something: the bubble next to it shows what.</p>' +
-      '<p>Paldex: raise all 18 adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p>', items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
+      '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
+      '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected. Snowy days still come now and then.</p>' +
+      '<p>Lights: turn them off when your pal falls asleep. Lights on wakes a nap, or wakes it after its wake time. In sleep hours it stays asleep until its wake time.</p>' +
+      '<p>Paldex: raise all 18 adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
   }
 
+  /* 1.9.1 morning report card */
+  function reportCard(card) {
+    return function () {
+      var p = pet(), s = st(), d = PP.Daily.today(s, PP.Game.now(s));
+      var goals = d && d.goals && d.goals.length ? '<li>Today\u2019s goals: ' + d.goals.map(function (g) { return esc(PP.Daily.text(g)) + (g.done ? ' \u2713' : ''); }).join(' \u00b7 ') + '</li>' : '';
+      return { title: 'GOOD MORNING!', html: (p ? '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'happy', 30) + '</div>' : '') +
+        '<p class="grade">Night grade: <b>' + card.grade + '</b> \u2013 ' + esc(card.note) + '</p><ul class="away">' +
+        '<li>Slept ' + card.hours + ' h</li><li>Lights off ' + card.darkPct + '% of the night</li>' +
+        '<li>' + (card.mistakes ? card.mistakes + ' care mistake' + (card.mistakes === 1 ? '' : 's') + ' overnight' : 'No care mistakes overnight') + '</li>' + goals + '</ul>',
+        items: [{ label: 'OK', act: close }] };
+    };
+  }
   function awaySummary(info) {
     return function () {
       var lines = info.lines.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('');
@@ -1011,13 +1099,13 @@
 
   PP.UI = { init: init, open: open, push: push, pop: pop, close: close, replace: replace, refresh: refresh, isOpen: isOpen, input: input,
     top: function () { return cur; },
-    screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, arenaScreen: arenaScreen,
+    screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, alertsScreen: alertsScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, arenaScreen: arenaScreen,
       skillsScreen: skillsScreen, palBox: palBox, breedScreen: breedScreen, albumScreen: albumScreen, settingsScreen: settingsScreen, helpScreen: helpScreen,
-      speciesPicker: speciesPicker, awaySummary: awaySummary, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,
+      speciesPicker: speciesPicker, awaySummary: awaySummary, reportCard: reportCard, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,
       arenaPreview: arenaPreview, friendsScreen: friendsScreen, friendMenu: friendMenu, slotMenu: slotMenu, treeScreen: treeScreen,
       renameScreen: renameScreen, sleepScreen: sleepScreen, exportScreen: exportScreen, importScreen: importScreen,
       storeScreen: storeScreen, storeFood: storeList('care'), storeBoosts: storeList('boost'), storeShells: storeShells, bagScreen: bagScreen, medMenu: medMenu,
-      paldexScreen: paldexScreen, dexEntry: dexEntry, dailyScreen: dailyScreen, backupReminder: backupReminder, cloudScreen: cloudScreen, cloudRestore: cloudRestore, hardWarning: hardWarning, shellScreen: shellScreen, guideScreen: guideScreen, transferScreen: transferScreen, importConfirm: importConfirm },
+      paldexScreen: paldexScreen, dexEntry: dexEntry, dailyScreen: dailyScreen, backupReminder: backupReminder, cloudScreen: cloudScreen, cloudRestore: cloudRestore, hardWarning: hardWarning, shellScreen: shellScreen, guideScreen: guideScreen, iconsScreen: iconsScreen, STRIP_LEGEND: STRIP_LEGEND, transferScreen: transferScreen, importConfirm: importConfirm },
     GUIDE_PAGES: GUIDE.length,
     esc: esc };
 })(typeof window !== 'undefined' ? window : globalThis);

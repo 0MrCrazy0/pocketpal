@@ -1,6 +1,7 @@
 /* PocketPal - Paldex (collection) and shell colour unlocks (pure).
  *
- * Paldex: 36 entries = 6 species x (baby, child, teen, Scrappy, Solid, Champion).
+ * Paldex: 42 entries = 6 species x (baby, child, teen, Scrappy, Solid, Champion, Secret).
+ *   1.9.7: an unknown secret form shows as a dark silhouette with a short hint (secret: true).
  *   'raised' = one of your pals reached that stage/form. 'seen' = met it in a battle or
  *   a friend code (shown as a dim picture, but it does not count for milestones).
  *   Stored compactly as state.dex["lion:perfect"] = { r: raisedAt, s: seenAt }.
@@ -11,12 +12,12 @@
   'use strict';
   var PP = root.PP = root.PP || {};
   var D = PP.DATA;
-  var KEYS = ['baby', 'child', 'teen', 'bad', 'good', 'perfect'];
-  var ADULT = ['bad', 'good', 'perfect'];
+  var KEYS = ['baby', 'child', 'teen', 'bad', 'good', 'perfect', 'secret'];
+  var ADULT = ['bad', 'good', 'perfect', 'secret'];
 
   function entries() {
     var out = [];
-    D.SPECIES.forEach(function (sp) { KEYS.forEach(function (k) { out.push({ species: sp, key: k, id: sp + ':' + k, name: D.NAMES[sp][k], adult: ADULT.indexOf(k) >= 0 }); }); });
+    D.SPECIES.forEach(function (sp) { KEYS.forEach(function (k) { out.push({ species: sp, key: k, id: sp + ':' + k, name: D.NAMES[sp][k], adult: ADULT.indexOf(k) >= 0, secret: k === 'secret' }); }); });
     return out;
   }
   function keyOf(p) { return !p || p.stage === 'egg' ? null : p.stage === 'adult' ? (p.form || 'good') : p.stage; }
@@ -56,7 +57,10 @@
     good: 'Raise a {S} with decent care (care score 60+)',
     perfect: 'Raise a {S} with perfect care: max 2 mistakes, score 90+, discipline 50%+'
   };
-  function hint(sp, key) { return HOW[key].replace('{S}', D.SPECIES_INFO[sp].label); }
+  function hint(sp, key) {
+    if (key === 'secret') return 'Secret form. ' + D.SECRET[sp].hint;   // 1.9.7
+    return HOW[key].replace('{S}', D.SPECIES_INFO[sp].label);
+  }
 
   /* Fill the Paldex from pals you already have (used when loading older saves). */
   function syncFromState(state) {

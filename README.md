@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 1.9.0**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 1.9.8**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -14,7 +14,7 @@ This is **version 1.9.0**. It's free, has no ads or accounts, and works offline.
 4. **Watch it grow:** egg, then baby, child, teen and adult (about 4 days). Good care gives the best adult form.
 5. **Battle and collect.** Adults fight in the arena, learn skills, battle friends and have eggs of their own.
 
-There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 adult forms: **Scrappy**, **Solid** and **Champion**.
+There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 adult forms: **Scrappy**, **Solid** and **Champion**. Each animal also has one **secret form** that only appears for something special, like a perfect childhood, a long training streak or a Myth Cup win. The Paldex shows a dark silhouette and a hint until you find it.
 
 ## Buttons
 
@@ -37,6 +37,10 @@ You can also just tap things on the screen. **MENU** opens the main menu, and **
 - ⚔ **Battle:** the arena and friend battles
 - 📢 **Discipline:** scold a tantrum, or praise good behaviour
 
+## The status strip
+
+Two short rows under the clock show how your pal is doing: hunger and happiness hearts, an energy bolt with 4 pips, discipline (a flag and bar) and weight (**WT LO / OK / HI**), then only what applies right now: sick, poop, a flashing **!**, asleep or tired. **MENU ▸ Screen icons** explains every one.
+
 ## Tips for raising a Champion
 
 - Answer calls quickly, within about 30 minutes.
@@ -50,11 +54,14 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 
 ## Extras
 
+- **Moody sky:** the weather on the screen follows your pal's mood. Sunshine means a happy pal; rain and storms mean it needs you.
+- **Good morning:** your pal yawns and stretches when it wakes up, then shows a little report card on how the night went.
 - **Daily goals:** 3 small goals a day for coins, plus streak bonuses, lucky days, surprise visitors and a rare golden egg.
 - **Pal Store:** spend coins on treats, boosts, shell colours and more Pal Box slots. Basic care is always free.
 - **Shell colours and Paldex:** repaint your handheld, earn special shells, and fill the Paldex with every form.
 - **Hard mode:** for experts only. Pals can't be revived, but they earn more coins.
-- **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed.
+- **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed. **Settings ▸ Care alerts** shows the next alert and lets you switch each kind (bedtime, hunger, medicine, clean-up, calls, wake-up) on or off.
+- **Live battles:** **Battle ▸ Live battle** opens a room with a 4-letter code. Your friend joins with the code and you both pick moves turn by turn. Battle codes still work offline.
 
 ## Keep your pal safe
 
@@ -65,7 +72,7 @@ Your game is saved in your browser. Before switching phones or clearing your bro
 
 ## Privacy
 
-There are no ads, tracking or accounts. Your pal stays on your device unless you turn on care alerts or cloud save, and cloud saves are scrambled so nobody else can read them.
+There are no ads, tracking or accounts. Your pal stays on your device unless you use care alerts, cloud save or live battles. Care alerts send only the alert times, cloud saves are scrambled so nobody else can read them, and live battles send your pal's battle code to the room.
 
 ---
 

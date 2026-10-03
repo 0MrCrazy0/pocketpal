@@ -16,7 +16,7 @@
       dex: {}, unlocks: [],
       wallet: { coins: D.ECONOMY.startCoins, day: null, earned: 0, lastDaily: null, streak: 0, mistakesAt: null }, inv: {},
       settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'pink', guideSeen: false, clock: PP.Time.defaultClock(),
-        hints: true, music: true, hardNext: false, cloud: false },
+        hints: true, music: true, hardNext: false, cloud: false, reportCard: true, alertTypes: PP.Reminders.defaults() },
       daily: null, hints: { done: {} }, backup: { lastExport: null, snoozeUntil: null },
       timeOffset: 0, lastSeenAt: now
     };
@@ -64,6 +64,11 @@
     return node(p, 0);
   }
 
+  /* 1.9.7: has this player won the post-game Myth Cup? */
+  function mythWon(state) {
+    for (var r = 0; r < D.ARENA.length; r++) if (D.ARENA[r].post && PP.Arena.won(state, r)) return true;
+    return false;
+  }
   /* ---------------------------------------------------------------- lifecycle */
   function startEgg(state, species, realNow, opts) {
     var i = freeSlot(state);
@@ -71,6 +76,7 @@
     opts = Object.assign({ hard: !!(state.settings && state.settings.hardNext) }, opts || {});
     if (opts.golden) opts.hard = false;                     // a golden egg is a gift: always a normal-mode pal
     var egg = PP.Pet.createEgg(Object.assign({ species: species, now: now(state, realNow), seed: U.hash(state.seed, 'egg', state.album.length, realNow, Math.random()) }, opts));
+    if (mythWon(state)) egg.myth = true;                   // 1.9.7: laid after the Myth Cup -> Eclipsar can appear
     state.slots[i] = egg;
     var a = active(state);
     if (!a || a.fate) state.active = i;
@@ -79,10 +85,10 @@
   function setActive(state, i, realNow) {
     if (i < 0 || i >= state.slots.length || !state.slots[i]) return { ok: false, msg: 'Empty slot' };
     state.active = i;
-    state.slots[i].lastTickAt = now(state, realNow); // it was in stasis: no catch-up for frozen time
+    PP.Care.outOfBox(state.slots[i], now(state, realNow)); // it was in stasis: no catch-up for frozen time (1.9.1: and awake if its night is over)
     return { ok: true, msg: state.slots[i].name + ' is out!' };
   }
-  function release(state, i) {
+  function release(state, i, realNow) {
     var p = state.slots[i];
     if (!p) return { ok: false, msg: 'Empty slot' };
     if (!p.fate) p.fate = p.stage === 'egg' ? 'gone' : 'released';
@@ -91,6 +97,9 @@
     if (state.active === i) {
       var j = state.slots.findIndex(function (s) { return s && !s.fate; });
       state.active = j >= 0 ? j : 0;
+      // 1.9.1: the pal that comes out was in stasis - no catch-up for the time it spent in the box
+      // (it used to be simulated for all of it, up to 14 days, and could even die)
+      if (j >= 0) PP.Care.outOfBox(state.slots[j], now(state, realNow));
     }
     return { ok: true, msg: 'Goodbye, ' + p.name + '!' };
   }
@@ -186,7 +195,7 @@
     var map = { meal: PP.Care.feedMeal, snack: PP.Care.feedSnack, clean: PP.Care.clean, medicine: PP.Care.medicine,
       lights: PP.Care.toggleLights, scold: PP.Care.scold, praise: PP.Care.praise };
     if (!map[action]) return { ok: false, msg: 'Unknown action' };
-    var r = map[action](p), t = now(state);
+    var t = now(state), r = action === 'lights' ? PP.Care.toggleLights(p, t) : map[action](p);
     if (r && r.ok) {
       PP.Hints.learn(state, action);
       if (action === 'meal') PP.Daily.record(state, 'meal', t);
@@ -268,9 +277,23 @@
     if (err) return { ok: false, msg: err };
     return startBattle(state, card, { kind: 'friend' }, seed);
   }
+  /* 1.9.7 live friend battle: the canonical battle (host = fighter 0) plus this player's view.
+   * Costs battle energy like any battle; pays like a friend battle (finishBattle with the view). */
+  function startLive(state, hostCard, guestCard, side, seed, round) {
+    var p = active(state), why = canBattle(p);
+    if (why) return { ok: false, msg: why };
+    var errH = PP.Cards.validateCard(hostCard), errG = PP.Cards.validateCard(guestCard);
+    if (errH || errG) return { ok: false, msg: 'Pal not valid: ' + (errH || errG) };
+    p.energy -= R.costs.battle;
+    var B = PP.Live.create(hostCard, guestCard, seed, round), v = PP.Live.view(B, side);
+    v.opp = side === 'g' ? hostCard : guestCard;
+    return { ok: true, battle: B, view: v };
+  }
   function finishBattle(state, B) {
     var p = active(state);
     if (!p || !B || !B.over) return null;
+    if (B.paid) return null;                                // 1.9.1: a battle pays out once
+    B.paid = true;
     var won = B.winner === 0, oppLv = B.f[1].level, out = { won: won, xp: 0, levels: 0, injured: false, unlocked: null, coins: 0, kind: B.meta.kind };
     var cleared = false, champ = false, arena = B.meta.kind === 'arena', rank = B.meta.rank | 0, rec = arena ? PP.Arena.record(state, rank) : null;
     if (arena) {
@@ -342,6 +365,7 @@
     var r = PP.Breeding.breed(p, partner, U.hash(state.seed, p.id, partner.id, p.clock), now(state, realNow));
     if (!r.ok) return r;
     r.egg.hard = !!(state.settings && state.settings.hardNext);
+    if (mythWon(state)) r.egg.myth = true;
     state.slots[i] = r.egg;
     return { ok: true, msg: r.msg + ' - it is in slot ' + (i + 1), slot: i, egg: r.egg };
   }
@@ -349,8 +373,8 @@
     var p = active(state);
     if (!p) return [];
     var list = [];
-    state.slots.forEach(function (s, i) { if (s && s !== p) list.push({ kind: 'slot', slot: i, pal: s, check: PP.Breeding.canBreed(p, s) }); });
-    state.friends.forEach(function (c, i) { list.push({ kind: 'friend', idx: i, pal: c, check: PP.Breeding.canBreed(p, c) }); });
+    state.slots.forEach(function (s, i) { if (s && s !== p) list.push({ kind: 'slot', slot: i, pal: s, check: PP.Breeding.canBreed(p, s, now(state)) }); });
+    state.friends.forEach(function (c, i) { list.push({ kind: 'friend', idx: i, pal: c, check: PP.Breeding.canBreed(p, c, now(state)) }); });
     return list;
   }
 
@@ -393,7 +417,7 @@
     revive: function (state) { return revive(state, { slot: state.active, free: true, now: Date.now() }); }
   };
 
-  PP.Game = { newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
+  PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
     update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

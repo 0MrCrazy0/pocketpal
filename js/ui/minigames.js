@@ -3,7 +3,7 @@
   'use strict';
   var PP = root.PP = root.PP || {};
   var S = PP.Sprites, F = PP.Font, D = PP.DATA;
-  // 1.8.3: sprites are drawn at whole-pixel sizes only: scale 3 = 96 px (each 48-px sheet pixel -> 2x2), 1.5 = 48 px (1:1)
+  // 1.8.3: sprites are drawn at whole-pixel sizes only. 1.9.4: 80-px cells on the x5 backing store: scale 3 = 96 LCD px (6x), 1.5 = 48 LCD px (3x)
   var W = 216, PS = 96, BIG = 3, CARD = 1.5;
   var C = { ink: '#0f380f', dark: '#306230', mid: '#8bac0f', bg: '#9bbc0f', lite: 'rgb(206,224,110)' };
   var g = null;
@@ -276,7 +276,7 @@
       if (g.phase === 'play' && !g.answer) g.answer = Math.random() < 0.5 ? -1 : 1;
       var glance = g.phase === 'play' ? g.answer : (g.phase === 'show' ? g.answer : 1);
       var pose2 = g.phase === 'play' ? 'look' : g.phase === 'show' ? (g.last > 0 ? 'happy' : 'sad') : (good ? 'happy' : 'sad');
-      S.draw(ctx, p.species, sk, pose2, g.phase === 'play' ? (glance < 0 ? 0 : 1) : Math.floor(t / 300), (W - PS) / 2, 22, BIG, false);
+      S.draw(ctx, p.species, sk, pose2, g.phase === 'play' ? 1 : Math.floor(t / 300), (W - PS) / 2, 22, BIG, g.phase === 'play' && glance < 0);   // 1.9.4: side profile only - the pal turns its whole body to face the way
       F.draw(ctx, '\u25c0 A', 10, 80, g.phase === 'show' && g.pick < 0 ? C.ink : C.dark, 2);
       F.draw(ctx, 'B \u25b6', W - 10, 80, g.phase === 'show' && g.pick > 0 ? C.ink : C.dark, 2, 'right');
       F.draw(ctx, done ? (good ? 'YOU WIN!' : 'BETTER LUCK NEXT TIME') : g.phase === 'show' ? (g.last > 0 ? 'CORRECT!' : 'WRONG WAY') : 'WATCH THE EYES',

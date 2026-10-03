@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 6;
+  var SCHEMA = 7;
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -48,6 +48,15 @@
       st.backup = { lastExport: null, since: Date.now(), snoozeUntil: null };
       st.settings = st.settings || {};
       st.settings.hints = true; st.settings.music = true; st.settings.hardNext = false; st.settings.cloud = false;
+      return st;
+    },
+    /* 6 -> 7 (1.9.7): secret forms (training streaks start now; a pal hatched after a Myth Cup win
+     * already in the save counts as myth-born only from its next egg) and per-type alert settings. */
+    6: function (st) {
+      st = st || {};
+      (st.slots || []).forEach(function (p) { if (p && typeof p === 'object' && p.evo && typeof p.evo === 'object' && p.evo.tday == null) { p.evo.streak = 0; p.evo.best = 0; } });
+      st.settings = st.settings || {};
+      st.settings.alertTypes = PP.Reminders.defaults();      // settings.alerts stays the on/off switch
       return st;
     },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
@@ -127,6 +136,9 @@
     out.acc = { hunger: U.num(p.acc && p.acc.hunger, 0, 0, 1), happy: U.num(p.acc && p.acc.happy, 0, 0, 1), poop: U.num(p.acc && p.acc.poop, 0, 0, 1) };
     if (p.acc && Number.isFinite(p.acc.weight)) out.acc.weight = U.num(p.acc.weight, 0, 0, 1);
     out.evo = { moodSum: U.num(p.evo && p.evo.moodSum, 0, 0), moodN: U.int(p.evo && p.evo.moodN, 0, 0), trainings: U.int(p.evo && p.evo.trainings, 0, 0) };
+    out.evo.streak = U.int(p.evo && p.evo.streak, 0, 0, 9999); out.evo.best = U.int(p.evo && p.evo.best, 0, 0, 9999);   // 1.9.7 training streak
+    if (p.evo && Number.isFinite(p.evo.tday)) out.evo.tday = U.int(p.evo.tday, 0, 0);
+    if (p.myth === true) out.myth = true; else delete out.myth;
     out.need = {};                                    // 1.8.0: keep only well-formed need timers
     if (p.need && typeof p.need === 'object') {
       ['hunger', 'happy', 'poop', 'sick', 'lights'].forEach(function (k) {
@@ -147,7 +159,15 @@
     out.schedAt = Number.isFinite(p.schedAt) ? Math.round(p.schedAt) : null;
     out.dayMin = Number.isFinite(p.dayMin) ? U.int(p.dayMin, 0, 0, 1439) : null;
     out.holdTo = Number.isFinite(p.holdTo) ? U.int(p.holdTo, 0, 0, 1439) : null;
-    out.sick = !!p.sick; out.asleep = !!p.asleep; out.lights = p.lights !== false;
+    out.stepAt = Number.isFinite(p.stepAt) ? p.stepAt : null;   // 1.9.1: time of the last simulated minute
+    out.sick = !!p.sick; out.asleep = !!p.asleep && out.stage !== 'egg'; out.lights = p.lights !== false;
+    // 1.9.1: an asleep pal always has a sleep kind (an unknown one could never wake up)
+    out.sleepKind = out.asleep ? (p.sleepKind === 'nap' ? 'nap' : 'night') : null;
+    var nl = p.night, nn = function (v) { return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0; };   // 1.9.1 night log (report card)
+    out.night = nl && typeof nl === 'object' && out.asleep && out.sleepKind === 'night' ? { mins: nn(nl.mins), dark: nn(nl.dark), lit: nn(nl.lit), mist: nn(nl.mist) } : null;
+    ['hard', 'golden'].forEach(function (k) { if (k in p) out[k] = !!p[k]; });
+    ['hardHungry', 'hardSick'].forEach(function (k) { if (k in p) out[k] = U.int(p[k], 0, 0, 1e6); });
+    if ('hardMist' in p) out.hardMist = Array.isArray(p.hardMist) ? p.hardMist.filter(Number.isFinite).slice(-12) : [];
     out.fake = p.fake && Number.isFinite(p.fake.until) ? { until: p.fake.until } : null;
     if (out.stage === 'adult') {
       var cap = PP.Stats.levelCap(out.form);
@@ -165,6 +185,7 @@
     out.fate = (p.fate === 'dead' || p.fate === 'gone' || p.fate === 'released') ? p.fate : null;
     out.parents = Array.isArray(p.parents) && p.parents.length ? p.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : null;
     out.boost = PP.Shop.cleanBoost(p.boost);
+    if ('lastBredAt' in p) { if (Number.isFinite(p.lastBredAt)) out.lastBredAt = p.lastBredAt; else delete out.lastBredAt; }
     return out;
   }
 
@@ -192,7 +213,8 @@
     var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'pink';
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
       notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
-      hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud };
+      hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
+      alertTypes: PP.Reminders.clean(st.alertTypes) };   // 1.9.7: per-type alert switches
     out.daily = PP.Daily.clean(s.daily);
     out.hints = PP.Hints.clean(s.hints);
     var bk = s.backup && typeof s.backup === 'object' ? s.backup : {};
@@ -210,12 +232,14 @@
     if (typeof raw !== 'string' || !raw) return { ok: false, error: 'empty' };
     var obj;
     try { obj = JSON.parse(raw); } catch (e) { return { ok: false, error: 'not JSON' }; }
-    if (!obj || typeof obj !== 'object' || typeof obj.schema !== 'number' || !obj.state) return { ok: false, error: 'not a PocketPal save' };
+    if (!obj || typeof obj !== 'object' || typeof obj.schema !== 'number' || !obj.state || typeof obj.state !== 'object' || Array.isArray(obj.state)) return { ok: false, error: 'not a PocketPal save' };   // 1.9.3: a non-object state was read as a fresh game (hiding the backup)
     if (obj.schema > SCHEMA) return { ok: false, error: 'made by a newer version' };
     var st = obj.state;
     for (var v = obj.schema; v < SCHEMA; v++) {
       if (!MIGRATIONS[v]) return { ok: false, error: 'no migration from ' + v };
-      st = MIGRATIONS[v](st);
+      // 1.9.3: a damaged OLD save (e.g. "slots" not a list) made a migration throw, so load() crashed the
+      // boot instead of using the backup, and importCode() threw instead of saying what was wrong.
+      try { st = MIGRATIONS[v](st); } catch (e) { return { ok: false, error: 'invalid data' }; }
     }
     try { return { ok: true, state: sanitizeState(st, now) }; } catch (e) { return { ok: false, error: 'invalid data' }; }
   }
