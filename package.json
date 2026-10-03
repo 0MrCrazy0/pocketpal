@@ -1,6 +1,6 @@
 {
   "name": "pocketpal2",
-  "version": "1.9.8",
+  "version": "1.9.9",
   "private": true,
   "description": "PocketPal - a pocket virtual pet (rewrite). No build step; open index.html.",
   "scripts": {

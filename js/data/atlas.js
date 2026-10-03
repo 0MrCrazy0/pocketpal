@@ -152,6 +152,30 @@
    "swirl": [
     10,
     1
+   ],
+   "fish": [
+    0,
+    2
+   ],
+   "fish_bitten": [
+    1,
+    2
+   ],
+   "honey": [
+    2,
+    2
+   ],
+   "honey_bitten": [
+    3,
+    2
+   ],
+   "fruit": [
+    4,
+    2
+   ],
+   "fruit_bitten": [
+    5,
+    2
    ]
   }
  },

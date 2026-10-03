@@ -401,13 +401,13 @@
     p.lights = !p.lights;
     if (!p.lights && p.need) p.need.lights = null;
     if (!p.lights) return res(true, 'Lights off', null);
-    if (p.asleep && p.sleepKind === 'nap') { p.asleep = false; p.sleepKind = null; return Object.assign(res(true, 'Lights on - awake again!', null), { woke: true }); }
+    if (p.asleep && p.sleepKind === 'nap') { p.asleep = false; p.sleepKind = null; return Object.assign(res(true, 'Lights on - awake again!', null), { woke: true, from: 'nap' }); }
     if (p.asleep && p.sleepKind === 'night') {
       var sch = PP.Sleep.of(p), mod = nowMs != null ? minuteFn(opts)(nowMs) : p.dayMin;
       if (mod != null && !PP.Sleep.isNight(mod, sch)) {
         p.asleep = false; p.sleepKind = null; p.holdTo = null;
         if (p.need) p.need.lights = null;
-        return Object.assign(res(true, 'Lights on - good morning!', null), { woke: true, from: 'night', report: nightReport(p) });
+        return Object.assign(res(true, 'Lights on - ' + (PP.Time ? PP.Time.greeting(mod).toLowerCase() : 'good morning') + '!', null), { woke: true, from: 'night', report: nightReport(p), at: mod });   // 1.9.9: by the hour
       }
       return Object.assign(res(true, 'Lights on - still asleep (bedtime)', null), { asleepUntil: sch.wake });
     }

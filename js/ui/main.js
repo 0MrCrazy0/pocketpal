@@ -166,11 +166,11 @@
   var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is sleeping - turn the lights off!' };
   App.handleEvents = function (evs, offline) {
     var p = G.active(App.state); if (!p || !evs.length) return;
-    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null, woke = null;
+    var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null, woke = null, napWoke = false;
     function line(e, text) { info.lines.push(e.at ? timeAt(e.at) + ': ' + text : text); }
     evs.forEach(function (e) {
       switch (e.t) {
-        case 'hatch': lastGrow = { kind: 'hatch' }; PP.Audio.play('hatch'); line(e, 'Your egg hatched into ' + D.NAMES[p.species].baby + '!' + (p.golden ? ' It sparkles with gold!' : '')); break;
+        case 'hatch': lastGrow = { kind: 'hatch' }; line(e, 'Your egg hatched into ' + D.NAMES[p.species].baby + '!' + (p.golden ? ' It sparkles with gold!' : '')); break;
         case 'evolve': lastGrow = { kind: 'evolve', from: e.from, to: e.to }; line(e, 'Grew into ' + D.NAMES[p.species][e.to] + '!'); break;
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
@@ -178,7 +178,7 @@
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
         case 'sleep': if (!offline) { App.toast(p.name + ' fell asleep. Lights off!'); PP.Audio.play('lullaby'); } woke = null; break;
-        case 'wake': if (e.from === 'night') woke = e; break;
+        case 'wake': if (e.from === 'night') woke = e; else if (offline) line(e, p.name + ' woke up from a nap'); else napWoke = true; break;
         case 'mistake': mistakes.push(e); if (!offline) App.toast('Care mistake: ' + e.why); break;
         case 'died': died = e; line(e, p.name + ' passed away (' + e.cause + ')'); break;
         case 'ranaway': died = e; line(e, p.name + ' ran away...'); break;
@@ -199,6 +199,7 @@
       if (died.t === 'died') queueCut({ kind: 'die', species: p.species, key: PP.Sprites.stageKeyOf(p), title: 'R.I.P. ' + p.name.toUpperCase() });
       App.pendingFate = true;
     }
+    if (napWoke && !woke && !died && !App.anim) App.wakeUp('nap');   // 1.9.9: woke from a nap while you watch
     if (woke && !died) {
       if (offline) line(woke, p.name + ' woke up');
       App.morning(woke.report, offline);
@@ -212,11 +213,24 @@
     }
     App.save();
   };
-  function queueCut(c) { App.cutQueue.push(c); }
+  function queueCut(c) {
+    // 1.9.9: the same growth reported twice (e.g. a catch-up and a tick racing) shows - and plays - once
+    var same = function (q) { return q.kind === c.kind && q.species === c.species && q.toKey === c.toKey && q.name === c.name; };
+    if (App.cutQueue.some(same) || (App.cut && same(App.cut))) return;
+    App.cutQueue.push(c);
+  }
   /* 1.9.1 good morning: yawn-and-stretch animation + jingle while you watch, and the night's
    * report card (shown once the screen is free, after any 'while you were away' summary). */
+  /* 1.9.9: the wake-up banner fits the moment: a nap -> FEELING REFRESHED!; a night's sleep -> the greeting for the
+   * local hour (GOOD MORNING! / GOOD AFTERNOON! / GOOD EVENING!). The morning jingle only plays in the morning. */
+  App.localMinute = function () { return PP.Time.minuteOfDay(G.now(App.state)); };
+  App.wakeUp = function (from) {
+    var mod = App.localMinute(), text = PP.Time.wakeLine(from, mod);
+    App.anim = { kind: 'wake', t0: performance.now(), dur: from === 'nap' ? 2200 : 2800, text: text, from: from };
+    PP.Audio.play(from !== 'nap' && PP.Time.partOfDay(mod) === 'morning' ? 'morning' : 'happy');
+  };
   App.morning = function (report, offline) {
-    if (!offline) { App.anim = { kind: 'wake', t0: performance.now(), dur: 2800 }; PP.Audio.play('morning'); }
+    if (!offline) App.wakeUp('night');
     var card = PP.Behave.reportCard(report);
     if (card && App.state.settings.reportCard !== false) App.reportInfo = card;
   };
@@ -224,8 +238,18 @@
     var stageName = toKey.indexOf('adult_') === 0 ? D.NAMES[p.species][toKey.slice(6)] : D.NAMES[p.species][toKey];
     var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!', adult_secret: 'SECRET FORM!' }[toKey] : toKey;
     queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub, secret: toKey === 'adult_secret' });
-    PP.Audio.play('evolve');
   };
+  /* 1.9.9: the hatch / evolve / secret-reveal jingle plays when its cut-scene STARTS (not when it was queued), once per
+   * cut-scene. A catch-up that grew several stages shows one cut-scene, so it plays one jingle. Muting is handled by
+   * PP.Audio (Sound off = silent, Music off = the short bleep). */
+  var CUT_JINGLE = { hatch: 'hatch', evolve: 'evolve' };
+  function cutJingle(c) {
+    if (c.jingled) return;
+    c.jingled = true;
+    var j = c.kind === 'evolve' && c.secret ? 'secret' : CUT_JINGLE[c.kind];
+    if (j) PP.Audio.play(j);
+  }
+  App.cutJingle = cutJingle;
 
   /* ------------------------------------------------------------ simulation updates */
   function updateSim(force) {
@@ -242,7 +266,9 @@
   function refreshIcons() {
     var p = G.active(App.state), n = p && !p.fate ? PP.Care.realNeeds(p) : {};
     var need = { feed: n.hunger, train: n.happy, clean: n.poop, med: n.sick, lights: n.lights || (p && p.asleep && p.lights), disc: p && !!p.fake };
+    var feedIcon = D.foodOf(p && p.species).icon;      // 1.9.9: the Feed icon shows the active pal's own food
     Array.prototype.forEach.call(document.querySelectorAll('.icon'), function (el, i) {
+      if (ICONS[i] === 'feed' && el.style.getPropertyValue('--i') !== String(feedIcon)) el.style.setProperty('--i', String(feedIcon));
       el.classList.toggle('need', !!need[ICONS[i]]);
       el.classList.toggle('on', i === App.iconSel);
       el.setAttribute('aria-pressed', i === App.iconSel ? 'true' : 'false');
@@ -295,7 +321,7 @@
     }
     if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
       if (r.from === 'night') App.morning(r.report, false);
-      else { App.anim = { kind: 'wake', t0: now, dur: 2200 }; PP.Audio.play('happy'); }
+      else App.wakeUp('nap');
     } else if (action === 'lights' && r.asleepUntil != null) {
       App.anim = { kind: 'stillAsleep', t0: now, dur: 3000, text: 'ASLEEP TILL ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock, { lcd: true }) };
       PP.Audio.play('ok');
@@ -433,7 +459,7 @@
     var ctx = App.ctx;
     ctx.setTransform(R.DPR || 1, 0, 0, R.DPR || 1, 0, 0);   // 1.9.4: draw in LCD pixels on the x5 backing store
     ctx.imageSmoothingEnabled = false;
-    if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; UI.close(); App.clearToasts(); }
+    if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; UI.close(); App.clearToasts(); cutJingle(App.cut); }
     if (App.cut) {
       R.drawCut(ctx, App, tNow);
       if (tNow - App.cut.t0 > R.cutDuration(App.cut)) App.cut = null;

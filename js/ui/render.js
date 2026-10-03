@@ -40,6 +40,9 @@
     heart: ['.#.#.', '#####', '#####', '.###.', '..#..'],
     empty: ['.#.#.', '#.#.#', '#...#', '.#.#.', '..#..'],
     food:  ['...###.', '..#####', '..#####', '...###.', '..#....', '.#.....', '##.....'],
+    food_fish:  ['.......', '...###.', '#.#####', '.####.#', '#.#####', '...###.', '.......'],   // 1.9.9 per-diet hunger glyphs
+    food_honey: ['.....#.', '.####..', '.####..', '#######', '#######', '#######', '.#####.'],
+    food_fruit: ['...#.#.', '...##..', '.##.##.', '#######', '#######', '#######', '.##.##.'],
     smile: ['..###..', '.#...#.', '#.#.#.#', '#.....#', '##...##', '.#####.', '..###..'],   // 1.9.2: a round smiley (the square one read as a die)
     poop:  ['...#...', '..##...', '.####..', '.#####.', '#######'],
     moon:  ['..###', '.##..', '##...', '##...', '##...', '.##..', '..###'],
@@ -89,7 +92,7 @@
     function row2(k, w, extra) { var q = { k: k, x: x2, w: w, y: y2 }; for (var e in extra || {}) q[e] = extra[e]; b.push(q); x2 += w + 3; return q; }
     var x2 = 40 + F.width('WT') + 3 + F.width('OK') + 5;
     if (p.stage !== 'egg') {
-      b.push({ k: 'food', x: 3, w: 7 }, { k: 'hunger', x: 11, w: 23, n: p.hunger });
+      b.push({ k: PP.DATA.foodOf(p.species).glyph, x: 3, w: 7 }, { k: 'hunger', x: 11, w: 23, n: p.hunger });   // 1.9.9: the pal's own food
       b.push({ k: 'smile', x: 38, w: 7 }, { k: 'happy', x: 46, w: 23, n: p.happy });
       b.push({ k: 'bolt', x: 74, w: 5 }, { k: 'energy', x: 81, w: 19, n: energyPips(p) });
       b.push({ k: 'flag', x: 3, w: 7, y: y2 }, { k: 'discipline', x: 11, w: 24, y: y2, n: Math.max(0, Math.min(100, Math.round(p.discipline || 0))) });
@@ -134,14 +137,14 @@
   }
   var NEED_ICON = { hunger: 1, happy: 2, poop: 3, sick: 4, lights: 5, tantrum: 7 };
   /* Speech bubble next to the pal showing WHAT it wants (cycles through all needs). */
-  function needBubble(ctx, needs, px, y, flip, t) {
+  function needBubble(ctx, needs, px, y, flip, t, species) {
     if (!needs.length || Math.floor(t / 500) % 4 === 3) return;
     var k = needs[Math.floor(t / 1500) % needs.length];
     var bx = flip ? px + 2 : px + PS - 24, by = Math.max(L.stripEnd + 2, y - 6);
     bx = Math.max(1, Math.min(W - 21, bx));
     ctx.fillStyle = C.ink; ctx.fillRect(bx, by, 20, 17); ctx.fillRect(bx + 1, by - 1, 18, 19);
     ctx.fillRect(flip ? bx + 14 : bx + 3, by + 18, 3, 3);   // tail
-    S.drawIcon(ctx, NEED_ICON[k], bx + 4, by + 3, 1);
+    S.drawIcon(ctx, k === 'hunger' ? PP.DATA.foodOf(species).icon : NEED_ICON[k], bx + 4, by + 3, 1);   // 1.9.9: hungry for ITS food
   }
 
   /* 1.9.8: where poop #i sits (LCD px, top-left of its x2 FX cell). Two side by side stay inside the LCD (tested). */
@@ -445,10 +448,10 @@
     else if (p.sick) S.drawFx(ctx, Math.floor(t / 600) % 2 ? 'skull' : 'germ', hx, hy - 12, 2);
     else if (p.fake && !app.anim) S.drawFx(ctx, 'anger', hx, hy - 10 + (Math.floor(t / 300) % 2), 2);
     else if (pose === 'sad' && !app.anim) S.drawFx(ctx, 'sweat', hx, hy, 2);
-    if (!app.anim && p.lights) needBubble(ctx, PP.Care.attention(p).filter(function (k) { return k !== 'poop' || p.poop >= 1; }), px, y, flip, t);
+    if (!app.anim && p.lights) needBubble(ctx, PP.Care.attention(p).filter(function (k) { return k !== 'poop' || p.poop >= 1; }), px, y, flip, t, p.species);
 
     // action FX
-    if (app.anim) drawAnimFx(ctx, app.anim, t, px, y, flip);
+    if (app.anim) drawAnimFx(ctx, app.anim, t, px, y, flip, p.species);
 
     dotted(ctx, L.floorLine);
     F.draw(ctx, p.name.toUpperCase() + ' ' + (p.sex === 'M' ? '\u2642' : '\u2640'), 3, L.bottomText, C.ink);
@@ -472,11 +475,11 @@
     ctx.fillStyle = C.lite || C.bg; ctx.fillRect((W - mw) / 2, my, mw, 9);
     F.draw(ctx, msg, W / 2, my + 1, C.ink, 1, 'center');
   }
-  function drawAnimFx(ctx, a, t, px, y, flip) {
+  function drawAnimFx(ctx, a, t, px, y, flip, species) {
     var k = (t - a.t0) / a.dur, fxX = flip ? px - 20 : px + PS - 12, fy = GROUND - 34;
     fxX = Math.max(0, Math.min(W - 32, fxX));
     if (a.kind === 'eat') {
-      var food = a.food === 'snack' ? 'snack' : (k < 0.45 ? 'meal' : 'meal_bitten');
+      var fd = PP.DATA.foodOf(species), food = a.food === 'snack' ? 'snack' : (k < 0.45 ? fd.fx : fd.bitten);   // 1.9.9: the pal's own diet
       if (k < 0.85) S.drawFx(ctx, a.food === 'snack' && k > 0.5 ? 'heart' : food, fxX, fy, 2);
     } else if (a.kind === 'happy') {
       for (var i = 0; i < 3; i++) {
@@ -488,7 +491,7 @@
     } else if (a.kind === 'angry' || a.kind === 'scold') {
       S.drawFx(ctx, 'anger', px + PS / 2 - 16, y + 4 + (Math.floor(t / 150) % 2) * 2, 2);
     } else if (a.kind === 'refuse') {
-      S.drawFx(ctx, a.food === 'snack' ? 'snack' : 'meal', fxX, fy, 2);
+      S.drawFx(ctx, a.food === 'snack' ? 'snack' : PP.DATA.foodOf(species).fx, fxX, fy, 2);
     } else if (a.kind === 'tired') {     // one-line message on the LCD, gone with the animation
       S.drawFx(ctx, Math.floor(t / 500) % 2 ? 'zzz' : 'zzz2', px + (flip ? 4 : PS - 30), y - 2, 2);
       var msg = 'TOO TIRED...', mw = F.width(msg) + 6, my = L.stripEnd + 2;
@@ -496,7 +499,7 @@
       ctx.fillStyle = C.lite || C.bg; ctx.fillRect((W - mw) / 2, my, mw, 9);
       F.draw(ctx, msg, W / 2, my + 1, C.ink, 1, 'center');
     } else if (a.kind === 'wake') {       // 1.9.1 good morning banner + a note at the stretch
-      banner(ctx, 'GOOD MORNING!');
+      banner(ctx, a.text || 'FEELING REFRESHED!');   // 1.9.9: set by App.wakeUp (nap line, or the greeting for the hour)
       if (t - a.t0 > 1900) S.drawFx(ctx, 'note', px + (flip ? 4 : PS - 30), y + 2 - k * 10, 2);
     } else if (a.kind === 'stillAsleep') { // 1.9.1 lights on in sleep hours: say so on the LCD
       banner(ctx, a.text || 'STILL ASLEEP');

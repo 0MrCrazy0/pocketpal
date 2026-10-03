@@ -69,7 +69,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .icon { position: relative; height: 38px; border-radius: 8px; border: 2px solid #3a3a3a; background: #222; cursor: pointer; filter: brightness(.7); touch-action: manipulation; }
 .icon::before {
   content: ''; position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px;
-  background: url(../sprites/icons.png) no-repeat; background-size: 192px 24px; background-position: calc(var(--i) * -24px) 0; image-rendering: pixelated;
+  background: url(../sprites/icons.png) no-repeat; background-size: 264px 24px; background-position: calc(var(--i) * -24px) 0; image-rendering: pixelated;
 }
 .icon.on { filter: none; border-color: #fff; background-color: #333; box-shadow: 0 0 6px rgba(255,255,255,.35); }
 .icon.need { filter: none; border-color: var(--lcd); box-shadow: 0 0 8px rgba(155,188,15,.6); animation: needPulse 1.1s ease-in-out infinite; }
@@ -176,7 +176,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .guide-art { display: flex; justify-content: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 2) 0; }
 .gbtn { display: inline-flex; align-items: center; justify-content: center; width: calc(var(--u) * 13); height: calc(var(--u) * 13); border-radius: 50%; background: #333; color: #ddd; font-weight: 800; font-size: calc(var(--u) * 6); border: 2px solid #4a9; }
 .gbtn.b { border-color: #49a; } .gbtn.c { border-color: #a54; }
-.gicon { display: inline-block; width: calc(var(--u) * 12); height: calc(var(--u) * 12); background: url(../sprites/icons.png) no-repeat; background-size: calc(var(--u) * 96) calc(var(--u) * 12); background-position: calc(var(--i) * var(--u) * -12) 0; image-rendering: pixelated; vertical-align: middle; background-color: #222; border-radius: calc(var(--u) * 2); }
+.gicon { display: inline-block; width: calc(var(--u) * 12); height: calc(var(--u) * 12); background: url(../sprites/icons.png) no-repeat; background-size: calc(var(--u) * 132) calc(var(--u) * 12); background-position: calc(var(--i) * var(--u) * -12) 0; image-rendering: pixelated; vertical-align: middle; background-color: #222; border-radius: calc(var(--u) * 2); }
 .glist { list-style: none; } .glist li { display: flex; align-items: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 1) 0; }
 .sicon { flex: none; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: calc(var(--u) * 1); box-shadow: 0 0 0 calc(var(--u) * .5) #0f380f; }   /* 1.9.2 screen icons legend: the real LCD glyphs */
 .hl { animation: hlPulse 1s ease-in-out infinite; outline: 3px solid #fff !important; outline-offset: 2px; z-index: 40; position: relative; }

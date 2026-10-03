@@ -320,10 +320,22 @@
   };
 
   PP.DATA = {
-    VERSION: '1.9.8',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    /* 1.9.9: what each pal eats. Visuals and labels only: a meal works exactly the same for every species.
+     * fx / bitten = FX cells (sprites/fx.png), icon = Feed / hunger-bubble icon cell (sprites/icons.png),
+     * glyph = status-strip hunger glyph (js/data/glyphs.js). Secret forms eat like their species. */
+    DIET: { lion: 'meat', wolf: 'meat', croc: 'fish', eagle: 'fish', bear: 'honey', elephant: 'fruit' },
+    FOODS: {
+      meat:  { name: 'Meat',  fx: 'meal',  bitten: 'meal_bitten',  icon: 1,  glyph: 'food' },
+      fish:  { name: 'Fish',  fx: 'fish',  bitten: 'fish_bitten',  icon: 8,  glyph: 'food_fish' },
+      honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
+      fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
+    },
+    VERSION: '1.9.9',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,
     ECONOMY: ECONOMY, ITEMS: ITEMS, BOOST: BOOST, BOX: BOX
   };
+  /* 1.9.9: the food a species eats (an unknown species gets meat, as before). */
+  PP.DATA.foodOf = function (species) { var D = PP.DATA; return D.FOODS[D.DIET[species]] || D.FOODS.meat; };
 })(typeof window !== 'undefined' ? window : globalThis);

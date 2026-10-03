@@ -32,6 +32,15 @@
     return opts && opts.lcd ? h12 + ':' + pad2(mi) + ap.toUpperCase() : h12 + ':' + pad2(mi) + ' ' + ap;
   }
   function minuteOfDay(ms) { var d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); }
+  /* 1.9.9: part of the day for greetings, from the LOCAL minute of the day (independent of the 12 / 24 h display):
+   * morning 5:00-11:59, afternoon 12:00-17:59, evening 18:00-4:59. */
+  function partOfDay(minOfDay) {
+    var h = Math.floor((((Math.round(minOfDay) % 1440) + 1440) % 1440) / 60);
+    return h >= 5 && h < 12 ? 'morning' : h >= 12 && h < 18 ? 'afternoon' : 'evening';
+  }
+  function greeting(minOfDay) { return 'Good ' + partOfDay(minOfDay); }
+  /* The LCD banner when a pal wakes up: a nap gets a nap line; a night's sleep gets the greeting for the hour. */
+  function wakeLine(from, minOfDay) { return from === 'nap' ? 'FEELING REFRESHED!' : greeting(minOfDay).toUpperCase() + '!'; }
   function clock(ms, m, opts) { return hm(minuteOfDay(ms), m, opts); }
   var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   /* "Sat 26 Sep, 9:05 pm" (or "today 9:05 pm" / "yesterday ..." when refMs is given). */
@@ -55,5 +64,6 @@
     return mi + 'm';
   }
 
-  PP.Time = { defaultClock: defaultClock, browserLocale: browserLocale, hm: hm, clock: clock, dateTime: dateTime, duration: duration, minuteOfDay: minuteOfDay };
+  PP.Time = { defaultClock: defaultClock, browserLocale: browserLocale, hm: hm, clock: clock, dateTime: dateTime, duration: duration, minuteOfDay: minuteOfDay,
+    partOfDay: partOfDay, greeting: greeting, wakeLine: wakeLine };
 })(typeof window !== 'undefined' ? window : globalThis);

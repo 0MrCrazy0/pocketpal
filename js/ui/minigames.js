@@ -4,7 +4,7 @@
   var PP = root.PP = root.PP || {};
   var S = PP.Sprites, F = PP.Font, D = PP.DATA;
   // 1.8.3: sprites are drawn at whole-pixel sizes only. 1.9.4: 80-px cells on the x5 backing store: scale 3 = 96 LCD px (6x), 1.5 = 48 LCD px (3x)
-  var W = 216, PS = 96, BIG = 3, CARD = 1.5;
+  var W = 216, PS = 96, BIG = 3;
   var C = { ink: '#0f380f', dark: '#306230', mid: '#8bac0f', bg: '#9bbc0f', lite: 'rgb(206,224,110)' };
   var g = null;
   var now = function () { return performance.now(); };   // swappable clock for the Node tests
@@ -50,7 +50,8 @@
 
   function input(btn) {
     if (!g) return;
-    if (btn === 'C' && (g.phase === 'play' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview'))) { var cb = g.onDone; g = null; cb(null); return; }
+    // 1.9.9: C also quits while a result shows (after a flip / a hit): it used to be swallowed there for ~1 s
+    if (btn === 'C' && (g.phase === 'play' || g.phase === 'show' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview'))) { var cb = g.onDone; g = null; cb(null); return; }
     if (g.phase !== 'play') return;
     var t = now();
     if (g.kind === 'memory') { if (btn === 'A' || btn === 'PREV' || btn === 'LEFT') seqInput(-1); else if (btn === 'B' || btn === 'RIGHT') seqInput(1); return; }
@@ -175,6 +176,11 @@
   /* 1.8.3: only poses whose eyes are OPEN in every frame of every stage (tests/minigames.test.js checks the
    * sprite-faces fixture). 1.8.2 used happy / sleep / eat / dance, whose closed or ^-shaped eyes looked like a line or a dot. */
   var MEM_POSES = ['idle', 'surprised', 'angry', 'sad', 'attack'];
+  /* 1.9.9: at card size the five poses looked almost the same (the young elephant's idle and attack were
+   * pixel-for-pixel alike), so pairs could not be told apart even in the preview. Every pose now carries its own big
+   * mood symbol (a heart, a '!', an anger mark, a sweat drop, a spark). The pal is drawn smaller under it, clipped
+   * to the card. */
+  var MEM_BADGE = { idle: 'heart', surprised: 'call', angry: 'anger', sad: 'sweat', attack: 'spark' }, CARD_PAL = 1;
   var CARD_W = 50, CARD_H = 54, CARD_X0 = 2, CARD_DX = 54, CARD_Y0 = 24, CARD_DY = 58, CARD_COLS = 4;
   function memDeal(g) {
     var bag = MEM_POSES.slice(), cards = [];
@@ -209,10 +215,14 @@
       var sel = !done && g.phase === 'play' && (g.slot || 0) === i;
       ctx.fillStyle = C.ink; ctx.fillRect(cx, cy, CARD_W, CARD_H);
       ctx.fillStyle = g.matched[i] ? C.mid : C.lite; ctx.fillRect(cx + 2, cy + 2, CARD_W - 4, CARD_H - 4);
-      if (sel) { ctx.fillStyle = C.ink; ctx.fillRect(cx + 3, cy + CARD_H - 6, CARD_W - 6, 2); }   // cursor (A / arrow keys move it, B flips)
+      if (sel) { ctx.fillStyle = C.ink; ctx.fillRect(cx + 3, cy + CARD_H + 1, CARD_W - 6, 2); }   // cursor (A / arrow keys move it, B flips): 1.9.9 under the card, clear of the pal
       var show = g.matched[i] || g.open.indexOf(i) >= 0 || done || g.phase === 'preview';
-      if (show) S.draw(ctx, p.species, sk, g.cards[i], Math.floor(t / 300), cx + 1, cy + 2, CARD);   // 1:1 pixels, open-eye poses
-      else F.draw(ctx, '?', cx + CARD_W / 2, cy + 17, C.dark, 3, 'center');
+      if (show) {
+        ctx.save(); ctx.beginPath(); ctx.rect(cx + 2, cy + 2, CARD_W - 4, CARD_H - 4); ctx.clip();   // never over the card frame
+        S.drawFx(ctx, MEM_BADGE[g.cards[i]], cx + 3, cy + 3, 1.5);                                   // 24 px mood symbol, top left
+        S.draw(ctx, p.species, sk, g.cards[i], Math.floor(t / 300), cx + CARD_W - 2 - 32 * CARD_PAL, cy + CARD_H - 2 - 32 * CARD_PAL, CARD_PAL);
+        ctx.restore();
+      } else F.draw(ctx, '?', cx + CARD_W / 2, cy + 17, C.dark, 3, 'center');
     }
     var left = g.phase === 'preview' ? Math.max(0, Math.ceil((MATCH_PREVIEW_MS - (t - g.t0)) / 1000)) : 0;
     F.draw(ctx, done ? (good ? 'NICE MEMORY!' : 'TRY AGAIN') : g.phase === 'preview' ? 'REMEMBER THEM! ' + left
@@ -282,12 +292,12 @@
       F.draw(ctx, done ? (good ? 'YOU WIN!' : 'BETTER LUCK NEXT TIME') : g.phase === 'show' ? (g.last > 0 ? 'CORRECT!' : 'WRONG WAY') : 'WATCH THE EYES',
         W / 2, 140, C.ink, 1, 'center');
     }
-    if (g.phase === 'play' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview')) F.draw(ctx, 'C: QUIT', W - 3, 152, C.dark, 1, 'right');
+    if (g.phase === 'play' || g.phase === 'show' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview')) F.draw(ctx, 'C: QUIT', W - 3, 152, C.dark, 1, 'right');
     if (g.phase === 'play' && g.kind === 'match') F.draw(ctx, 'A: MOVE  B: FLIP', 3, 152, C.dark, 1);
     if (g.phase === 'play' && g.kind === 'memory') F.draw(ctx, 'A: \u25c0  B: \u25b6', 3, 152, C.dark, 1);
   }
   PP.Mini = { start: start, draw: draw, input: input, tap: tap, active: active, abort: function () { g = null; },
     need: function (kind) { var k = g; g = { kind: kind }; var n = need(); g = k; return n; },
-    SEQ: SEQ, MATCH: { cards: MEM_CARDS, pairs: MEM_PAIRS, misses: MEM_MISSES, previewMs: MATCH_PREVIEW_MS, poses: MEM_POSES, cardScale: CARD }, SCALE: BIG, seqNew: seqNew, seqGrow: seqGrow, seqPress: seqPress,
+    SEQ: SEQ, MATCH: { cards: MEM_CARDS, pairs: MEM_PAIRS, misses: MEM_MISSES, previewMs: MATCH_PREVIEW_MS, poses: MEM_POSES, badges: MEM_BADGE, cardScale: CARD_PAL, badgeScale: 1.5 }, SCALE: BIG, seqNew: seqNew, seqGrow: seqGrow, seqPress: seqPress,
     _state: function () { return g; }, _step: function (t) { if (g) step(t); }, _clock: function (fn) { now = fn || function () { return performance.now(); }; } };   // read-only peek for the browser tests
 })(typeof window !== 'undefined' ? window : globalThis);

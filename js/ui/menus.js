@@ -252,7 +252,7 @@
    * Every icon in the home status strip, drawn with the SAME pixel glyphs as the LCD (PP.Render.MINI + the LCD font),
    * so the legend always matches the screen. Used by the guide, How to play, MENU > Screen icons and Status. */
   var STRIP_LEGEND = [
-    { row: 1, parts: [['food'], ['hearts', 3]], name: 'Hunger', text: '4 hearts. Feed a meal when they run low.' },
+    { row: 1, parts: [['food'], ['hearts', 3]], name: 'Hunger', text: '4 hearts. Feed a meal when they run low. The picture is your pal\'s own food: meat (lion, wolf), fish (croc, eagle), honey (bear) or fruit (elephant).' },
     { row: 1, parts: [['smile'], ['hearts', 2]], name: 'Happiness', text: '4 hearts. Play a game or give a snack.' },
     { row: 1, parts: [['bolt'], ['pips', 3]], name: 'Energy', text: '4 pips, 25% each. They blink when your pal is tired.' },
     { row: 1, parts: [['text', 'TEEN 3D']], name: 'Stage + age', text: 'H = hours, D = days old.' },
@@ -291,10 +291,12 @@
     });
     return (iconCache[key] = '<img class="sicon" alt="" src="' + cv.toDataURL() + '" style="width:calc(var(--u) * ' + (w * 1.5) + ');height:calc(var(--u) * 13.5)">');
   }
+  /* 1.9.9: the active pal's food (D.DIET); meat when there is no pal yet. */
+  function myFood() { var p = PP.App && PP.App.state && PP.Game.active(PP.App.state); return D.foodOf(p ? p.species : ''); }
   function legendHtml() {
     return [1, 2].map(function (row) {
       return '<p><b>Row ' + row + (row === 1 ? ' (always there)' : ' (discipline + weight, then only what applies right now)') + '</b></p><ul class="glist legend">' +
-        STRIP_LEGEND.filter(function (e) { return e.row === row; }).map(function (e) { return '<li>' + stripIcon(e.parts) + '<span><b>' + esc(e.name) + ':</b> ' + esc(e.text) + '</span></li>'; }).join('') + '</ul>';
+        STRIP_LEGEND.filter(function (e) { return e.row === row; }).map(function (e) { return '<li>' + stripIcon(e.parts[0][0] === 'food' ? [[myFood().glyph]].concat(e.parts.slice(1)) : e.parts) + '<span><b>' + esc(e.name) + ':</b> ' + esc(e.text) + '</span></li>'; }).join('') + '</ul>';
     }).join('');
   }
   function iconsScreen() {
@@ -312,12 +314,12 @@
         '<li><span class="gbtn b">B</span><span><b>B = choose.</b> Opens the icon or picks the item.</span></li>' +
         '<li><span class="gbtn c">C</span><span><b>C = back.</b> Closes menus. In battle: auto-fight.</span></li></ul>' +
         '<p class="tip">You can also tap icons and menu items. Keyboard: A S D, arrows, Enter, Esc.</p>'; } },
-    { t: 'CARE ICONS 1/2', hl: ['.icon[style="--i:0"]', '.icon[style="--i:1"]', '.icon[style="--i:2"]', '.icon[style="--i:3"]'], h: function () {
+    { t: 'CARE ICONS 1/2', hl: ['.icons .icon:nth-child(1)', '.icons .icon:nth-child(2)', '.icons .icon:nth-child(3)', '.icons .icon:nth-child(4)'], h: function () {
       return '<ul class="glist"><li><span class="gicon" style="--i:0"></span><span><b>Status / menu:</b> hunger, happiness, care score, everything else.</span></li>' +
-        '<li><span class="gicon" style="--i:1"></span><span><b>Feed:</b> meals fill hunger, snacks add happiness (not too many!).</span></li>' +
+        '<li><span class="gicon" style="--i:' + myFood().icon + '"></span><span><b>Feed:</b> meals fill hunger, snacks add happiness (not too many!).</span></li>' +
         '<li><span class="gicon" style="--i:2"></span><span><b>Train &amp; play:</b> mini-games for happiness, discipline and XP.</span></li>' +
         '<li><span class="gicon" style="--i:3"></span><span><b>Clean:</b> flush the poop away.</span></li></ul>'; } },
-    { t: 'CARE ICONS 2/2', hl: ['.icon[style="--i:4"]', '.icon[style="--i:5"]', '.icon[style="--i:6"]', '.icon[style="--i:7"]'], h: function () {
+    { t: 'CARE ICONS 2/2', hl: ['.icons .icon:nth-child(5)', '.icons .icon:nth-child(6)', '.icons .icon:nth-child(7)', '.icons .icon:nth-child(8)'], h: function () {
       return '<ul class="glist"><li><span class="gicon" style="--i:4"></span><span><b>Medicine:</b> when the skull shows, your pal is sick.</span></li>' +
         '<li><span class="gicon" style="--i:5"></span><span><b>Lights:</b> switch off when it falls asleep. Droopy eyes, yawning, blinking energy pips and <b>Zz</b> in the strip = tired: lights off for a quick <b>nap</b> (+1 energy every 2 min), or feed it.</span></li>' +
         '<li><span class="gicon" style="--i:6"></span><span><b>Battle:</b> arena and friend battles (adults).</span></li>' +
@@ -418,7 +420,7 @@
   function feedMenu() {
     var p = pet();
     var items = [
-      { label: 'Meal', sub: 'Hunger +1, weight +1g (free)', act: function () { App().doAct('meal'); } },
+      { label: 'Meal: ' + D.foodOf(p && p.species).name, sub: 'Hunger +1, weight +1g (free)', act: function () { App().doAct('meal'); } },   // 1.9.9: per diet
       { label: 'Snack', sub: 'Happy +1, weight +2g. More than 3 in 3h = care mistake', act: function () { App().doAct('snack'); } }
     ].concat(PP.Shop.owned(st(), ['food', 'energy']).map(function (id) { return itemRow(id); }));
     return { title: 'FEED', html: p ? '<p>Hunger ' + hearts(p.hunger) + ' \u00b7 Happy ' + hearts(p.happy) + ' \u00b7 Energy ' + Math.round(p.energy) + '%</p>' : '', live: true, items: items };
@@ -1042,7 +1044,7 @@
     return function () {
       var p = pet(), s = st(), d = PP.Daily.today(s, PP.Game.now(s));
       var goals = d && d.goals && d.goals.length ? '<li>Today\u2019s goals: ' + d.goals.map(function (g) { return esc(PP.Daily.text(g)) + (g.done ? ' \u2713' : ''); }).join(' \u00b7 ') + '</li>' : '';
-      return { title: 'GOOD MORNING!', html: (p ? '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'happy', 30) + '</div>' : '') +
+      return { title: PP.Time.greeting(PP.Time.minuteOfDay(PP.Game.now(s))).toUpperCase() + '!', html: (p ? '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'happy', 30) + '</div>' : '') +
         '<p class="grade">Night grade: <b>' + card.grade + '</b> \u2013 ' + esc(card.note) + '</p><ul class="away">' +
         '<li>Slept ' + card.hours + ' h</li><li>Lights off ' + card.darkPct + '% of the night</li>' +
         '<li>' + (card.mistakes ? card.mistakes + ' care mistake' + (card.mistakes === 1 ? '' : 's') + ' overnight' : 'No care mistakes overnight') + '</li>' + goals + '</ul>',
