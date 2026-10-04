@@ -331,7 +331,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.3.0',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.3.18',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

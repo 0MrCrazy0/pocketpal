@@ -134,7 +134,7 @@
       if (!p.sick) return res(false, "It isn't sick - saved for later");
       p.sick = false; p.sickDoses = 0; if (p.need) p.need.sick = null;
       p.health = Math.min(100, p.health + 20);
-      r = res(true, 'Cured in one dose! Health +20', 'happy');
+      r = res(true, 'Cured in one dose! Health +20', 'med');
     } else if (it.kind === 'boost') {
       var b = boosts(p);
       if (b[it.stat] >= D.BOOST.perStat) return res(false, it.name + ' has no more effect on ' + p.name + ' (max ' + D.BOOST.perStat + ')');

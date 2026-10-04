@@ -40,7 +40,7 @@
       case 'move':
         var m = D.MOVES[e.move];
         bv.msg = nm(e.who) + ' used ' + m.name.toUpperCase() + '!';
-        bv.pose[e.who] = m.power > 0 ? 'attack' : 'happy';
+        bv.pose[e.who] = m.power > 0 ? 'angry' : 'happy';
         if (m.power > 0) bv.lunge = e.who;
         PP.Audio.play('move'); dur = 700; break;
       case 'hit':

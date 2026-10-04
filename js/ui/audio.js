@@ -80,6 +80,7 @@
     gameover:{ step: 0.22, lead: 'E4 D4 C4 B3 A3*4', bass: 'A2*4 E2*4' },
     morning: { step: 0.1,  lead: 'G4 C5 E5 G5*2 E5 C6*3', bass: 'C3*4 G3*4' },          // 1.9.1 good morning
     lullaby: { step: 0.24, lead: 'E5 C5 D5 G4*2 E5 D5 C5*3', bass: 'C3*4 G2*4 C3*3' },   // 1.9.1 bedtime
+    snack:   { step: 0.07, lead: 'E5 G5 C6*2', bass: 'C3*2 G3*2' },                        // 2.3.6 berry cake
     secret:  { step: 0.08, lead: 'G4 A4 B4 D5 G5*2 F#5 G5 A5 B5*2 - B5 D6 G6*4', bass: 'G2*4 D3*4 G3*4 E3*2 D3*2 G2*4' }   // 1.9.9 secret-form reveal: the evolve jingle + a higher finish
   };
   var music = true;

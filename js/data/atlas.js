@@ -177,6 +177,10 @@
    "fruit_bitten": [
     5,
     2
+   ],
+   "snack_bitten": [
+    6,
+    2
    ]
   }
  },

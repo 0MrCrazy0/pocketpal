@@ -26,8 +26,15 @@
    * scale 3 = 96 px). Cells are A.frame (80) px, drawn at 1.2x on the home screen (the x5 LCD
    * backing store makes that an exact 6x of each sheet pixel) and 1:1 at scale 2.5. */
   function frameIndex(frame) { var n = A.framesPerPose; return ((Math.floor(frame) % n) + n) % n; }
+  function shownPose(pose) {
+    // 2.3.5: the attack and scratch cells lift one leg that does not join the body. Show a snarl or a sit instead.
+    if (pose === 'attack' || pose === 'scratch' || pose === 'quirk') return pose === 'attack' ? 'angry' : 'sit';
+    if (pose === 'dance') return 'happy';
+    return pose;
+  }
   function draw(ctx, species, stageKey, pose, frame, x, y, scale, flip) {
     var im = imgs[species]; if (!im || !im.complete || !im.naturalWidth) return;
+    pose = shownPose(pose);
     var F = A.frame, pi = A.poses.indexOf(pose); if (pi < 0) pi = 0;
     var col = stageIndex(stageKey) * A.framesPerPose + frameIndex(frame || 0);
     var out = (A.base || F) * (scale || 1);
@@ -45,6 +52,7 @@
   /* CSS background for an HTML element showing one frame, sized in LCD pixels (n x --u)
    * so menu pictures scale with the screen (no canvas needed). */
   function cssU(species, stageKey, pose, frame, n) {
+    pose = shownPose(pose);
     var F = A.frame, k = n / F, pi = Math.max(0, A.poses.indexOf(pose || 'idle'));
     var col = stageIndex(stageKey) * A.framesPerPose + frameIndex(frame || 0);
     var u = function (v) { return 'calc(' + v + ' * var(--u))'; };

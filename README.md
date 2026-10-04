@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.3.0**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.3.18**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 

@@ -26,10 +26,10 @@
     var e = p ? p.energy : 80, hap = p ? p.happy : 2, young = p && p.stage === 'baby';
     var tired = e < ((PP.DATA && PP.DATA.RULES && PP.DATA.RULES.tiredEnergy) || 30);
     var w = tired ? {     // 1.8.3: a tired pal droops, yawns and nods off instead of standing around bright-eyed
-      stand: 0, look: 0.6, sit: 3, yawn: 4, scratch: 0.3, bored: 0, dance: 0, quirk: 0.3, sleepy: 4, droop: 4, front: 0.4
+      stand: 0, look: 0.6, sit: 3, yawn: 4, scratch: 0, bored: 0, dance: 0, quirk: 0, sleepy: 4, droop: 4, front: 0.4
     } : {
-      stand: 4, look: 3, sit: e < 40 ? 4 : 2, yawn: e < 35 ? 3 : 0.6, scratch: young ? 0.5 : 1.2,
-      bored: hap <= 1 ? 3 : 0.4, dance: hap >= 4 ? 1.2 : 0, quirk: young ? 0.8 : 1.4, sleepy: 0, droop: 0, front: 1.5
+      stand: 4, look: 3, sit: e < 40 ? 4 : 2, yawn: e < 35 ? 3 : 0.6, scratch: 0,
+      bored: hap <= 1 ? 3 : 0.4, dance: 0, quirk: 0, sleepy: 0, droop: 0, front: 1.5
     };
     var total = 0, k;
     for (k in w) total += w[k];

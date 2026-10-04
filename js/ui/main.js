@@ -319,7 +319,8 @@
       if (action === 'medicine' && r.ok) kind = 'med';
       if (action === 'lights') kind = null;
       if (action === 'scold') kind = r.ok ? 'scold' : 'sad';
-      if (action === 'praise') kind = r.ok ? 'praise' : 'happy';   // 2.0.0: earned praise -> a hop, then it smiles at you
+      if (action === 'snack' && r.ok && r.anim === 'eat') { kind = 'eat'; dur = 1800; }
+      if (action === 'praise') kind = r.ok ? 'praise' : 'happy';
       if (kind) App.anim = { kind: kind, pose: kind === 'med' ? (p.sick ? 'sick' : 'happy') : kind === 'scold' ? 'sad' : null, food: action, t0: now, dur: dur };
     }
     if (r.asleep) {                               // 2.2.0: a care action that needs it awake
@@ -329,6 +330,7 @@
       App.anim = { kind: 'sad', pose: 'angry', t0: now, dur: 1800 };
       PP.Audio.play('no');
     } else if (action === 'lights' && r.resleep) {
+      App.anim = { kind: 'stillAsleep', t0: now, dur: 1600, text: 'Z z z' };
       PP.Audio.play('lullaby');
     } else if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
       if (r.from === 'night') App.morning(r.report, false);
@@ -336,7 +338,7 @@
     } else if (action === 'lights' && r.asleepUntil != null) {
       App.anim = { kind: 'stillAsleep', t0: now, dur: 3000, text: 'ASLEEP TILL ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock, { lcd: true }) };
       PP.Audio.play('ok');
-    } else PP.Audio.play(!r.ok ? 'no' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
+    } else PP.Audio.play(!r.ok ? 'no' : action === 'snack' ? 'snack' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
     refreshIcons(); checkAttention(); App.save();
   };
   /* Items from the Pal Store bag (Feed / Medicine menus and the Bag). */
@@ -349,9 +351,9 @@
     if (r.ok || r.anim) {
       UI.close();
       var kind = r.anim || 'happy';
-      App.anim = { kind: kind, pose: kind === 'refuse' ? 'refuse' : null, food: it && it.kind === 'food' ? (id === 'cake' ? 'snack' : 'meal') : id, t0: performance.now(), dur: kind === 'eat' ? 1800 : 1500 };
+      App.anim = { kind: kind, pose: kind === 'refuse' ? 'refuse' : kind === 'med' ? 'happy' : null, food: it && it.kind === 'food' ? (id === 'cake' ? 'snack' : 'meal') : id, t0: performance.now(), dur: kind === 'eat' || kind === 'med' ? 1800 : 1500 };
     }
-    PP.Audio.play(!r.ok ? 'no' : r.anim === 'eat' ? 'eat' : 'happy');
+    PP.Audio.play(!r.ok ? 'no' : id === 'cake' ? 'snack' : r.anim === 'eat' ? 'eat' : 'happy');
     refreshIcons(); checkAttention(); App.save();
     if (!r.ok) UI.refresh();
   };
@@ -586,6 +588,7 @@
       else App.toast('Alerts need the live https game');
     });
     document.addEventListener('visibilitychange', function () {
+      if (PP.Mini) PP.Mini.pause(document.hidden);   // 2.3.1: a mini-game's countdown stops while the app is hidden
       if (document.hidden) { App.save(); if (PP.Net) PP.Net.scheduleAlert(App.state); }
       else { updateSim(true); }
     });

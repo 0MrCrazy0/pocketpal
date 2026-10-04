@@ -162,7 +162,7 @@
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
       p.asleep = true; p.sleepKind = 'nap'; ev.push({ t: 'nap' });
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
-      p.asleep = false; p.sleepKind = null; ev.push({ t: 'wake', from: 'nap' });
+      p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' });
     }
     if (ctx.offline && p.asleep && p.sleepKind === 'night' && p.lights) p.lights = false; // mercy: pal switches lights off itself while you're away
     if (p.asleep && p.sleepKind === 'night' && p.night) { p.night.mins++; if (p.lights) p.night.lit++; else p.night.dark++; }
@@ -379,7 +379,7 @@
       if (!p.sick && U.roll(p.seed, p.clock, 'snack', p.snacks.length) < 0.35) { p.sick = true; p.sickDoses = 0; return res(true, 'Too many snacks! Tummy ache', 'sick'); }
       return res(true, 'Too many snacks! (care mistake)', 'sad');
     }
-    return res(true, 'Sweet! Happy +1', 'happy');
+    return res(true, 'Sweet! Happy +1', 'eat');
   }
   function clean(p) {
     var b = blocked(p); if (b) return b;
@@ -419,10 +419,14 @@
     p.lights = !p.lights;
     if (!p.lights && p.need) p.need.lights = null;
     if (!p.lights) {
-      if (p.wokeAt != null && !p.asleep && inNight) {
-        p.wokeAt = null; p.asleep = true; p.sleepKind = 'night';
+      if (inNight && !(p.asleep && p.sleepKind === 'night')) {
+        p.wokeAt = null; p.asleep = true; p.sleepKind = 'night'; p.fake = null;
         if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
-        return Object.assign(res(true, 'Lights off - back to sleep. Zzz...', null), { resleep: true });
+        return Object.assign(res(true, 'Lights off - straight to sleep. Zzz...', null), { resleep: true });
+      }
+      if (!inNight && p.energy < R.napEnergy && !p.asleep) {
+        p.asleep = true; p.sleepKind = 'nap'; p.fake = null;
+        return Object.assign(res(true, 'Lights off - a nap. Zzz...', null), { resleep: true });
       }
       return res(true, 'Lights off', null);
     }

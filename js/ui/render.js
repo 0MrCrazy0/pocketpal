@@ -175,6 +175,7 @@
 
   /* -> [pose, frame]. Face animation (blinks, chewing) and idle behaviours live here. */
   function petPose(p, app, moving, t) {
+    if (p.asleep) return ['sleep', Math.floor(t / 700)];
     if (app.anim) {
       var a = app.anim, el = t - a.t0;
       if (a.kind === 'eat') return PP.Behave.eatFrame(el, 220);
@@ -242,20 +243,44 @@
     if (sceneForce) return sceneForce;
     var now = PP.Game.now(st), d = new Date(now), h = d.getHours() + d.getMinutes() / 60;
     var phase = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 17.5 ? 'day' : h >= 17.5 && h < 19.5 ? 'dusk' : 'night';
-    // 1.9.1: the sky follows the pal's mood (PP.Behave.weather), on top of the day's roll
-    var base = dayWeather(st, now), w = PP.Behave.weather(PP.Game.active(st), base);
-    var bow = PP.Behave.rainbow(bowMemo, w, Date.now()) && phase !== 'night';
+    var pal = PP.Game.active(st);
+    // 2.3.3: bedtime follows the pal's own schedule, so a sleeping pal gets the star sky
+    if (pal && pal.stage !== 'egg' && !pal.fate && PP.Sleep.isNight(PP.Time.minuteOfDay(now), PP.Sleep.of(pal))) phase = 'night';
+    var base = dayWeather(st, now), w = PP.Behave.weather(pal, base);
+    // a clear day can be windy so the clouds actually move. Mood weather (rain, storm, snow, sun) still wins.
+    if (phase !== 'night' && w === 'clear' && PP.util.roll(st.seed, PP.Shop.dayOf(now), 'wind') < 0.4) w = 'wind';
+    var bow = phase !== 'night' && (w === 'sunny' || PP.Behave.rainbow(bowMemo, w, Date.now()));
     return { phase: phase, weather: w, base: base, rainbow: bow };
   }
-  function hills(ctx) {
-    var top = L.floorLine;
-    ctx.fillStyle = C.lite;
-    ctx.globalAlpha = 0.35;
-    for (var x = 0; x < W; x++) {                       // two soft, wide hills on the horizon
-      var hgt = Math.round(10 + 7 * Math.sin(x / 34 + 0.6) + 4 * Math.sin(x / 13 + 2));
+  function hills(ctx, shift) {
+    var top = L.floorLine, s = shift || 0;
+    ctx.fillStyle = C.dark;
+    for (var x = 0; x < W; x++) {
+      var hgt = Math.round(8 + 6 * Math.sin((x + s) / 34 + 0.6) + 3 * Math.sin((x + s) / 13 + 2));
       ctx.fillRect(x, top - hgt, 1, hgt);
     }
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = C.ink;
+    for (var g = 0; g < W; g += 7) ctx.fillRect(g, top - 2, 1, 2);
+  }
+  function orbSpot(phase, now, top) {
+    var d = new Date(now), h = d.getHours() + d.getMinutes() / 60, u;
+    if (phase === 'night') u = h >= 19.5 ? (h - 19.5) / 9.5 : (h + 4.5) / 9.5;
+    else u = (h - 5) / 14.5;
+    u = Math.max(0, Math.min(1, u));
+    return { x: 22 + u * (W - 44), y: top + 26 - Math.sin(u * Math.PI) * 14 };
+  }
+  function skyCloud(ctx, x, y, scale) {
+    var s = scale || 1;
+    ctx.fillStyle = C.lite;
+    fshape(ctx, x, y - 3 * s, x + 22 * s, y + 5 * s, function (u, v) {
+      return inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
+    });
+    ctx.fillStyle = C.ink;
+    fshape(ctx, x - 1, y - 4 * s, x + 23 * s, y + 6 * s, function (u, v) {
+      var inn = inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
+      var out = inDisc(u, v, x + 6 * s, y + 1, 5 * s) || inDisc(u, v, x + 12 * s, y, 6 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 4.3 * s);
+      return out && !inn;
+    });
   }
   /* 1.9.8: fill a shape on the x5 backing grid (1/5 LCD px rows): inside(u, v) in LCD px. Each row is one run per
    * span, never overlapping, so translucent sky colours stay even. Used for the sun, moon, clouds and lightning. */
@@ -277,40 +302,57 @@
   }
   function drawScene(ctx, st, t) {
     var info = sceneInfo(st), top = L.stripEnd, bottom = L.floorLine, still = reducedMotion();
-    var tt = still ? 0 : t;
-    if (info.phase === 'dawn' || info.phase === 'dusk') {   // a glow low in the sky
-      for (var i = 0; i < 4; i++) { ctx.fillStyle = 'rgba(206,224,110,' + (0.10 + i * 0.06) + ')'; ctx.fillRect(0, bottom - 54 + i * 10, W, 10); }
-      ctx.fillStyle = 'rgba(206,224,110,0.55)';
-      var sx = info.phase === 'dawn' ? 30 : W - 42;
-      fshape(ctx, sx - 6.5, bottom - 26.5, sx + 6.5, bottom - 19, function (u, v) { return inDisc(u, v, sx, bottom - 19.5, 6.5); });   // 1.9.8: a smooth half sun
-    } else if (info.phase === 'night') {
-      ctx.fillStyle = 'rgba(48,98,48,0.16)'; ctx.fillRect(0, top, W, bottom - top);
+    var tt = still ? 0 : t, w = info.weather;
+    if (info.phase === 'night') {
+      ctx.fillStyle = 'rgba(15,56,15,0.55)'; ctx.fillRect(0, top, W, bottom - top);
       ctx.fillStyle = C.lite;
-      for (var k = 0; k < 14; k++) {
-        var stx = (k * 53 + 17) % (W - 8) + 4, sty = top + 4 + (k * 29) % 46;
-        if (!still && (Math.floor(tt / 900) + k) % 5 === 0) continue;  // gentle twinkle
-        ctx.fillRect(stx, sty, 1, 1);
+      function skyRand(n) { var x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
+      var stars = [], cell = 18;
+      for (var gx = 0; gx < 11; gx++) {
+        for (var gy = 0; gy < 3; gy++) {
+          var n = gx * 3 + gy;
+          stars.push([6 + gx * cell + Math.floor(skyRand(n + 1) * 10), top + 6 + gy * 20 + Math.floor(skyRand(n + 40) * 10)]);
+        }
       }
-      ctx.fillStyle = 'rgba(206,224,110,0.9)';                          // crescent moon
-      var mcx = W - 29.5, mcy = top + 12.5;                              // 1.9.8: a smooth crescent on the x5 grid
-      fshape(ctx, mcx - 5.6, mcy - 5.6, mcx + 5.6, mcy + 5.6, function (u, v) { return inDisc(u, v, mcx, mcy, 5.5) && !inDisc(u, v, mcx + 3, mcy - 1, 4.3); });
-    } else if (info.weather === 'sunny') {                               // 1.9.1 sunny: a sun with turning rays, one small cloud
-      var sunX = W - 34, sunY = top + 16, rot = still ? 0 : Math.floor(tt / 700) % 2;
-      ctx.fillStyle = 'rgba(206,224,110,0.95)';
-      var scx = sunX + 0.5, scy = sunY + 0.5;                            // 1.9.8: a round sun and tapered rays on the x5 grid
-      fshape(ctx, scx - 5.6, scy - 5.6, scx + 5.6, scy + 5.6, function (u, v) { return inDisc(u, v, scx, scy, 5.5); });
-      ctx.fillStyle = RAIN;
-      var rays = [];
-      for (var ra = 0; ra < 8; ra++) { var ang = (ra + rot * 0.5) * Math.PI / 4; rays.push([scx + Math.cos(ang) * 7.4, scy + Math.sin(ang) * 7.4, scx + Math.cos(ang) * 10.2, scy + Math.sin(ang) * 10.2]); }
-      fshape(ctx, scx - 11, scy - 11, scx + 11, scy + 11, function (u, v) { for (var q = 0; q < rays.length; q++) if (inCap(u, v, rays[q][0], rays[q][1], rays[q][2], rays[q][3], 0.6)) return true; return false; });
-      cloud(ctx, Math.round(((tt / 500) % (W + 40)) - 20), top + 12, 0.6);
-    } else {                                                             // day: slow clouds (more of them when cloudy)
-      var n = info.weather === 'clear' || info.weather === 'snow' ? 2 : 4;
-      for (var c = 0; c < n; c++) cloud(ctx, Math.round(((tt / 400 + c * (W + 40) / n) % (W + 40)) - 20), top + 8 + (c % 2) * 14 + (c > 1 ? 6 : 0), 0.6);
+      var who = Math.floor(tt / 3400) % stars.length, ph = (tt % 3400) / 3400;
+      for (var k = 0; k < stars.length; k++) {
+        var sz = (!still && k === who && ph > 0.12 && ph < 0.38) ? 2 : 1;
+        ctx.fillRect(stars[k][0], stars[k][1], sz, sz);
+      }
+      if (!still) {
+        var shot = 14000, slot = Math.floor(tt / shot), sp = tt % shot;
+        if (sp < 850) {
+          var p = sp / 850;
+          var x0 = 16 + skyRand(slot + 4) * (W - 90);
+          var y0 = top + 34 + skyRand(slot + 11) * 30;
+          var hx = x0 + p * 64, hy = y0 - p * 26;
+          ctx.fillStyle = C.lite;
+          for (var i = 0; i < 18; i++) ctx.fillRect(Math.round(hx - i * 3.4), Math.round(hy + i * 1.4), i === 0 ? 3 : 1, 1);
+        }
+      }
+      var moon = orbSpot('night', PP.Game.now(st), top);
+      ctx.fillStyle = C.lite;
+      fshape(ctx, moon.x - 8, moon.y - 8, moon.x + 8, moon.y + 8, function (u, v) { return inDisc(u, v, moon.x, moon.y, 7) && !inDisc(u, v, moon.x + 3.4, moon.y - 1, 5.2); });
+    } else {
+      var sun = orbSpot(info.phase, PP.Game.now(st), top);
+      ctx.fillStyle = C.lite;
+      fshape(ctx, sun.x - 8, sun.y - 8, sun.x + 8, sun.y + 8, function (u, v) { return inDisc(u, v, sun.x, sun.y, 7); });
+      ctx.fillStyle = C.ink;
+      fshape(ctx, sun.x - 8, sun.y - 8, sun.x + 8, sun.y + 8, function (u, v) { return inDisc(u, v, sun.x, sun.y, 7.6) && !inDisc(u, v, sun.x, sun.y, 6.2); });
+      var clouds = w === 'storm' || w === 'rain' ? 4 : w === 'grey' || w === 'cloudy' || w === 'wind' ? 3 : 2;
+      var speed = w === 'wind' || w === 'storm' ? 40 : 90;
+      for (var c = 0; c < clouds; c++) skyCloud(ctx, ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 8 + (c % 2) * 14, w === 'storm' ? 1.2 : 1);
     }
     if (info.rainbow) rainbowArc(ctx, top, bottom);
-    hills(ctx);
-    drawWeather(ctx, info.weather, top, bottom, tt, still);
+    hills(ctx, still ? 0 : tt / 30);
+    if (w === 'wind' && !still) {
+      ctx.fillStyle = C.dark;
+      for (var leaf = 0; leaf < 8; leaf++) {
+        var lx = ((leaf * 37 + tt / 18) % (W + 10)) - 5, ly = top + 20 + (leaf * 11) % 60;
+        ctx.fillRect(lx, ly, 3, 1);
+      }
+    }
+    drawWeather(ctx, w === 'wind' ? 'clear' : w, top, bottom, tt, still);
   }
   /* 1.9.1 weather layers. Every colour keeps ink text >= 3:1 (checked by the update audit). */
   var RAIN = '#5a8a28', CLOUDG = '#628f2c';
@@ -325,14 +367,17 @@
     });
   }
   function rainbowArc(ctx, top, bottom) {
-    var cx = 44, cy = bottom - 2, bands = ['rgba(206,224,110,0.95)', RAIN, 'rgba(206,224,110,0.95)', 'rgba(139,172,15,0.9)'];
+    // A shallow arch across the sky, crown just under the status strip, feet beside the pal.
+    var cx = W / 2, cy = bottom + 8, reach = 112;
+    var bands = [C.ink, C.dark, C.mid, C.lite];
     for (var b = 0; b < bands.length; b++) {
       ctx.fillStyle = bands[b];
-      var rad = 34 - b * 2;
+      var rad = reach - b * 3;
       for (var x = -rad; x <= rad; x++) {
-        var yy = Math.round(Math.sqrt(rad * rad - x * x));
-        if (cy - yy < top + 2) continue;
-        ctx.fillRect(cx + x, cy - yy, 1, 2);
+        var yy = Math.round(Math.sqrt(Math.max(0, rad * rad - x * x)));
+        var py = cy - yy;
+        if (py < top + 1 || py > top + 78) continue;
+        ctx.fillRect(Math.round(cx + x), py, 1, 2);
       }
     }
   }
@@ -463,10 +508,10 @@
     F.draw(ctx, p.name.toUpperCase() + ' ' + (p.sex === 'M' ? '\u2642' : '\u2640'), 3, L.bottomText, C.ink);
     if (p.stage === 'adult') F.draw(ctx, 'LV' + p.level, W - 3, L.bottomText, C.ink, 1, 'right');
 
-    if (!p.lights) {   // lights off: the room goes dark, the status strip stays readable
+    if (!p.lights) {   // lights off: dim the room, but leave the night sky readable
       var top = L.stripEnd;
-      ctx.fillStyle = 'rgba(15,56,15,0.82)'; ctx.fillRect(0, top, W, H - top);
-      if (p.asleep) F.draw(ctx, 'Z z z', px + PS / 2, y + 20, C.mid, 1, 'center');
+      ctx.fillStyle = 'rgba(15,56,15,0.45)'; ctx.fillRect(0, top, W, H - top);
+      if (p.asleep) F.draw(ctx, 'Z z z', px + PS / 2, y + 20, C.lite, 1, 'center');
     }
     drawStrip(ctx, p, t);
   }
@@ -485,8 +530,13 @@
     var k = (t - a.t0) / a.dur, fxX = flip ? px - 20 : px + PS - 12, fy = GROUND - 34;
     fxX = Math.max(0, Math.min(W - 32, fxX));
     if (a.kind === 'eat') {
-      var fd = PP.DATA.foodOf(species), food = a.food === 'snack' ? 'snack' : (k < 0.45 ? fd.fx : fd.bitten);   // 1.9.9: the pal's own diet
-      if (k < 0.85) S.drawFx(ctx, a.food === 'snack' && k > 0.5 ? 'heart' : food, fxX, fy, 2);
+      var fd = PP.DATA.foodOf(species), snack = a.food === 'snack' || a.food === 'cake';
+      var whole = snack ? 'snack' : fd.fx, bitten = snack ? 'snack_bitten' : fd.bitten;
+      var food = k < 0.42 ? whole : bitten;
+      var bob = Math.sin(k * Math.PI * 4) * 3;
+      var fx = px + (flip ? 2 : PS - 50), fy = y + 30 + bob;
+      if (k < 0.82) S.drawFx(ctx, food, fx, fy, 3);
+      else S.drawFx(ctx, 'heart', fx + 8, y + 12 - (k - 0.82) * 20, 2);
     } else if (a.kind === 'look') {        // 2.0.0: a little heart when it smiles at you
       if (t - a.t0 > 900) S.drawFx(ctx, 'heart', px + PS / 2 - 16, y + 2 - Math.min(10, (t - a.t0 - 900) / 60), 2);
     } else if (a.kind === 'happy' || a.kind === 'praise') {
