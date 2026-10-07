@@ -23,7 +23,7 @@
   /* Weighted choice that reacts to mood: tired pals yawn and sit, sad pals mope,
    * very happy pals dance. r1, r2 in [0,1). */
   function pickIdle(p, r1, r2) {
-    var e = p ? p.energy : 80, hap = p ? p.happy : 2, young = p && p.stage === 'baby';
+    var e = p ? p.energy : 80, hap = p ? p.happy : 2;
     var tired = e < ((PP.DATA && PP.DATA.RULES && PP.DATA.RULES.tiredEnergy) || 30);
     var w = tired ? {     // 1.8.3: a tired pal droops, yawns and nods off instead of standing around bright-eyed
       stand: 0, look: 0.6, sit: 3, yawn: 4, scratch: 0, bored: 0, dance: 0, quirk: 0, sleepy: 4, droop: 4, front: 0.4
@@ -85,15 +85,14 @@
   }
   function weather(p, base) {
     base = base || 'clear';
-    var calm = base === 'snow' ? 'snow' : base === 'rain' ? 'cloudy' : 'clear';
+    var calm = base === 'rain' ? 'cloudy' : 'clear';
     if (!p || p.fate || p.stage === 'egg') return calm;
-    var g = gloom(p);
-    if (g >= 6) return 'storm';
     if (p.sick) return 'drizzle';
-    if (g >= 4) return 'rain';
-    if (g >= 2) return 'grey';
-    if (base !== 'snow' && p.happy >= 4 && p.hunger >= 3 && p.poop === 0 && !p.fake) return 'sunny';
-    return calm;
+    if (p.happy <= 0 || (p.hunger <= 0 && p.poop >= 2)) return 'storm';
+    if (p.happy <= 1) return 'rain';
+    if (p.happy <= 2) return 'grey';
+    if (p.happy >= 4 && p.hunger >= 3 && p.poop === 0 && !p.fake) return 'sunny';
+    return p.happy >= 3 ? 'wind' : calm;
   }
   /* A rainbow shows for a while when the sky turns sunny soon after it was wet.
    * memo = {} kept by the renderer; t in ms. Returns true while the rainbow is up. */

@@ -154,6 +154,9 @@
     p.hunger = Math.max(2, Math.min(4, p.hunger || 2));
     p.happy = Math.max(2, Math.min(4, p.happy || 2));
     p.energy = Math.max(50, p.energy || 50);
+    // 2.3.21: a fresh start also means the lights on and no night in progress - a pal that died in its sleep with the
+    // lights off used to come back in the dark and fall straight into a nap
+    p.lights = true; p.wokeAt = null; p.night = null; p.holdTo = null; p.stepAt = null;
     p.lastTickAt = now(state, opts.now);
     state.slots[slot] = p;
     if (!state.slots[state.active] || state.slots[state.active].fate) state.active = slot;

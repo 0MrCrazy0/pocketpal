@@ -261,8 +261,7 @@
     { row: 2, parts: [['sick']], name: 'Sick', text: 'The skull: give medicine.' },
     { row: 2, parts: [['poop'], ['text', '2']], name: 'Poop + count', text: 'Clean it up. It flashes at 2 or more.' },
     { row: 2, parts: [['attn']], name: 'Call (!)', text: 'Flashing: your pal needs you. Answer within 30 minutes.' },
-    { row: 2, parts: [['text', 'ZZ']], name: 'Asleep', text: 'Turn the lights off.' },
-    { row: 2, parts: [['moon']], name: 'Night', text: 'It is bedtime - your pal will fall asleep soon.' },
+    { row: 2, parts: [['moon']], name: 'Asleep / bedtime', text: 'Your pal is asleep, or it is its bedtime. Turn the lights off.' },
     { row: 2, parts: [['tired']], name: 'Tired (Zz)', text: 'Low energy: lights off for a nap, or feed it.' }
   ];
   var iconCache = {};

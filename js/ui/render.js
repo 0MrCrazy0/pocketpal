@@ -35,7 +35,7 @@
   /* ---- compact status strip under the clock (1.8.4: two rows)
    *  row 1: hunger hearts, happiness hearts, energy bolt + 4 pips, stage + age
    *  row 2: discipline flag + bar, weight ('WT' + LO / OK / HI), then only what applies now:
-   *         sick, poop + count, ! needs attention, ZZ asleep (or moon at night), Zz tired */
+   *         sick, poop + count, ! needs attention, moon asleep or bedtime (2.3.21: no 'ZZ' text), Zz tired */
   var MINI = {
     heart: ['.#.#.', '#####', '#####', '.###.', '..#..'],
     empty: ['.#.#.', '#.#.#', '#...#', '.#.#.', '..#..'],
@@ -102,9 +102,8 @@
       if (p.sick) row2('sick', 7);
       if (p.poop > 0) { row2('poop', 7); x2 -= 1; row2('poopN', F.width(String(p.poop)), { text: String(p.poop) }); }
       if (!p.fate && PP.Care.attention(p).length) row2('attn', 2);
-      if (p.asleep) row2('zzz', F.width('ZZ'), { text: 'ZZ' });
-      else if (night) row2('moon', 5);
-      if (PP.Care.isTired(p)) row2('tired', 9);
+      if (p.asleep || night) row2('moon', 5);   // 2.3.21: asleep shows the moon too (the 'ZZ' text is gone; the pal's sprite Zzz's show sleep)
+      if (PP.Care.isTired(p) && !p.asleep) row2('tired', 9);   // 2.3.21: no 'Zz' glyph in the strip while it sleeps
     }
     var sa = stageAge(p), sw = F.width(sa);
     b.push({ k: 'stage', x: W - 3 - sw, w: sw, text: sa });
@@ -237,7 +236,7 @@
   var bowMemo = {};
   function dayWeather(st, now) {
     var r = PP.util.roll(st.seed, PP.Shop.dayOf(now), 'weather');
-    return r < 0.18 ? 'rain' : r < 0.26 ? 'snow' : 'clear';      // the 1.9.0 day roll (snow chance unchanged)
+    return r < 0.22 ? 'rain' : 'clear';
   }
   function sceneInfo(st) {
     if (sceneForce) return sceneForce;
@@ -253,14 +252,52 @@
     return { phase: phase, weather: w, base: base, rainbow: bow };
   }
   function hills(ctx, shift) {
-    var top = L.floorLine, s = shift || 0;
+    var top = FLOOR_TOP, s = shift || 0;   // 2.3.21: the far hills now stand on the horizon of the new floor
     ctx.fillStyle = C.dark;
     for (var x = 0; x < W; x++) {
       var hgt = Math.round(8 + 6 * Math.sin((x + s) / 34 + 0.6) + 3 * Math.sin((x + s) / 13 + 2));
-      ctx.fillRect(x, top - hgt, 1, hgt);
+      if (hgt > 0) ctx.fillRect(x, top - hgt, 1, hgt);
     }
-    ctx.fillStyle = C.ink;
-    for (var g = 0; g < W; g += 7) ctx.fillRect(g, top - 2, 1, 2);
+  }
+  /* 2.3.21: a pixel-art FLOOR the pal stands on, and two TREES in the LCD style. Day: a mid-green ground strip with a
+   * dark edge, tufts and pebbles; round trees with a lit side and a shaded side. Night: the ground goes dark and the
+   * trees become ink silhouettes. They are static (only the far hills scroll), sit clear of the poop pile on the right
+   * and of the sun / moon / cloud band, and the pal, poop, Zzz's and weather are all drawn over them. */
+  var FLOOR_TOP = 131, TREES = [{ x: 40, h: 26, r: 9 }, { x: 148, h: 20, r: 7 }];
+  function floorStrip(ctx, night) {
+    var top = FLOOR_TOP, bot = L.floorLine, x;
+    ctx.fillStyle = night ? C.dark : C.mid; ctx.fillRect(0, top, W, bot - top);
+    ctx.fillStyle = night ? C.ink : C.dark; ctx.fillRect(0, top, W, 1);                 // the edge of the ground
+    for (x = 3; x < W; x += 11) { ctx.fillRect(x, top - 1, 1, 1); ctx.fillRect(x + 2, top - 2, 1, 2); ctx.fillRect(x + 4, top - 1, 1, 1); }   // grass tufts
+    ctx.fillStyle = night ? C.ink : C.dark;
+    for (x = 0; x < W; x += 9) {                                                          // pebbles and soil marks
+      var r = (x * 7) % 5;
+      ctx.fillRect(x + r, top + 3 + (x % 3), 2, 1);
+      if (x % 2 === 0) ctx.fillRect(x + 5 - r, top + 6, 1, 1);
+    }
+  }
+  function treeArt(ctx, t, night) {
+    var cx = t.x, base = FLOOR_TOP, cy = base - t.h + t.r, r = t.r;
+    function inCanopy(u, v) {
+      return inDisc(u, v, cx, cy, r) || inDisc(u, v, cx - r * 0.7, cy + r * 0.45, r * 0.68) || inDisc(u, v, cx + r * 0.7, cy + r * 0.45, r * 0.68);
+    }
+    function inTrunk(u, v) { return u >= cx - 1.5 && u < cx + 1.5 && v >= cy + r * 0.6 && v < base; }
+    for (var y = Math.floor(cy - r - 1); y < base; y++) {
+      for (var x = Math.floor(cx - r * 1.5 - 1); x <= Math.ceil(cx + r * 1.5 + 1); x++) {
+        var u = x + 0.5, v = y + 0.5, can = inCanopy(u, v), tr = !can && inTrunk(u, v);
+        if (!can && !tr) continue;
+        var edge = can ? !(inCanopy(u - 1, v) && inCanopy(u + 1, v) && inCanopy(u, v - 1) && inCanopy(u, v + 1))
+                       : !(inTrunk(u - 1, v) && inTrunk(u + 1, v));
+        var col;
+        if (night) col = C.ink;                                                              // a silhouette at night
+        else if (edge) col = C.ink;
+        else if (tr) col = C.dark;
+        else if ((u - cx) + (v - cy) > r * 0.55) col = C.dark;                               // shaded lower right
+        else if ((u - cx) + (v - cy) < -r * 0.6) col = C.lite;                               // lit upper left
+        else col = C.mid;
+        ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1);
+      }
+    }
   }
   function orbSpot(phase, now, top) {
     var d = new Date(now), h = d.getHours() + d.getMinutes() / 60, u;
@@ -272,11 +309,11 @@
   function skyCloud(ctx, x, y, scale) {
     var s = scale || 1;
     ctx.fillStyle = C.lite;
-    fshape(ctx, x, y - 3 * s, x + 22 * s, y + 5 * s, function (u, v) {
+    fshape(ctx, x - 2, y - 8 * s, x + 26 * s, y + 8 * s, function (u, v) {
       return inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
     });
     ctx.fillStyle = C.ink;
-    fshape(ctx, x - 1, y - 4 * s, x + 23 * s, y + 6 * s, function (u, v) {
+    fshape(ctx, x - 3, y - 9 * s, x + 27 * s, y + 9 * s, function (u, v) {
       var inn = inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
       var out = inDisc(u, v, x + 6 * s, y + 1, 5 * s) || inDisc(u, v, x + 12 * s, y, 6 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 4.3 * s);
       return out && !inn;
@@ -300,13 +337,13 @@
     var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-9, k = Math.max(0, Math.min(1, ((u - ax) * dx + (v - ay) * dy) / L2));
     var ex = u - ax - k * dx, ey = v - ay - k * dy; return ex * ex + ey * ey <= r * r;
   }
+  function skyRand(n) { var x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }   // 2.3.21: was declared inside a block (lint)
   function drawScene(ctx, st, t) {
     var info = sceneInfo(st), top = L.stripEnd, bottom = L.floorLine, still = reducedMotion();
     var tt = still ? 0 : t, w = info.weather;
     if (info.phase === 'night') {
       ctx.fillStyle = 'rgba(15,56,15,0.55)'; ctx.fillRect(0, top, W, bottom - top);
       ctx.fillStyle = C.lite;
-      function skyRand(n) { var x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
       var stars = [], cell = 18;
       for (var gx = 0; gx < 11; gx++) {
         for (var gy = 0; gy < 3; gy++) {
@@ -341,10 +378,12 @@
       fshape(ctx, sun.x - 8, sun.y - 8, sun.x + 8, sun.y + 8, function (u, v) { return inDisc(u, v, sun.x, sun.y, 7.6) && !inDisc(u, v, sun.x, sun.y, 6.2); });
       var clouds = w === 'storm' || w === 'rain' ? 4 : w === 'grey' || w === 'cloudy' || w === 'wind' ? 3 : 2;
       var speed = w === 'wind' || w === 'storm' ? 40 : 90;
-      for (var c = 0; c < clouds; c++) skyCloud(ctx, ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 8 + (c % 2) * 14, w === 'storm' ? 1.2 : 1);
+      for (var c = 0; c < clouds; c++) skyCloud(ctx, ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 16 + (c % 2) * 12, 1);
     }
-    if (info.rainbow) rainbowArc(ctx, top, bottom);
     hills(ctx, still ? 0 : tt / 30);
+    if (info.rainbow) rainbowArc(ctx, top, FLOOR_TOP);   // 2.3.21: after the far hills, so its feet come down to the ground
+    TREES.forEach(function (tr) { treeArt(ctx, tr, info.phase === 'night'); });
+    floorStrip(ctx, info.phase === 'night');
     if (w === 'wind' && !still) {
       ctx.fillStyle = C.dark;
       for (var leaf = 0; leaf < 8; leaf++) {
@@ -356,28 +395,26 @@
   }
   /* 1.9.1 weather layers. Every colour keeps ink text >= 3:1 (checked by the update audit). */
   var RAIN = '#5a8a28', CLOUDG = '#628f2c';
-  function cloud(ctx, x, y, a, col) {
-    ctx.fillStyle = col || 'rgba(206,224,110,' + a + ')';             // 1.9.8: a puffy cloud (same 18 x 6 box) on the x5 grid
-    fshape(ctx, x, y - 2.4, x + 18, y + 4, function (u, v) { return inCap(u, v, x + 2, y + 1.6, x + 16, y + 1.6, 2.2) || inDisc(u, v, x + 8.6, y + 0.4, 3.2) || inDisc(u, v, x + 5, y + 1, 2.4) || inDisc(u, v, x + 12.4, y + 1, 2.4); });
-  }
   function bigCloud(ctx, x, y, col) {
     ctx.fillStyle = col;
-    fshape(ctx, x, y - 5, x + 34, y + 6, function (u, v) {             // 1.9.8: a rounded storm cloud (same 34 x 11 box)
+    fshape(ctx, x - 2, y - 8, x + 38, y + 10, function (u, v) {             // 1.9.8: a rounded storm cloud (same 34 x 11 box)
       return inCap(u, v, x + 3, y + 2.6, x + 31, y + 2.6, 3.2) || inDisc(u, v, x + 11.5, y - 0.2, 4) || inDisc(u, v, x + 21.5, y - 1.2, 4.6) || inDisc(u, v, x + 28, y + 1.2, 3.2);
     });
   }
-  function rainbowArc(ctx, top, bottom) {
-    // A shallow arch across the sky, crown just under the status strip, feet beside the pal.
-    var cx = W / 2, cy = bottom + 8, reach = 112;
+  function rainbowArc(ctx, top, ground) {
+    // 2.3.21: a full arch whose two feet come right down to the ground line (it used to stop in mid-air). Crown just
+    // under the status strip; each band is a solid 3 px ring, drawn column by column so there are no gaps on the slopes.
+    var cx = W / 2, cy = ground, ry = ground - top - 10, kx = 104 / ry;   // a slightly wide arch: feet near both edges
     var bands = [C.ink, C.dark, C.mid, C.lite];
     for (var b = 0; b < bands.length; b++) {
       ctx.fillStyle = bands[b];
-      var rad = reach - b * 3;
-      for (var x = -rad; x <= rad; x++) {
-        var yy = Math.round(Math.sqrt(Math.max(0, rad * rad - x * x)));
-        var py = cy - yy;
-        if (py < top + 1 || py > top + 78) continue;
-        ctx.fillRect(Math.round(cx + x), py, 1, 2);
+      var ro = ry - b * 2, ri = ro - 2, rox = Math.round(ro * kx);
+      for (var x = -rox; x <= rox; x++) {
+        var ux = x / kx, yo = Math.sqrt(Math.max(0, ro * ro - ux * ux)), yi = Math.abs(ux) < ri ? Math.sqrt(ri * ri - ux * ux) : 0;
+        var y0 = Math.round(cy - yo), y1 = Math.round(cy - yi);
+        if (y0 < top + 1) y0 = top + 1;
+        if (y1 > ground) y1 = ground;
+        if (y1 > y0) ctx.fillRect(Math.round(cx + x), y0, 1, y1 - y0);
       }
     }
   }
@@ -387,7 +424,7 @@
       ctx.fillStyle = 'rgba(48,98,48,' + (w === 'storm' ? 0.26 : w === 'rain' ? 0.18 : 0.12) + ')';
       ctx.fillRect(0, top, W, h);
       var nc = w === 'storm' ? 4 : 3;
-      for (i = 0; i < nc; i++) bigCloud(ctx, Math.round(((tt / (w === 'storm' ? 160 : 600) + i * (W + 50) / nc) % (W + 50)) - 40), top + 6 + (i % 2) * 7, w === 'grey' ? 'rgba(206,224,110,0.8)' : CLOUDG);
+      for (i = 0; i < nc; i++) bigCloud(ctx, Math.round(((tt / (w === 'storm' ? 160 : 600) + i * (W + 50) / nc) % (W + 50)) - 40), top + 16 + (i % 2) * 8, w === 'grey' ? 'rgba(206,224,110,0.8)' : CLOUDG);
     }
     if (w === 'rain' || w === 'storm' || w === 'drizzle') {
       // clearly falling rain: slanted streaks that drop fast, plus little splashes on the ground
@@ -486,6 +523,7 @@
     if (react === 'shiver') px += Math.floor(t / 70) % 2 ? 1 : -1;
     else if (react === 'hop') { y -= Math.round(5 * Math.abs(Math.sin((t % 1200) / 1200 * Math.PI * 2))); pose = 'happy'; frame = Math.floor(t / 250); }
     app.reaction = react;
+    if (app.anim && app.anim.kind === 'eat') flip = eatFacing(p.species, S.stageKeyOf(p), px, flip, p.poop);   // 2.3.21: room for the food
     S.draw(ctx, p.species, S.stageKeyOf(p), pose, frame, px, y, PET, flip);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
 
@@ -502,7 +540,7 @@
     if (!app.anim && p.lights) needBubble(ctx, PP.Care.attention(p).filter(function (k) { return k !== 'poop' || p.poop >= 1; }), px, y, flip, t, p.species);
 
     // action FX
-    if (app.anim) drawAnimFx(ctx, app.anim, t, px, y, flip, p.species);
+    if (app.anim) drawAnimFx(ctx, app.anim, t, px, y, flip, p.species, S.stageKeyOf(p));
 
     dotted(ctx, L.floorLine);
     F.draw(ctx, p.name.toUpperCase() + ' ' + (p.sex === 'M' ? '\u2642' : '\u2640'), 3, L.bottomText, C.ink);
@@ -511,7 +549,7 @@
     if (!p.lights) {   // lights off: dim the room, but leave the night sky readable
       var top = L.stripEnd;
       ctx.fillStyle = 'rgba(15,56,15,0.45)'; ctx.fillRect(0, top, W, H - top);
-      if (p.asleep) F.draw(ctx, 'Z z z', px + PS / 2, y + 20, C.lite, 1, 'center');
+      // 2.3.21: no 'Z z z' TEXT here any more - the sprite Zzz's (drawFx 'zzz' / 'zzz2' above the pal) say it is asleep
     }
     drawStrip(ctx, p, t);
   }
@@ -526,17 +564,49 @@
     ctx.fillStyle = C.lite || C.bg; ctx.fillRect((W - mw) / 2, my, mw, 9);
     F.draw(ctx, msg, W / 2, my + 1, C.ink, 1, 'center');
   }
-  function drawAnimFx(ctx, a, t, px, y, flip, species) {
+  /* 2.3.21: where each pal's mouth is in its eat / chew frames (LCD px from the sprite's top-left, facing right):
+   * [front edge, mouth height], stages baby .. adult_secret. Measured from the sheets (tools: see CHANGELOG 2.3.21).
+   * The food sits just in front of the mouth instead of being drawn over the face. */
+  var MOUTH = {
+    croc: [[84, 69], [88, 68], [92, 68], [95, 72], [95, 72], [95, 72], [95, 72]],
+    lion: [[89, 60], [89, 53], [89, 46], [94, 41], [94, 41], [90, 41], [94, 41]],
+    eagle: [[83, 62], [80, 48], [83, 44], [80, 41], [80, 41], [80, 41], [80, 41]],
+    elephant: [[91, 64], [95, 61], [95, 59], [95, 57], [95, 57], [94, 57], [95, 57]],
+    bear: [[94, 61], [95, 63], [95, 62], [94, 62], [94, 62], [94, 62], [94, 62]],
+    wolf: [[90, 57], [92, 52], [91, 48], [95, 44], [95, 44], [95, 44], [95, 44]]
+  };
+  var MOUTH_STAGES = ['baby', 'child', 'teen', 'adult_bad', 'adult_good', 'adult_perfect', 'adult_secret'];
+  var FOOD = 32, BITE = 6;            // the food cell is drawn 32 px wide; it overlaps the front of the mouth by 6 px
+  function mouthAt(species, stageKey) {
+    var row = MOUTH[species], i = MOUTH_STAGES.indexOf(stageKey);
+    return row && i >= 0 ? row[i] : [90, 52];
+  }
+  /* Top-left of the food while eating (pal at px, y; flip = facing left). Kept on screen and above the floor line. */
+  function foodSpot(species, stageKey, px, y, flip) {
+    var m = mouthAt(species, stageKey);
+    var x = flip ? px + PS - m[0] - FOOD + BITE : px + m[0] - BITE;
+    var fy = Math.min(GROUND - FOOD, y + m[1] - FOOD / 2);
+    return [Math.max(0, Math.min(W - FOOD, x)), fy];
+  }
+  /* Facing for the eat animation: turn towards the open side if the food would not fit in front of the mouth
+   * (right: the screen edge, or the poop pile when there is one). */
+  function eatFacing(species, stageKey, px, flip, poop) {
+    var m = mouthAt(species, stageKey), room = FOOD - BITE, right = poop > 0 ? poopAt(0)[0] : W;
+    if (!flip && px + m[0] + room > right) return true;
+    if (flip && px + PS - m[0] - room < 0) return false;
+    return flip;
+  }
+  function drawAnimFx(ctx, a, t, px, y, flip, species, stageKey) {
     var k = (t - a.t0) / a.dur, fxX = flip ? px - 20 : px + PS - 12, fy = GROUND - 34;
     fxX = Math.max(0, Math.min(W - 32, fxX));
     if (a.kind === 'eat') {
       var fd = PP.DATA.foodOf(species), snack = a.food === 'snack' || a.food === 'cake';
       var whole = snack ? 'snack' : fd.fx, bitten = snack ? 'snack_bitten' : fd.bitten;
       var food = k < 0.42 ? whole : bitten;
-      var bob = Math.sin(k * Math.PI * 4) * 3;
-      var fx = px + (flip ? 2 : PS - 50), fy = y + 30 + bob;
-      if (k < 0.82) S.drawFx(ctx, food, fx, fy, 3);
-      else S.drawFx(ctx, 'heart', fx + 8, y + 12 - (k - 0.82) * 20, 2);
+      // 2.3.21: in front of the mouth at 2x (it was drawn 3x over the face); a small bob while it is being eaten
+      var spot = foodSpot(species, stageKey, px, y, flip), bob = Math.round(Math.sin(k * Math.PI * 4) * 2);
+      if (k < 0.82) S.drawFx(ctx, food, spot[0], Math.min(GROUND - FOOD, spot[1] + bob), 2);
+      else S.drawFx(ctx, 'heart', spot[0], spot[1] - 14 - (k - 0.82) * 20, 2);
     } else if (a.kind === 'look') {        // 2.0.0: a little heart when it smiles at you
       if (t - a.t0 > 900) S.drawFx(ctx, 'heart', px + PS / 2 - 16, y + 2 - Math.min(10, (t - a.t0 - 900) / 60), 2);
     } else if (a.kind === 'happy' || a.kind === 'praise') {
@@ -647,5 +717,5 @@
 
   PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
     statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI, mini: mini, poopAt: poopAt,
-    sceneInfo: sceneInfo, drawScene: drawScene, forceScene: function (v) { sceneForce = v || null; } };
+    sceneInfo: sceneInfo, drawScene: drawScene, FLOOR_TOP: FLOOR_TOP, TREES: TREES, foodSpot: foodSpot, eatFacing: eatFacing, mouthAt: mouthAt, forceScene: function (v) { sceneForce = v || null; } };
 })(typeof window !== 'undefined' ? window : globalThis);

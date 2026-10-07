@@ -236,12 +236,14 @@
 
   /* 1.8.3: only poses whose eyes are OPEN in every frame of every stage (tests/minigames.test.js checks the
    * sprite-faces fixture). 1.8.2 used happy / sleep / eat / dance, whose closed or ^-shaped eyes looked like a line or a dot. */
-  var MEM_POSES = ['idle', 'surprised', 'angry', 'sad', 'attack'];
+  /* 2.3.21: 'attack' is drawn with the angry picture since 2.3.5 (see PP.Sprites.shownPose), so two of the five cards showed
+   * the same pal - only the symbol told them apart. 'look' (turning to face you, eyes open) is a picture of its own. */
+  var MEM_POSES = ['idle', 'surprised', 'angry', 'sad', 'look'];
   /* 1.9.9: at card size the five poses looked almost the same (the young elephant's idle and attack were
    * pixel-for-pixel alike), so pairs could not be told apart even in the preview. Every pose now carries its own big
    * mood symbol (a heart, a '!', an anger mark, a sweat drop, a spark). The pal is drawn smaller under it, clipped
    * to the card. */
-  var MEM_BADGE = { idle: 'heart', surprised: 'call', angry: 'anger', sad: 'sweat', attack: 'spark' }, CARD_PAL = 1;
+  var MEM_BADGE = { idle: 'heart', surprised: 'call', angry: 'anger', sad: 'sweat', look: 'spark' }, CARD_PAL = 1;
   var CARD_W = 50, CARD_H = 54, CARD_X0 = 2, CARD_DX = 54, CARD_Y0 = 24, CARD_DY = 58, CARD_COLS = 4;
   function memDeal(g) {
     var bag = MEM_POSES.slice(), cards = [];

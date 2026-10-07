@@ -309,7 +309,7 @@
     if (action === 'lights' && r.asleepUntil != null) r.msg = p.name + ' is asleep until ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock) + '. Lights off lets it rest.';
     // 2.2.0: woken early at night - say what happens next
     if (action === 'lights' && r.early) r.msg = p.name + (r.grumpy ? ' wakes up grumpy! Happy -1. ' : ' is up again. ') + 'It dozes off again by ' + PP.Time.hm(r.backBy, App.state.settings.clock) + ' - lights off puts it back to bed.';
-    if (action === 'lights' && r.resleep) r.msg = 'Lights off - ' + p.name + ' goes back to sleep. Zzz...';
+    if (action === 'lights' && r.resleep) r.msg = 'Lights off - ' + p.name + ' goes back to sleep.';   // 2.3.21: no 'Zzz' text
     App.toast(r.msg);
     UI.close();
     var now = performance.now();
@@ -330,7 +330,7 @@
       App.anim = { kind: 'sad', pose: 'angry', t0: now, dur: 1800 };
       PP.Audio.play('no');
     } else if (action === 'lights' && r.resleep) {
-      App.anim = { kind: 'stillAsleep', t0: now, dur: 1600, text: 'Z z z' };
+      App.anim = null;                 // 2.3.21: no 'Z z z' text banner - the sleeping sprite and its Zzz's show it
       PP.Audio.play('lullaby');
     } else if (action === 'lights' && r.woke) {          // 1.9.1: lights on woke it up
       if (r.from === 'night') App.morning(r.report, false);
@@ -338,7 +338,8 @@
     } else if (action === 'lights' && r.asleepUntil != null) {
       App.anim = { kind: 'stillAsleep', t0: now, dur: 3000, text: 'ASLEEP TILL ' + PP.Time.hm(r.asleepUntil, App.state.settings.clock, { lcd: true }) };
       PP.Audio.play('ok');
-    } else PP.Audio.play(!r.ok ? 'no' : action === 'snack' ? 'snack' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
+    // 2.3.21: the cheerful snack jingle only for a snack it enjoyed - an overfed snack (care mistake / tummy ache) sounds sad
+    } else PP.Audio.play(!r.ok ? 'no' : action === 'snack' && r.anim === 'eat' ? 'snack' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
     refreshIcons(); checkAttention(); App.save();
   };
   /* Items from the Pal Store bag (Feed / Medicine menus and the Bag). */
@@ -353,7 +354,7 @@
       var kind = r.anim || 'happy';
       App.anim = { kind: kind, pose: kind === 'refuse' ? 'refuse' : kind === 'med' ? 'happy' : null, food: it && it.kind === 'food' ? (id === 'cake' ? 'snack' : 'meal') : id, t0: performance.now(), dur: kind === 'eat' || kind === 'med' ? 1800 : 1500 };
     }
-    PP.Audio.play(!r.ok ? 'no' : id === 'cake' ? 'snack' : r.anim === 'eat' ? 'eat' : 'happy');
+    PP.Audio.play(!r.ok ? 'no' : id === 'cake' && r.anim === 'eat' ? 'snack' : r.anim === 'eat' ? 'eat' : r.anim === 'sad' || r.anim === 'sick' ? 'sad' : 'happy');   // 2.3.21: an overfed cake is not a treat
     refreshIcons(); checkAttention(); App.save();
     if (!r.ok) UI.refresh();
   };

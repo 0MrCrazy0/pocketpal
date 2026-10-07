@@ -117,7 +117,9 @@
     if (id === 'cake') {
       if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       r = PP.Care.feedSnack(p);                // same overfeeding rule as a free snack
-      if (r.ok) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.weight += 1; if (r.anim === 'happy') r = res(true, 'Berry Cake! Happy +2', 'eat'); }
+      // 2.3.21: the free snack answers with the 'eat' animation since 2.3.6, so the old check for 'happy' never matched and
+      // a cake that gave happy +2 still said 'Sweet! Happy +1'. An overfed cake keeps the snack's warning.
+      if (r.ok) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.weight += 1; if (r.anim === 'eat') r = res(true, 'Berry Cake! Happy +2', 'eat'); }
     } else if (id === 'feast') {
       if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       if (p.fake) return res(false, 'Tantrum! It refuses food', 'refuse');
@@ -125,6 +127,7 @@
       p.hunger = Math.min(R.maxHearts, p.hunger + 2); p.happy = Math.min(R.maxHearts, p.happy + 1);
       p.energy = Math.min(100, p.energy + 15); p.weight += 2;
       r = res(true, 'A feast! Hunger +2, happy +1', 'eat');
+      if (PP.Daily) PP.Daily.record(state, 'meal', PP.Game.now(state));   // 2.3.21: a feast is a meal too (the 'Feed 2 meals' goal ignored it)
     } else if (id === 'tonic') {
       if (p.asleep) return Object.assign(res(false, PP.Care.SLEEP_MSG), { asleep: true });
       if (p.energy >= 100) return res(false, 'Already full of energy');

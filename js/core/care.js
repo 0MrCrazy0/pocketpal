@@ -160,7 +160,7 @@
       ev.push({ t: 'wake', from: 'night', report: nightReport(p) });
     }
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
-      p.asleep = true; p.sleepKind = 'nap'; ev.push({ t: 'nap' });
+      p.asleep = true; p.sleepKind = 'nap'; p.fake = null; ev.push({ t: 'nap' });   // 2.3.21: a pal does not sulk in its sleep (every other way to fall asleep ends a tantrum too)
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
       p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' });
     }
@@ -401,7 +401,7 @@
       p.sick = false; p.sickDoses = 0; if (p.need) p.need.sick = null;
       return res(true, 'Cured!', 'happy');
     }
-    return res(true, 'One more dose needed', 'sick');
+    return res(true, 'Dose ' + p.sickDoses + ' of ' + need + '. One more needed', 'sick');
   }
   /* Lights. 2.2.0: switching them ON always wakes the pal (the 1.9.1 rule kept it asleep in its sleep hours, which
    * players read as "stuck - it won't wake up"):
@@ -422,11 +422,11 @@
       if (inNight && !(p.asleep && p.sleepKind === 'night')) {
         p.wokeAt = null; p.asleep = true; p.sleepKind = 'night'; p.fake = null;
         if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
-        return Object.assign(res(true, 'Lights off - straight to sleep. Zzz...', null), { resleep: true });
+        return Object.assign(res(true, 'Lights off - straight to sleep.', null), { resleep: true });
       }
       if (!inNight && p.energy < R.napEnergy && !p.asleep) {
         p.asleep = true; p.sleepKind = 'nap'; p.fake = null;
-        return Object.assign(res(true, 'Lights off - a nap. Zzz...', null), { resleep: true });
+        return Object.assign(res(true, 'Lights off - a nap.', null), { resleep: true });
       }
       return res(true, 'Lights off', null);
     }
