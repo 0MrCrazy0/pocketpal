@@ -501,7 +501,7 @@
     var p = pet(), R = D.RULES;
     var a = p ? PP.Care.canExercise(p, 'train') : { ok: false, msg: 'No pal' }, b = p ? PP.Care.canExercise(p, 'game') : a;
     return { title: 'TRAIN & PLAY', html: p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '</p>' : '', items: [
-      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Win: happy +1, discipline +3%' + (p && p.stage === 'adult' ? ', XP' : ''), disabled: !a.ok, reason: a.msg,
+      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Win: happy +1, discipline +5%' + (p && p.stage === 'adult' ? ', XP' : ''), disabled: !a.ok, reason: a.msg,
         act: function () { close(); App().startMini('train'); } },
       { label: 'Left or Right?', sub: '-' + R.costs.game + ' energy. Watch the eyes. Win: happy +2', disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('game'); } },
       { label: 'Memory', sub: '-' + R.costs.game + ' energy. Repeat the looks: A = left, B = right. Win: happy +2', disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('memory'); } },
@@ -514,7 +514,7 @@
   function discMenu() {
     return { title: 'DISCIPLINE', html: '<p class="tip">Scold a tantrum. Praise after training or a refused meal.</p>', items: [
       { label: 'Scold', sub: 'Tantrum: +25% discipline. Wrong time: happy -1', act: function () { close(); App().doAct('scold'); } },
-      { label: 'Praise', sub: 'Earned praise: +12% discipline and happy. Empty praise spoils a little.', act: function () { close(); App().doAct('praise'); } }
+      { label: 'Praise', sub: 'After care or training: +12%. Any time: +4% once an hour. A tantrum: spoils.', act: function () { close(); App().doAct('praise'); } }
     ] };
   }
 

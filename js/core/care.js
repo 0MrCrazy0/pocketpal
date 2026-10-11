@@ -364,6 +364,7 @@
     }
     p.hunger++; p.weight += 1;
     p.energy = Math.min(100, p.energy + R.energyFood.meal);
+    deed(p);   // feeding a hungry pal is worth praise
     return res(true, 'Yum! Hunger +1', 'eat');
   }
   function feedSnack(p) {
@@ -385,6 +386,7 @@
     if (p.poop <= 0) return res(false, 'Already clean');
     p.poop = 0; p.acc.poop = Math.min(p.acc.poop, 0.5);
     if (p.need) p.need.poop = null;
+    deed(p);
     return res(true, 'All clean!', 'happy');
   }
   function medicine(p) {
@@ -421,6 +423,7 @@
       if (inNight && !(p.asleep && p.sleepKind === 'night')) {
         p.wokeAt = null; p.asleep = true; p.sleepKind = 'night'; p.fake = null;
         if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
+        deed(p);
         return Object.assign(res(true, 'Lights off - straight to sleep.', null), { resleep: true });
       }
       if (!inNight && p.energy < R.napEnergy && !p.asleep) {
@@ -468,15 +471,23 @@
     if (p.asleep) return asleepRes();
     var open = praiseOpen(p);
     p.praiseReady = false;
-    if (open && !p.fake) {
+    if (p.fake) {
+      p.discipline = Math.max(0, p.discipline - R.praise.spoil);
+      return res(false, 'Praising a tantrum spoils it. Discipline -' + R.praise.spoil + '%', 'sad');
+    }
+    if (open) {
       p.discipline = Math.min(100, p.discipline + R.praise.earned);
       p.happy = Math.min(R.maxHearts, p.happy + 1);
       return res(true, 'Good pal! Discipline +' + R.praise.earned + '%', 'happy');
     }
-    p.discipline = Math.max(0, p.discipline - R.praise.spoil);
-    // empty praise still cheers it up, but at most once an hour (it is not free happiness)
-    if (p.clock - (p.spoilAt == null ? -1e9 : p.spoilAt) >= R.praise.spoilHappyMin) { p.spoilAt = p.clock; p.happy = Math.min(R.maxHearts, p.happy + 1); }
-    return res(false, (p.fake ? 'Praising a tantrum spoils it.' : 'Spoiled a little.') + ' Discipline -' + R.praise.spoil + '%', p.fake ? 'sad' : 'happy');
+    // a plain praise still builds a little, once an hour, so the meter is not stuck at 0
+    if (p.clock - (p.spoilAt == null ? -1e9 : p.spoilAt) >= R.praise.spoilHappyMin) {
+      p.spoilAt = p.clock;
+      p.discipline = Math.min(100, p.discipline + 4);
+      p.happy = Math.min(R.maxHearts, p.happy + 1);
+      return res(true, 'Nice! Discipline +4%', 'happy');
+    }
+    return res(true, 'It likes that. Praise again in a bit.', 'happy');
   }
   /* Mini-game / training results. kind: 'train' | 'game'. success: bool */
   function canExercise(p, kind) {
@@ -500,8 +511,8 @@
       p.trainDay.n++;
       PP.Evolution.noteTraining(p);                         // 1.9.7: training streak (Aurorawing)
       var full = p.trainDay.n <= R.trainDayFull;
-      if (success && full) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.discipline = Math.min(100, p.discipline + 3); deed(p); }
-      msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +3%' : 'Nice try!';
+      if (success && full) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.discipline = Math.min(100, p.discipline + 5); deed(p); }
+      msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +5%' : 'Nice try!';
       if (p.stage === 'adult') {
         var xp = !full ? 1 : success ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3);
         var lv = PP.Stats.addXp(p, xp);

@@ -374,12 +374,16 @@
       }
       if (!still) {
         var shot = 14000, slot = Math.floor(tt / shot), sp = tt % shot;
-        if (sp < 850) {
-          var p = sp / 850;
-          var x0 = 16 + skyRand(slot + 4) * (W - 90);
-          var y0 = top + 34 + skyRand(slot + 11) * 30;
-          var hx = x0 + p * 64, hy = y0 - p * 26;
-          S.drawFx(ctx, 'shot', hx - 28, hy - 8, 2);
+        if (sp < 900) {
+          var pr = sp / 900, goRight = skyRand(slot + 7) > 0.5;
+          var x0 = goRight ? 10 + skyRand(slot + 4) * 36 : W - 46 - skyRand(slot + 4) * 36;
+          var y0 = top + 6 + skyRand(slot + 11) * 14;
+          var hx = x0 + (goRight ? 1 : -1) * pr * 72, hy = y0 + pr * 40;
+          ctx.save();
+          ctx.translate(Math.round(hx), Math.round(hy));
+          ctx.scale(goRight ? 1 : -1, -1);   // the painted head leads the fall
+          S.drawFx(ctx, 'shot', -16, -8, 2);
+          ctx.restore();
         }
       }
       var moon = orbSpot('night', PP.Game.now(st), top);
