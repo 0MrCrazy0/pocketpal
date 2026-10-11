@@ -154,7 +154,13 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .tlabel { font-size: calc(var(--u) * 5.5); color: #7f9f4a; margin-bottom: calc(var(--u) * -2); }
 
 /* skill tree */
-.sk-row { display: flex; gap: calc(var(--u) * 1.5); align-items: stretch; }
+.tree { display: flex; flex-direction: column; gap: calc(var(--u) * 1.5); margin-bottom: calc(var(--u) * 2); }
+.tree-tier { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 1); align-items: stretch; }
+.tree-lab { flex: 0 0 calc(var(--u) * 8); color: #9fb86a; font-size: calc(var(--u) * 5); align-self: center; }
+.tree-node { flex: 1 1 calc(var(--u) * 28); border: 1px dashed #8bac0f; padding: calc(var(--u) * 1); font-size: calc(var(--u) * 5); line-height: 1.05; }
+.tree-node i { display: block; color: #9fb86a; font-style: normal; font-size: calc(var(--u) * 4.2); }
+.tree-node.got { background: #2f5f1f; border-style: solid; }
+.tree-node.can { border-style: solid; border-color: #e0f8d0; }
 .sk-row + .sk-row { margin-top: 0; }
 .sk-t { flex: 0 0 calc(var(--u) * 19); font-size: calc(var(--u) * 5.5); color: #9fb86a; display: flex; align-items: center; line-height: 1.1; }
 .overlay .sk-row .mi.node { flex: 1 1 0; min-width: 0; min-height: calc(var(--u) * 13); padding: calc(var(--u) * 1) calc(var(--u) * 2); gap: calc(var(--u) * 1); font-size: calc(var(--u) * 5.6); }

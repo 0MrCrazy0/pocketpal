@@ -650,6 +650,20 @@
     var p = pet();
     if (!p) return { title: 'SKILLS', html: '<p>No pal.</p>', items: [{ label: 'Back', act: pop }] };
     var tree = PP.Skills.tree(p.species), adult = p.stage === 'adult';
+    var treeHtml = '<div class="tree">';
+    var byTier = { 1: [], 2: [], 3: [], 4: [] };
+    tree.forEach(function (s) { (byTier[s.tier] || (byTier[s.tier] = [])).push(s); });
+    [1, 2, 3, 4].forEach(function (tier) {
+      treeHtml += '<div class="tree-tier"><span class="tree-lab">' + (tier === 4 ? 'ULT' : 'T' + tier) + '</span>';
+      byTier[tier].forEach(function (s) {
+        var learned = (p.skills || []).indexOf(s.id) >= 0, ready = !PP.Skills.blockReason(p, s.id);
+        var needs = (s.req || []).map(function (id) { var n = PP.Skills.find(p.species, id); return n ? n.name : id; }).join(' or ');
+        treeHtml += '<span class="tree-node' + (learned ? ' got' : ready ? ' can' : '') + '">' + esc(s.name) +
+          (needs ? '<i>' + esc(needs) + '</i>' : '') + '</span>';
+      });
+      treeHtml += '</div>';
+    });
+    treeHtml += '</div>';
     var items = tree.map(function (s) {
       var learned = (p.skills || []).indexOf(s.id) >= 0, why = PP.Skills.blockReason(p, s.id);
       var tag = learned ? '\u2713' : !why ? s.cost + 'SP' : '\u2022';
@@ -667,7 +681,7 @@
         '<br><i>' + (learned ? 'Learned' + ((p.innate || []).indexOf(s.id) >= 0 ? ' (inherited)' : '') : why ? esc(why) : 'Ready - press B to learn') + '</i>';
     }
     return { title: D.SPECIES_INFO[p.species].flavour.toUpperCase() + ' SKILL TREE \u00b7 ' + (adult ? p.sp + ' SP' : 'LOCKED'),
-      html: adult ? '' : '<p class="tip">Skills unlock when your pal becomes an adult. Preview:</p>',
+      html: treeHtml + (adult ? '' : '<p class="tip">Skills unlock when your pal becomes an adult. Preview:</p>'),
       tiers: { 1: 'T1 Lv1', 2: 'T2 Lv5', 3: 'T3 Lv12', 4: 'ULT Lv25' }, detail: detail, items: items };
   }
   function confirmScreen(title, text, yes) {
