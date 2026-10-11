@@ -16,15 +16,15 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v2.3.21';
+var CACHE = 'pocketpal-v2.4.7';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
   'js/config.js', 'js/data/atlas.js', 'js/data/glyphs.js',
   'js/core/util.js', 'js/core/data.js', 'js/core/time.js', 'js/core/sleep.js', 'js/core/pet.js', 'js/core/care.js', 'js/core/evolution.js', 'js/core/stats.js', 'js/core/skills.js',
-  'js/core/battle.js', 'js/core/breeding.js', 'js/core/cards.js', 'js/core/arena.js', 'js/core/collection.js', 'js/core/shop.js', 'js/core/daily.js', 'js/core/hints.js', 'js/core/behaviour.js',
+  'js/core/battle.js', 'js/core/breeding.js', 'js/core/cards.js', 'js/core/arena.js', 'js/core/collection.js', 'js/core/shop.js', 'js/core/daily.js', 'js/core/hints.js', 'js/core/behaviour.js', 'js/core/world.js',
   'js/core/save.js', 'js/core/game.js', 'js/core/cloud.js', 'js/core/reminders.js', 'js/core/live.js',
-  'js/ui/font.js', 'js/ui/sprites.js', 'js/ui/audio.js', 'js/ui/shells.js', 'js/ui/render.js', 'js/ui/battleview.js', 'js/ui/minigames.js', 'js/ui/menus.js',
+  'js/ui/font.js', 'js/ui/sprites.js', 'js/ui/audio.js', 'js/ui/shells.js', 'js/ui/worldart.js', 'js/ui/render.js', 'js/ui/battleview.js', 'js/ui/minigames.js', 'js/ui/menus.js', 'js/ui/world.js',
   'js/ui/input.js', 'js/ui/testpanel.js', 'js/ui/admin.js', 'js/ui/net.js', 'js/ui/live.js', 'js/ui/cloudsync.js', 'js/ui/favicon.js', 'js/ui/main.js'
 ];
 var ICONS = ['icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'badge-96.png'];

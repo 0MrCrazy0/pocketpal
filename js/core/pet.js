@@ -68,6 +68,7 @@
       unhappyMin: 0, nightKey: null,
       level: 1, xp: 0, sp: 0, skills: [], wins: 0, losses: 0,
       lastBredClock: -1e9,
+      mem: [],                                      // 2.4.0: memory book (PP.World.remember)
       fate: null, fateCause: null
     };
   }

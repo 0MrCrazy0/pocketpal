@@ -12,8 +12,8 @@
   'use strict';
   var PP = root.PP = root.PP || {};
   var D = PP.DATA;
-  var KEYS = ['baby', 'child', 'teen', 'bad', 'good', 'perfect', 'secret'];
-  var ADULT = ['bad', 'good', 'perfect', 'secret'];
+  var KEYS = ['baby', 'child', 'teen', 'bad', 'good', 'power', 'swift', 'guard', 'perfect', 'secret'];   // 2.4.0: + style forms (after Solid)
+  var ADULT = ['bad', 'good', 'perfect', 'secret', 'power', 'swift', 'guard'];
 
   function entries() {
     var out = [];
@@ -59,6 +59,7 @@
   };
   function hint(sp, key) {
     if (key === 'secret') return 'Secret form. ' + D.SECRET[sp].hint;   // 1.9.7
+    if (D.STYLE.hint[key]) return D.FORM_INFO[key].label + ' form. Raise a ' + D.SPECIES_INFO[sp].label + ': ' + D.STYLE.hint[key];   // 2.4.0
     return HOW[key].replace('{S}', D.SPECIES_INFO[sp].label);
   }
 

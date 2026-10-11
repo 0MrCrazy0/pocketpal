@@ -21,7 +21,7 @@
   function tDate(ms) { return PP.Time.dateTime(ms, clockMode(), Date.now()); }
   function schedText(s) { return tHM(s.bed) + ' \u2013 ' + tHM(s.wake); }
   var DEX_ADULTS = D.SPECIES.length * D.FORMS.length, DEX_ALL = D.SPECIES.length * PP.Collection.KEYS.length;   // 24 / 42 (1.9.7)
-  var FORM_LABEL = { bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret' };
+  var FORM_LABEL = { bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret', power: 'Mighty', swift: 'Swift', guard: 'Sturdy' };   // 2.4.0 + style forms
 
   /* ------------------------------------------------------------ framework */
   function init() { el = document.getElementById('overlay'); }
@@ -130,14 +130,18 @@
     return { title: 'MENU', items: [
       { label: 'Status', sub: 'Needs, stats, care report', act: function () { push(statusScreen(0)); } },
       dailyItem(),
+      { label: 'Trips', sub: 'Beach, forest or town with your pal', act: function () { push(PP.WorldUI.tripsScreen); } },   // 2.4.0
       { label: 'Skills', sub: 'Skill tree (adults)', act: function () { push(skillsScreen); } },
       { label: 'Paldex', sub: c.adults + '/' + DEX_ADULTS + ' adult forms \u00b7 ' + c.total + '/' + DEX_ALL + ' in all', right: c.adults + '/' + DEX_ADULTS, act: function () { push(paldexScreen(0)); } },
       { label: 'Shell colour', sub: 'Repaint your handheld', act: openShells },
       { label: 'Pal Store', sub: 'Treats, boosts, colours, extra slots', right: PP.Shop.coins(st()) + 'c', act: function () { push(storeScreen); } },
+      { label: 'Things', sub: 'Hats, toys and garden decorations', right: PP.World.ownedList(st()).length + '', act: function () { push(PP.WorldUI.thingsScreen(0)); } },   // 2.4.0
       { label: 'Bag', sub: 'Items you bought', right: String(PP.Shop.owned(st()).reduce(function (n, id) { return n + PP.Shop.count(st(), id); }, 0)), act: function () { push(bagScreen); } },
       { label: 'Pal Box', sub: 'Your ' + st().slots.length + ' slots, new egg', act: function () { push(palBox); } },
       { label: 'Breeding', sub: 'Make an egg with a mate', act: function () { push(breedScreen); } },
       { label: 'Album', sub: 'Every pal you raised + family trees', act: function () { push(albumScreen); } },
+      { label: 'Family', sub: 'Generations, retiring, memory books', right: 'G' + PP.World.topGen(st()), act: function () { push(PP.WorldUI.familyScreen); } },   // 2.4.0
+      { label: 'Gifts & visits', sub: 'Send gifts, visit friends\u2019 pals', act: function () { push(PP.WorldUI.giftsScreen); } },
       { label: 'Settings', sub: 'Sound, alerts, save transfer', act: function () { push(settingsScreen); } },
       { label: 'Guide', sub: 'Buttons, icons and the goal', act: function () { push(guideScreen(0)); } },
       { label: 'How to play', sub: 'All the rules on one page', act: function () { push(helpScreen); } },
@@ -177,7 +181,13 @@
   }
 
   /* ------------------------------------------------------------ Paldex */
-  var DEX_TAG = { baby: 'Baby', child: 'Child', teen: 'Teen', bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret' };
+  var DEX_TAG = { baby: 'Baby', child: 'Child', teen: 'Teen', bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret', power: 'Mighty', swift: 'Swift', guard: 'Sturdy' };
+  /* 2.4.0: the young pal's training style, as three small bars (Status > report) */
+  function styleRow(p) {
+    var v = PP.Evolution.style(p), mx = Math.max(8, v.power, v.swift, v.guard);
+    var one = function (k, lab) { return lab + ' ' + bar(v[k], mx, lab); };
+    return '<tr><td>Training style</td><td class="style-bars">' + one('power', 'Power') + '<br>' + one('swift', 'Quick') + '<br>' + one('guard', 'Calm') + '</td></tr>';
+  }
   function nextDexReward(s) {
     var c = PP.Collection.counts(s), best = null;
     D.SHELLS.forEach(function (sh) { if (sh.unlock && sh.unlock.dex && c.adults < sh.unlock.dex && (!best || sh.unlock.dex < best.unlock.dex)) best = sh; });
@@ -202,7 +212,7 @@
         items: items, detail: function (i) {
           var k = keys[i]; if (!k) return i === keys.length ? 'Show the next animal' : i === keys.length + 1 ? 'Show the previous animal' : 'Back to the menu';
           var e = PP.Collection.get(s, sp, k) || {};
-          return '<b>' + esc(e.r || e.s ? D.NAMES[sp][k] : '???') + '</b> \u00b7 ' + DEX_TAG[k] + (e.r ? ' \u00b7 <i>raised</i>' : e.s ? ' \u00b7 <i>seen in battle</i>' : '') + '<br>' + esc(PP.Collection.hint(sp, k));
+          return '<b>' + esc(e.r || e.s ? D.NAMES[sp][k] : '???') + '</b> \u00b7 ' + DEX_TAG[k] + (e.r ? ' \u00b7 <i>raised</i>' : e.s ? ' \u00b7 <i>seen</i>' : '') + '<br>' + esc(PP.Collection.hint(sp, k));
         } };
     };
   }
@@ -378,8 +388,9 @@
           '<tr><td>Care score</td><td>' + score + '</td></tr>' +
           '<tr><td>Trainings</td><td>' + p.evo.trainings + (p.evo.best ? ' \u00b7 best streak ' + p.evo.best + ' day' + (p.evo.best > 1 ? 's' : '') : '') + '</td></tr>' +
           (f ? '<tr><td>On track for</td><td><b>' + FORM_LABEL[f] + '</b> (' + esc(D.NAMES[p.species][f]) + ')</td></tr>' : '') +
-          '</table><p class="tip">Champion: \u2264' + D.EVO.perfect.maxMistakes + ' mistakes, score \u2265' + D.EVO.perfect.minScore + ', discipline \u2265' + D.EVO.perfect.minDiscipline +
-          '%. Solid: score \u2265' + D.EVO.good.minScore + '. A secret form needs Champion care plus something special - see the Paldex.</p>' +
+          (p.stage !== 'egg' ? styleRow(p) : '') +
+          '</table>' + (PP.Evolution.hint(p) ? '<p class="evo-hint">\u2728 ' + esc(PP.Evolution.hint(p)) + '</p>' : '') + '<p class="tip">Champion: \u2264' + D.EVO.perfect.maxMistakes + ' mistakes, score \u2265' + D.EVO.perfect.minScore + ', discipline \u2265' + D.EVO.perfect.minDiscipline +
+          '%. Solid: score \u2265' + D.EVO.good.minScore + ' - and HOW you train a Solid-care pal can make it Mighty (power training), Swift (quick games) or Sturdy (Match / great manners). A secret form needs Champion care plus something special - see the Paldex.</p>' +
           recentMistakes(p);
       } else if (pg === 'battle') {
         var bs = PP.Stats.battleStats(p), cap = PP.Stats.levelCap(p.form), need = D.LEVEL.xpNeed(p.level);
@@ -445,6 +456,7 @@
       { label: 'Food & care', sub: 'Cake, feast, energy tonic, super medicine', act: function () { push(storeList('care')); } },
       { label: 'Boosts', sub: 'Tiny permanent stat boosts (max 4 per pal)', act: function () { push(storeList('boost')); } },
       { label: 'Shell colours', sub: 'Extra colours to buy (finishes are earned)', act: function () { push(storeShells); } },
+      { label: 'Hats, toys & garden', sub: 'Things to collect', act: function () { push(PP.WorldUI.thingShop); } },   // 2.4.0
       { label: 'Pal Box slots', sub: 'Room for more pals: ' + st().slots.length + '/' + D.BOX.max, right: PP.Shop.nextSlotPrice(st()) != null ? PP.Shop.nextSlotPrice(st()) + 'c' : 'MAX', act: function () { push(palBox); } },
       { label: 'Revive a pal', sub: 'Bring back a pal that died or ran away', right: G.lostPals(st()).length ? G.lostPals(st()).length + '' : '-', act: function () { push(reviveScreen); } },
       { label: 'My bag', sub: 'Use what you bought', act: function () { push(bagScreen); } },
@@ -511,6 +523,7 @@
     var items = [
       { label: 'Arena', sub: 'Computer ladder: ' + D.ARENA_MAIN + ' cups + a post-game cup', disabled: !!why, reason: why, act: function () { push(arenaScreen); } },
       { label: 'Friend battle', sub: 'Fight a pal from a battle code', disabled: !!why, reason: why, act: function () { push(friendsScreen); } },
+      { label: 'Friends Cup', sub: 'Beat your friends\u2019 pals in a row (' + PP.World.FCUP.size + ' at most)', right: (st().fcup && st().fcup.wins) ? '\u2605' + st().fcup.wins : '', disabled: !!why, reason: why, act: function () { push(fcupScreen); } },
       { label: 'Live battle', sub: 'Room code: pick moves with a friend in real time', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
       { label: 'My battle code', sub: 'Share your pal', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
       { label: 'Add friend code', sub: 'Paste a code (battle or breed)', act: function () { push(addCodeScreen); } }
@@ -567,6 +580,24 @@
         ] };
     };
   }
+  /* 2.4.0 Friends Cup: friends' pals, weakest first, beaten in a row */
+  function fcupScreen() {
+    var s = st(), p = pet(), W = PP.World, S = W.fcupStatus(s), why = W.canFcup(s), mine = p ? PP.Battle.fighter(p) : null;
+    var list = S.foes.length ? '<ul class="foes">' + S.foes.map(function (c, j) {
+      var mark = j < S.next ? '<b class="ok" role="img" aria-label="beaten">\u2713</b>' : '<b class="no" role="img" aria-label="to go">\u00b7</b>';
+      return '<li class="' + (j === S.next ? 'nextfoe' : '') + '">' + mark + thumb(c.species, 'adult_' + c.form, 'idle', 12) +
+        '<span><b>' + esc(c.name) + '</b>' + (j === S.next ? ' \u25c2 next' : '') + '<br>' + esc(cardLabel(c)) + ' \u00b7 BP ' + PP.Battle.fighter(c).bp + '</span></li>';
+    }).join('') + '</ul>' : '';
+    var F = s.fcup || {}, bonusToday = F.day === PP.Shop.dayOf(G.now(s));
+    return { title: 'FRIENDS CUP' + (F.wins ? ' \u2605' + F.wins : ''), html:
+      (S.ready ? '<p class="pips">Run: ' + S.foes.map(function (c, j) { return j < S.next ? '\u25cf' : j === S.next ? '\u25c9' : '\u25cb'; }).join(' ') + (mine ? ' \u00b7 your BP ' + mine.bp : '') + '</p>' : '') + list +
+      '<p class="tip">' + (S.ready ? 'Your newest ' + S.foes.length + ' friend pals, weakest first. A loss ends the run. Win the cup: +' + W.FCUP.bonus + ' coins' + (bonusToday ? ' (already won today - XP and battle coins still count)' : ' (once a day)') + '.'
+        : 'Add ' + W.FCUP.min + ' or more friend battle codes (Battle \u25b8 Add friend code) and their pals become a cup to win!') + '</p>',
+      items: [
+        { label: 'FIGHT!', sub: S.next ? 'Continue the run (' + (S.next + 1) + '/' + S.foes.length + ')' : 'Start a run', disabled: !!why, reason: why, act: function () { close(); App().startFcup(); } },
+        { label: 'Back', act: pop }
+      ] };
+  }
   function cardLabel(c) { return D.NAMES[c.species][c.form] + ' Lv' + c.level + ' ' + (c.sex === 'M' ? '\u2642' : '\u2640'); }
   function friendsScreen() {
     var s = st();
@@ -586,7 +617,7 @@
     };
   }
   function myCodeScreen() {
-    var p = pet(), code = PP.Cards.encode(p);
+    var p = pet(), code = PP.Cards.encode(p, { mb: st().mail && st().mail.box });   // 2.4.0: + your gift mailbox, if set up
     return { title: 'MY BATTLE CODE', html: '<p>Send this to a friend. It works offline: the whole battle card is inside the code, with a checksum.</p><textarea class="code" readonly rows="4" aria-label="Your battle code">' + esc(code) + '</textarea>',
       items: [
         { label: 'Copy code', act: function () { copyText(code); } },
@@ -671,7 +702,7 @@
       var s = st(), p = s.slots[i]; if (!p) return null;
       var items = [];
       if (i !== s.active && !p.fate) items.push({ label: 'Take out', sub: 'Switch to this pal', act: function () { var r = G.setActive(s, i, Date.now()); App().toast(r.msg); App().resetWalker(); App().save(); close(); } });
-      if (p.fate && p.fate !== 'released' && !p.hard) items.push({ label: 'Revive', sub: 'Costs ' + G.reviveCost(p) + ' coins', right: G.reviveCost(p) + 'c', act: function () {
+      if (p.fate && p.fate !== 'released' && p.fate !== 'retired' && !p.hard) items.push({ label: 'Revive', sub: 'Costs ' + G.reviveCost(p) + ' coins', right: G.reviveCost(p) + 'c', act: function () {
         push(confirmScreen('Revive ' + p.name + '?', 'Costs ' + G.reviveCost(p) + ' coins. You have ' + PP.Shop.coins(s) + '.', function () {
           var r = G.revive(s, { slot: i, now: Date.now() }); App().toast(r.msg); PP.Audio.play(r.ok ? 'level' : 'no'); if (r.ok) { App().resetWalker(); App().save(); } pop();
         }));
@@ -779,7 +810,9 @@
       } else h += '<p class="tip">Wild egg - no known parents.</p>';
       h += '<div class="trow me">' + nodeHtml(t) + '</div></div>';
       if (e.hard && (e.fate === 'dead' || e.fate === 'gone')) h += '<p class="memorial-note">\u2020 In memory of <b>' + esc(e.name) + '</b>, raised in hard mode' + (e.days != null ? ' for ' + e.days + ' day' + (e.days === 1 ? '' : 's') : '') + ' (' + esc(e.cause || e.fate) + '). Hard-mode pals cannot be revived.</p>';
-      return { title: 'FAMILY OF ' + String(e.name).toUpperCase(), html: h, items: [{ label: 'Back', act: pop }] };
+      if (e.fate === 'retired') h += '<p class="tip">Retired' + (e.trait ? ' - passed on ' + ({ gene: 'a strong gene', skill: 'an innate skill', ribbon: 'the Family Ribbon' })[e.trait] : '') + '.</p>';   // 2.4.0
+      var mi = [{ label: 'Memory book', sub: ((e.mem || []).length) + ' memories', act: function () { push(PP.WorldUI.memScreen(e.id)); } }, { label: 'Back', act: pop }];
+      return { title: 'FAMILY OF ' + String(e.name).toUpperCase(), html: h, items: mi };
     };
   }
 
@@ -1038,9 +1071,10 @@
       '<p>Tantrums: sometimes your pal calls for no reason. Scold during a tantrum for +25% discipline. Praise after training or a refused meal.</p>' +
       '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed.</p>' +
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
-      '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected. Snowy days still come now and then.</p>' +
+      '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected.</p>' +
       '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +
-      '<p>Paldex: raise all 18 adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
+      '<p><b>Out and about (2.4.0):</b> MENU \u25b8 Trips (beach, forest, town), Things (hats, toys, garden), Family (retire an adult: an heir egg carries one trait), Gifts &amp; visits, and every pal\u2019s Memory book. Battle \u25b8 Friends Cup pits you against your friends\u2019 pals. Halloween, Christmas and Easter bring seasonal items.</p>' +
+      '<p>Paldex: raise all ' + DEX_ADULTS + ' adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
   }
 
   /* 1.9.1 morning report card */
@@ -1066,7 +1100,7 @@
   function battleResult(out, B) {
     return function () {
       var p = pet(), won = out.won, A = PP.Arena, rank = B && B.meta ? B.meta.rank : 0, h, title = 'BATTLE OVER';
-      var celebrate = out.firstClear ? (out.myth ? 'MYTH CUP CLEARED!' : out.cup.toUpperCase() + ' CLEARED!') : null;
+      var celebrate = out.fcleared ? 'FRIENDS CUP WON!' : out.firstClear ? (out.myth ? 'MYTH CUP CLEARED!' : out.cup.toUpperCase() + ' CLEARED!') : null;
       if (out.fled) {   // 1.8.4 run / forfeit
         title = out.fled === 'escaped' ? 'GOT AWAY' : 'FORFEIT';
         h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), out.fled === 'escaped' ? 'idle' : 'sad', 30) + '</div><ul class="away">' +
@@ -1075,6 +1109,8 @@
       } else {
         h = (celebrate ? '<div class="cupclear" role="status">\u2605 ' + esc(celebrate) + ' \u2605</div>' : '') +
           '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30) + '</div><p><b>' + (won ? 'VICTORY!' : 'Defeat...') + '</b></p><ul class="away">' +
+          (out.fcup ? '<li>Friends Cup: friend ' + out.foe + '/' + out.foes + (won ? (out.fcleared ? ' - CUP WON!' : ' beaten') : ' - run over') + '</li>' : '') +
+          (out.fbonus ? '<li>Friends Cup bonus +' + out.fbonus + ' coins</li>' : '') +
           (out.kind === 'arena' ? '<li>' + esc(out.cup) + ': foe ' + out.foe + '/' + out.foes + (won ? (out.cleared ? ' - cup ' + (out.firstClear ? 'cleared!' : 'cleared again') : ' beaten') : ' - run over') + '</li>' : '') +
           '<li>+' + out.xp + ' XP' + (out.levels ? ' \u00b7 LEVEL UP \u2192 Lv ' + p.level + ' (+' + out.levels + ' SP)' : '') + '</li>' +
           '<li>Happy ' + (won ? '+1' : '-1') + ', weight -1g</li>' +
@@ -1085,11 +1121,14 @@
           (out.injured ? '<li>Got hurt and is now sick! Give medicine.</li>' : '') + '</ul>';
       }
       var nextFoe = out.kind === 'arena' && won && !out.cleared && !out.fled;
+      var nextFriend = out.fcup && won && !out.fcleared && !out.fled && out.next ? PP.World.fcupStatus(st()).foes[out.next - 1] : null;
       function ok() { close(); if (celebrate) App().celebrate(celebrate); }
       return { title: title, html: h, items: [
         out.levels && p.sp ? { label: 'Spend skill points', act: function () { replace(skillsScreen); if (celebrate) App().celebrate(celebrate); } } : null,
         nextFoe ? { label: 'Next foe (' + out.next + '/' + out.foes + ')', sub: A.foe(rank, out.next - 1).name + ' \u00b7 ' + ROLE[A.foe(rank, out.next - 1).role], disabled: !!G.canBattle(p), reason: G.canBattle(p),
           act: function () { close(); App().startArena(rank); } } : null,
+        nextFriend ? { label: 'Next friend (' + out.next + '/' + out.foes + ')', sub: nextFriend.name + ' \u00b7 BP ' + PP.Battle.fighter(nextFriend).bp, disabled: !!G.canBattle(p), reason: G.canBattle(p),
+          act: function () { close(); App().startFcup(); } } : null,
         { label: 'OK', act: ok }].filter(Boolean) };
     };
   }
@@ -1106,7 +1145,7 @@
 
   PP.UI = { init: init, open: open, push: push, pop: pop, close: close, replace: replace, refresh: refresh, isOpen: isOpen, input: input,
     top: function () { return cur; },
-    screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, alertsScreen: alertsScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, arenaScreen: arenaScreen,
+    screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, alertsScreen: alertsScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, arenaScreen: arenaScreen, fcupScreen: fcupScreen,
       skillsScreen: skillsScreen, palBox: palBox, breedScreen: breedScreen, albumScreen: albumScreen, settingsScreen: settingsScreen, helpScreen: helpScreen,
       speciesPicker: speciesPicker, awaySummary: awaySummary, reportCard: reportCard, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,
       arenaPreview: arenaPreview, friendsScreen: friendsScreen, friendMenu: friendMenu, slotMenu: slotMenu, treeScreen: treeScreen,
@@ -1114,5 +1153,7 @@
       storeScreen: storeScreen, storeFood: storeList('care'), storeBoosts: storeList('boost'), storeShells: storeShells, bagScreen: bagScreen, medMenu: medMenu,
       paldexScreen: paldexScreen, dexEntry: dexEntry, dailyScreen: dailyScreen, backupReminder: backupReminder, cloudScreen: cloudScreen, cloudRestore: cloudRestore, hardWarning: hardWarning, shellScreen: shellScreen, guideScreen: guideScreen, iconsScreen: iconsScreen, STRIP_LEGEND: STRIP_LEGEND, transferScreen: transferScreen, importConfirm: importConfirm },
     GUIDE_PAGES: GUIDE.length,
+    // 2.4.0: the menu kit for js/ui/world.js
+    kit: { esc: esc, thumb: thumb, hearts: hearts, bar: bar, hm: hm, tDate: tDate, push: push, pop: pop, replace: replace, close: close, refresh: refresh, confirm: confirmScreen, FORM_LABEL: FORM_LABEL },
     esc: esc };
 })(typeof window !== 'undefined' ? window : globalThis);

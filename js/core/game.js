@@ -8,7 +8,7 @@
 
   function newState(now) {
     now = now || Date.now();
-    return {
+    var st0 = {
       schema: 6, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
       slots: [null, null, null, null], boxSize: 4, active: 0,
       album: [], friends: [],
@@ -20,6 +20,7 @@
       daily: null, hints: { done: {} }, backup: { lastExport: null, snoozeUntil: null },
       timeOffset: 0, lastSeenAt: now
     };
+    return Object.assign(st0, PP.World.defaults());   // 2.4.0: things, trips, mail, visits, events, family line
   }
   function now(state, realNow) { return (realNow || Date.now()) + (state.timeOffset || 0); }
   function active(state) { return state.slots[state.active] || null; }
@@ -45,6 +46,7 @@
     if (p.hard) e.hard = true; else delete e.hard;          // 1.9.0: hard-mode memorial
     if (p.golden) e.golden = true; else delete e.golden;
     if (p.fateCause) e.cause = String(p.fateCause).slice(0, 30);
+    e.mem = (p.mem || []).slice(-30);                       // 2.4.0: the memory book stays with the album entry
     // a full copy is only needed to revive a pal that died or ran away (keeps the save small)
     if (e.fate === 'dead' || e.fate === 'gone') e.snap = U.deepCopy(p); else delete e.snap;
   }
@@ -112,7 +114,7 @@
   function lostPals(state) {
     var list = [], seen = {};
     (state.slots || []).forEach(function (p, i) {
-      if (p && p.fate && p.fate !== 'released' && !p.hard) {
+      if (p && p.fate && p.fate !== 'released' && p.fate !== 'retired' && !p.hard) {
         seen[p.id] = true;
         list.push({ kind: 'slot', slot: i, pet: p, name: p.name, cost: reviveCost(p) });
       }
@@ -133,13 +135,14 @@
     } else if (opts.albumId) {
       var e = albumFind(state, opts.albumId);
       if (!e || !e.snap) return { ok: false, msg: 'No body left to restore' };
-      if (e.fate !== 'dead' && e.fate !== 'gone') return { ok: false, msg: 'Released pals cannot be revived' };
+      if (e.fate !== 'dead' && e.fate !== 'gone') return { ok: false, msg: e.fate === 'retired' ? 'Retired pals are resting - they cannot be revived' : 'Released pals cannot be revived' };
       if (inSlots(state, e.id)) return { ok: false, msg: 'That pal is already in your Pal Box' };
       p = PP.Save && PP.Save.sanitizePet ? PP.Save.sanitizePet(U.deepCopy(e.snap)) : U.deepCopy(e.snap);
       slot = freeSlot(state);
       if (slot < 0) return { ok: false, msg: 'Pal Box is full - free a slot first' };
     }
     if (!p || !p.fate) return { ok: false, msg: 'That pal is still with you' };
+    if (p.fate === 'released' || p.fate === 'retired') return { ok: false, msg: 'Only lost pals can be revived' };
     if (p.stage === 'egg') return { ok: false, msg: 'Eggs cannot be revived' };
     if (p.hard) return { ok: false, msg: 'Hard-mode pals cannot be revived. They live on in your Album.' };
     var cost = opts.free ? 0 : reviveCost(p);
@@ -160,6 +163,7 @@
     p.lastTickAt = now(state, opts.now);
     state.slots[slot] = p;
     if (!state.slots[state.active] || state.slots[state.active].fate) state.active = slot;
+    PP.World.remember(p, 'revive', 'Came back to life!', p.lastTickAt);   // 2.4.0
     albumUpsert(state, p);
     return { ok: true, msg: p.name + ' is back!' + (cost ? ' (-' + cost + 'c)' : ''), slot: slot, pet: p, cost: cost };
   }
@@ -174,7 +178,11 @@
       if (e.t === 'hatch' || e.t === 'evolve') { albumUpsert(state, p); if (PP.Collection.markPet(state, p, t)) grew = true; }
       if (e.t === 'hatch') { PP.Hints.learn(state, 'hatch'); if (p.golden) { PP.Daily.ensure(state).golden++; grew = true; } }
       if (e.t === 'died' || e.t === 'ranaway') albumUpsert(state, p);
+      memo(p, e, t);                                        // 2.4.0 memory book
     });
+    if (!p.fate && !p.elderSeen && PP.World.isElder(p)) {   // 2.4.0: an Elder may retire (never forced)
+      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder', t); ev.push({ t: 'elder', name: p.name });
+    }
     if (grew) unlockEvents(state, ev);
     if (p.stage !== 'egg') {
       var d = PP.Shop.claimDaily(state, t);
@@ -185,6 +193,23 @@
       PP.Daily.observe(state, t);
     }
     return ev;
+  }
+  /* 2.4.0: battle milestones -> the memory book (first win, every 25th, every 5th level, cups) - never every battle */
+  function memoBattle(p, out, lv0, t) {
+    var W = PP.World;
+    if (out.won && p.wins === 1) W.remember(p, 'battle', 'Won its first battle!', t);
+    else if (out.won && p.wins % 25 === 0) W.remember(p, 'battle', p.wins + ' battle wins!', t);
+    for (var L = lv0 + 1; L <= p.level; L++) if (L % 5 === 0 || L === D.LEVEL.ultimateLevel) W.remember(p, 'level', 'Reached Lv' + L, t);
+    if (out.firstClear && out.cup) W.remember(p, 'cup', 'Won the ' + out.cup + '!', t);
+  }
+  /* 2.4.0: life events -> the pal's memory book */
+  function memo(p, e, t) {
+    var W = PP.World, N = D.NAMES[p.species] || {};
+    if (e.t === 'hatch') W.remember(p, 'hatch', 'Hatched into a ' + N.baby + (p.gen > 1 ? ' (generation ' + p.gen + ')' : ''), t);
+    else if (e.t === 'evolve' && p.stage === 'adult') W.remember(p, 'adult', 'Grew up into ' + N[p.form || 'good'], t);
+    else if (e.t === 'evolve') W.remember(p, 'grow', 'Grew into a ' + N[p.stage] + ' (' + p.stage + ')', t);
+    else if (e.t === 'died') W.remember(p, 'note', 'Passed away' + (e.cause ? ' (' + e.cause + ')' : ''), t);
+    else if (e.t === 'ranaway') W.remember(p, 'note', 'Ran away', t);
   }
   /* New shell colours earned -> 'unlock' events for the UI. */
   function unlockEvents(state, ev) {
@@ -209,8 +234,8 @@
     }
     return r;
   }
-  function exercise(state, kind, success) {
-    var r = PP.Care.exercise(active(state), kind, success);
+  function exercise(state, kind, success, mini) {
+    var r = PP.Care.exercise(active(state), kind, success, mini);
     if (r.ok) {
       r.coins = PP.Shop.earn(state, success ? D.ECONOMY.trainWin : D.ECONOMY.trainLoss, now(state));
       if (r.coins) r.msg += ' +' + r.coins + 'c';
@@ -310,6 +335,7 @@
       p.energy = Math.min(100, p.energy + Math.floor(R.costs.battle / 2));
       if (B.fled === 'forfeit') p.losses++;
       if (arena) { rec.losses++; state.arena.run = null; }
+      if (B.meta.fcup) PP.World.fcupResult(state, B, out, now(state));   // 2.4.0 Friends Cup: the run is over
       PP.Collection.markSeen(state, B.opp, now(state));
       return out;
     }
@@ -336,12 +362,15 @@
       if (arena) { rec.losses++; state.arena.run = null; }
       if (U.roll(p.seed, p.clock, 'injury', p.losses) < 0.2) { p.sick = true; p.sickDoses = 0; out.injured = true; }
     }
+    var lv0 = p.level;
     out.levels = PP.Stats.addXp(p, out.xp);
+    memoBattle(p, out, lv0, now(state));                    // 2.4.0 memory book
     var bc = PP.Shop.battleCoins(won, oppLv, B.meta, cleared, champ, out.myth);
     if (won && B.meta.kind === 'visitor') { bc.bonus += PP.Daily.VISITOR_BONUS; out.visitor = true; }
     out.coins = PP.Shop.earn(state, bc.capped, now(state)) + PP.Shop.earn(state, bc.bonus, now(state), false);
     if (won) { var dr = PP.Daily.record(state, 'battle', now(state)); out.coins += dr.coins; }
     out.capped = bc.capped > 0 && out.coins < bc.capped + bc.bonus;
+    if (B.meta.fcup) PP.World.fcupResult(state, B, out, now(state));     // 2.4.0 Friends Cup (after the capped coins)
     albumUpsert(state, p);
     PP.Collection.markSeen(state, B.opp, now(state));
     out.shells = PP.Collection.checkUnlocks(state).map(function (s) { return s.name; });
@@ -376,6 +405,8 @@
     r.egg.hard = !!(state.settings && state.settings.hardNext);
     if (mythWon(state)) r.egg.myth = true;
     state.slots[i] = r.egg;
+    PP.World.remember(p, 'egg', 'Had an egg with ' + (partner.name || 'a friend'), now(state, realNow));   // 2.4.0
+    PP.World.remember(r.egg, 'egg', 'Laid by ' + p.name + ' and ' + (partner.name || 'a friend'), now(state, realNow));
     return { ok: true, msg: r.msg + ' - it is in slot ' + (i + 1), slot: i, egg: r.egg };
   }
   function mates(state) {
@@ -427,6 +458,6 @@
   };
 
   PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, visitorCard: visitorCard, finishBattle: finishBattle,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

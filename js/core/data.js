@@ -18,20 +18,26 @@
   /* Minutes spent in each stage (simulated time, sleep included). */
   var STAGE_MIN = { egg: 5, baby: 120, child: 36 * 60, teen: 60 * 60 };
 
-  var FORMS = ['bad', 'good', 'perfect', 'secret'];
+  /* 2.4.0: + three STYLE forms (power / swift / guard). They are appended, so the old form indexes in battle codes and
+   * saves never move. A style form is a good-care adult whose young life leaned one way (see STYLE + Evolution.style). */
+  var FORMS = ['bad', 'good', 'perfect', 'secret', 'power', 'swift', 'guard'];
+  var STYLE_FORMS = ['power', 'swift', 'guard'];
   var FORM_INFO = {
     bad:     { label: 'Scrappy',  mult: 0.88, growth: 0.030, cap: 20 },
     good:    { label: 'Solid',    mult: 1.00, growth: 0.035, cap: 30 },
     perfect: { label: 'Champion', mult: 1.12, growth: 0.040, cap: 40 },
-    secret:  { label: 'Secret',   mult: 1.12, growth: 0.040, cap: 40 }    // 1.9.7: Champion power, a different stat spread (never stronger)
+    secret:  { label: 'Secret',   mult: 1.12, growth: 0.040, cap: 40 },   // 1.9.7: Champion power, a different stat spread (never stronger)
+    power:   { label: 'Mighty',   mult: 1.00, growth: 0.035, cap: 30 },   // 2.4.0 style forms: Solid power, a tilted spread (never stronger)
+    swift:   { label: 'Swift',    mult: 1.00, growth: 0.035, cap: 30 },
+    guard:   { label: 'Sturdy',   mult: 1.00, growth: 0.035, cap: 30 }
   };
   var NAMES = {
-    croc:     { egg: 'Croc Egg',     baby: 'Snip',   child: 'Nipper',   teen: 'Gatorling', bad: 'Muckjaw',   good: 'Snaptail',   perfect: 'Kingmaw',    secret: 'Abyssmaw' },
-    lion:     { egg: 'Lion Egg',     baby: 'Purrl',  child: 'Cubby',    teen: 'Lionel',    bad: 'Scruffpaw', good: 'Maneguard',  perfect: 'Solarion',   secret: 'Eclipsar' },
-    eagle:    { egg: 'Eagle Egg',    baby: 'Peep',   child: 'Fledgy',   teen: 'Hawklet',   bad: 'Ragwing',   good: 'Skyhawk',    perfect: 'Stormtalon', secret: 'Aurorawing' },
-    elephant: { egg: 'Elephant Egg', baby: 'Tootle', child: 'Trunklet', teen: 'Tuskling',  bad: 'Dustrunk',  good: 'Tuskard',    perfect: 'Mammodon',   secret: 'Glaciodon' },
-    bear:     { egg: 'Bear Egg',     baby: 'Bumble', child: 'Cubbin',   teen: 'Ursling',   bad: 'Grubbear',  good: 'Grizzmore',  perfect: 'Ursalord',   secret: 'Starfur' },
-    wolf:     { egg: 'Wolf Egg',     baby: 'Yip',    child: 'Pupper',   teen: 'Wolfling',  bad: 'Mangefang', good: 'Howlrunner', perfect: 'Lunaris',    secret: 'Nightveil' }
+    croc:     { egg: 'Croc Egg',     baby: 'Snip',   child: 'Nipper',   teen: 'Gatorling', bad: 'Muckjaw',   good: 'Snaptail',   perfect: 'Kingmaw',    secret: 'Abyssmaw', power: 'Crushjaw', swift: 'Ripscale', guard: 'Mossback' },
+    lion:     { egg: 'Lion Egg',     baby: 'Purrl',  child: 'Cubby',    teen: 'Lionel',    bad: 'Scruffpaw', good: 'Maneguard',  perfect: 'Solarion',   secret: 'Eclipsar', power: 'Brawlmane', swift: 'Blazepaw', guard: 'Shieldmane' },
+    eagle:    { egg: 'Eagle Egg',    baby: 'Peep',   child: 'Fledgy',   teen: 'Hawklet',   bad: 'Ragwing',   good: 'Skyhawk',    perfect: 'Stormtalon', secret: 'Aurorawing', power: 'Crushtalon', swift: 'Zephyrix', guard: 'Ironwing' },
+    elephant: { egg: 'Elephant Egg', baby: 'Tootle', child: 'Trunklet', teen: 'Tuskling',  bad: 'Dustrunk',  good: 'Tuskard',    perfect: 'Mammodon',   secret: 'Glaciodon', power: 'Smashtusk', swift: 'Dashtrunk', guard: 'Fortusk' },
+    bear:     { egg: 'Bear Egg',     baby: 'Bumble', child: 'Cubbin',   teen: 'Ursling',   bad: 'Grubbear',  good: 'Grizzmore',  perfect: 'Ursalord',   secret: 'Moonfur', power: 'Boulderpaw', swift: 'Swiftclaw', guard: 'Barkhide' },
+    wolf:     { egg: 'Wolf Egg',     baby: 'Yip',    child: 'Pupper',   teen: 'Wolfling',  bad: 'Mangefang', good: 'Howlrunner', perfect: 'Lunaris',    secret: 'Nightveil', power: 'Ironfang', swift: 'Windrunner', guard: 'Stoneguard' }
   };
 
   /* Care tuning per stage. Rates are "minutes per heart lost while awake". */
@@ -90,6 +96,22 @@
     elephant: { rule: 'gen',     tilt: { def: 1, atk: -1 }, hint: 'A Champion of generation 3 or later.', gen: 3 },
     bear:     { rule: 'parents', tilt: { spd: 1, atk: -1 }, hint: 'Both parents were Champion or secret forms.' },
     wolf:     { rule: 'flawless', tilt: { def: 1, atk: -1 }, hint: 'A flawless life: 0 mistakes, discipline 90%+, score 95+.', discipline: 90, score: 95 }
+  };
+
+  /* 2.4.0 style forms. While a pal is a child or teen every training / mini-game adds style points (Care.exercise):
+   * power = Power Training + the training dummy (sparring wins count double: battle practice), swift = Left or Right +
+   * Memory, guard = Match. A very well-behaved youth (discipline >= guardDisc, <= guardMistakes care mistakes) adds
+   * guardCare x the total to guard. At the teen -> adult moment a GOOD-care pal (not Champion) whose leading style has
+   * at least minPts points, share >= minShare of all points and a lead >= minLead over the next one takes that style
+   * form; a balanced or barely-trained pal stays the classic Solid form. Bad care is still Scrappy; Champion / secret
+   * rules are unchanged. tilt = base stat points moved (sum 0) so a style form is never stronger than Solid. */
+  var STYLE = {
+    minPts: 8, minShare: 0.45, minLead: 3, guardDisc: 80, guardMistakes: 1, guardCare: 0.3,
+    pts: { train: [2, 1, 'power'], dummy: [3, 1, 'power'], game: [2, 1, 'swift'], memory: [2, 1, 'swift'], match: [2, 1, 'guard'] },   // [win, try, style]
+    tilt: { power: { atk: 2, def: -1, spd: -1 }, swift: { spd: 2, atk: -1, def: -1 }, guard: { def: 2, atk: -1, spd: -1 } },
+    hint: { power: 'Mostly Power Training and sparring with the dummy while young (with good care).',
+      swift: 'Mostly Left or Right and Memory games while young (with good care).',
+      guard: 'Mostly Match games, or a very well-behaved youth (discipline 80%+, 0-1 mistakes), with good care.' }
   };
 
   var LEVEL = {
@@ -331,9 +353,9 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.3.21',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.4.7',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
-    FORMS: FORMS, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
+    FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,
     ECONOMY: ECONOMY, ITEMS: ITEMS, BOOST: BOOST, BOX: BOX
   };

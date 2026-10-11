@@ -72,7 +72,7 @@
    *   sad or hungry -> grey clouds, then rain as it gets worse;  sick -> drizzle
    *   really neglected (empty hearts AND mess or sickness) -> a storm with lightning
    * Snow keeps its old 1.9.0 rule (the day's roll); only a darker mood replaces it.
-   * `base` is that day's roll: 'clear' | 'rain' | 'snow'. Pure, so it is unit-tested. */
+   * `base` is that day's roll: 'clear' | 'rain'. Pure, so it is unit-tested. */
   var WET = { rain: 1, drizzle: 1, storm: 1 };
   function gloom(p) {
     var n = 0;
@@ -105,7 +105,7 @@
   }
   /* How the pal reacts to its sky now and then (none with reduced motion or while busy). */
   function weatherReaction(w) {
-    return w === 'rain' || w === 'storm' || w === 'drizzle' ? 'shiver' : w === 'sunny' ? 'hop' : w === 'snow' ? 'shiver' : null;
+    return w === 'rain' || w === 'storm' || w === 'drizzle' ? 'shiver' : w === 'sunny' ? 'hop' : null;
   }
 
   /* ---- 1.9.1 morning report card: rep = { mins, dark, lit, mistakes } from the night's sleep. */

@@ -21,6 +21,13 @@
       while (up && bp(s) > bp(c) && s[up] > 1) s[up]--;   // rounding can never lift it above the Champion
       return s;
     }
+    if (D.STYLE && D.STYLE.tilt[form]) {                    // 2.4.0: a style form's spread - never more BP than the Solid form
+      var tt = D.STYLE.tilt[form], b2 = Object.assign({}, b), top = null;
+      for (var k2 in tt) { b2[k2] += tt[k2]; if (tt[k2] > 0) top = k2; }
+      var s2 = statsFrom(b2, f, level, genes), c2 = statsFrom(b, D.FORM_INFO.good, level, genes);
+      while (top && bp(s2) > bp(c2) && s2[top] > 1) s2[top]--;
+      return s2;
+    }
     return statsFrom(b, f, level, genes);
   }
   function statsFrom(b, f, level, genes) {

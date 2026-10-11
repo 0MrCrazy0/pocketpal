@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 7;
+  var SCHEMA = 8;
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -59,6 +59,12 @@
       st.settings.alertTypes = PP.Reminders.defaults();      // settings.alerts stays the on/off switch
       return st;
     },
+    /* 7 -> 8 (2.4.0): things (collectibles), trips, gift mailbox, visits, seasonal events, the family line and a memory
+     * book per pal (started from what the save already knows). Nothing is removed. */
+    7: function (st) {
+      st = st || {};
+      return PP.World.migrate(st);
+    },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
     3: function (st) {
       st = st || {};
@@ -82,6 +88,7 @@
     o.stage = 'adult';
     if (!(typeof o.code === 'string' && /^PP2-[A-Za-z0-9_-]+-[0-9a-z]{4}$/.test(o.code) && o.code.length <= 2000)) delete o.code;
     if (o.via !== 'live' && o.via !== 'code') delete o.via;
+    if (!(typeof o.mb === 'string' && /^[0-9a-f]{16}$/.test(o.mb))) delete o.mb;   // 2.4.0 gift mailbox id
     if (!(typeof o.added === 'number' && isFinite(o.added) && o.added >= 0)) delete o.added;
     return o;
   }
@@ -115,11 +122,14 @@
     return (p.skills || []).reduce(function (n, id) { var s = PP.Skills.find(p.species, id); return n + (s && (p.innate || []).indexOf(id) < 0 ? s.cost : 0); }, 0);
   }
   /* Album entries are display data; only lost pals keep a (sanitised) copy for reviving. */
+  var ALBUM_MEM = 30;   // 2.4.0: memory-book entries an album entry keeps
   function sanitizeAlbumEntry(a) {
     if (!a || typeof a !== 'object' || typeof a.id !== 'string' || D.SPECIES.indexOf(a.species) < 0) return null;
     var e = Object.assign({}, a);
     e.name = PP.Pet.cleanName(a.name) || '?';
-    e.fate = (a.fate === 'dead' || a.fate === 'gone' || a.fate === 'released') ? a.fate : null;
+    e.fate = (a.fate === 'dead' || a.fate === 'gone' || a.fate === 'released' || a.fate === 'retired') ? a.fate : null;   // 2.4.0 + retired
+    e.mem = PP.World.cleanMem(a.mem).slice(-ALBUM_MEM);
+    if (['gene', 'skill', 'ribbon'].indexOf(a.trait) < 0) delete e.trait;
     e.parents = Array.isArray(a.parents) ? a.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : [];
     var snap = (e.fate === 'dead' || e.fate === 'gone') && a.snap ? sanitizePet(a.snap) : null;
     if (snap && snap.id === e.id && snap.species === e.species) e.snap = snap; else delete e.snap;
@@ -151,6 +161,7 @@
     out.evo = { moodSum: U.num(p.evo && p.evo.moodSum, 0, 0), moodN: U.int(p.evo && p.evo.moodN, 0, 0), trainings: U.int(p.evo && p.evo.trainings, 0, 0) };
     out.evo.streak = U.int(p.evo && p.evo.streak, 0, 0, 9999); out.evo.best = U.int(p.evo && p.evo.best, 0, 0, 9999);   // 1.9.7 training streak
     if (p.evo && Number.isFinite(p.evo.tday)) out.evo.tday = U.int(p.evo.tday, 0, 0);
+    if (p.evo && p.evo.sty && typeof p.evo.sty === 'object') out.evo.sty = { power: U.int(p.evo.sty.power, 0, 0, 9999), swift: U.int(p.evo.sty.swift, 0, 0, 9999), guard: U.int(p.evo.sty.guard, 0, 0, 9999) };   // 2.4.0
     if (p.myth === true) out.myth = true; else delete out.myth;
     out.need = {};                                    // 1.8.0: keep only well-formed need timers
     if (p.need && typeof p.need === 'object') {
@@ -199,7 +210,8 @@
       out.sp = Math.min(out.sp, Math.max(0, PP.Stats.totalSpForLevel(out.level) - spentSp(out)));
     }
     out.inheritedSkills = Array.isArray(p.inheritedSkills) ? p.inheritedSkills.filter(function (id) { return PP.Skills.find(out.species, id); }).slice(0, 2) : [];
-    out.fate = (p.fate === 'dead' || p.fate === 'gone' || p.fate === 'released') ? p.fate : null;
+    out.fate = (p.fate === 'dead' || p.fate === 'gone' || p.fate === 'released' || p.fate === 'retired') ? p.fate : null;
+    PP.World.cleanPet(out, p);                        // 2.4.0: memory book, worn hat, heir note
     out.parents = Array.isArray(p.parents) && p.parents.length ? p.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : null;
     out.boost = PP.Shop.cleanBoost(p.boost);
     if ('lastBredAt' in p) { if (Number.isFinite(p.lastBredAt)) out.lastBredAt = p.lastBredAt; else delete out.lastBredAt; }
@@ -231,7 +243,8 @@
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
       notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
       hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
-      alertTypes: PP.Reminders.clean(st.alertTypes) };   // 1.9.7: per-type alert switches
+      alertTypes: PP.Reminders.clean(st.alertTypes),   // 1.9.7: per-type alert switches
+      eventForce: ['off', 'halloween', 'christmas', 'easter'].indexOf(st.eventForce) >= 0 ? st.eventForce : null };   // 2.4.0 admin: test a seasonal event
     out.daily = PP.Daily.clean(s.daily);
     out.hints = PP.Hints.clean(s.hints);
     var bk = s.backup && typeof s.backup === 'object' ? s.backup : {};
@@ -239,6 +252,7 @@
     out.backup = { lastExport: fin(bk.lastExport), since: fin(bk.since) || out.createdAt || null, snoozeUntil: fin(bk.snoozeUntil) };
     out.timeOffset = U.num(s.timeOffset, 0);
     out.lastSeenAt = U.num(s.lastSeenAt, now || Date.now());
+    PP.World.cleanState(out, s);                      // 2.4.0: things, trips, mail, visits, events, family line
     return out;
   }
 

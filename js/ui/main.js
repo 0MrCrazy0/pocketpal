@@ -163,7 +163,7 @@
   function timeAt(ms) { return PP.Time.dateTime(ms, App.state.settings.clock, Date.now()); }
 
   /* ------------------------------------------------------------ events from the simulation */
-  var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is sleeping - turn the lights off!' };
+  var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is asleep and the lights are still on.' };
   App.handleEvents = function (evs, offline) {
     var p = G.active(App.state); if (!p || !evs.length) return;
     var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null, woke = null, napWoke = false;
@@ -175,6 +175,7 @@
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
+        case 'elder': App.toast(e.name + ' is an Elder now! It can retire and pass a trait to an heir egg (MENU \u25b8 Family) - only if you want.'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
         case 'sleep': if (!offline) { App.toast(p.name + (e.again ? ' dozed off again. Lights off!' : ' fell asleep. Lights off!')); PP.Audio.play('lullaby'); } woke = null; break;
@@ -213,6 +214,8 @@
     }
     App.save();
   };
+  /* 2.4.0: a trip or visit scene (a cut-scene), then `after` (its result screen) */
+  App.playScene = function (c, after) { c.after = after || null; queueCut(c); };
   function queueCut(c) {
     // 1.9.9: the same growth reported twice (e.g. a catch-up and a tick racing) shows - and plays - once
     var same = function (q) { return q.kind === c.kind && q.species === c.species && q.toKey === c.toKey && q.name === c.name; };
@@ -236,7 +239,7 @@
   };
   App.playEvolve = function (p, fromKey, toKey) {
     var stageName = toKey.indexOf('adult_') === 0 ? D.NAMES[p.species][toKey.slice(6)] : D.NAMES[p.species][toKey];
-    var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!', adult_secret: 'SECRET FORM!' }[toKey] : toKey;
+    var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!', adult_secret: 'SECRET FORM!', adult_power: 'Mighty form!', adult_swift: 'Swift form!', adult_guard: 'Sturdy form!' }[toKey] : toKey;
     queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub, secret: toKey === 'adult_secret' });
   };
   /* 1.9.9: the hatch / evolve / secret-reveal jingle plays when its cut-scene STARTS (not when it was queued), once per
@@ -281,7 +284,7 @@
    * NEW need appears, remind every few minutes while it stays, and (opt-in) show a
    * browser notification if the tab is in the background. */
   var lastNeeds = '', lastBeep = 0, REMIND_MS = 5 * 60 * 1000;
-  var NEED_TEXT = { sick: 'is sick!', hunger: 'is hungry!', happy: 'is sad and wants to play', lights: 'fell asleep - turn the lights off', poop: 'made a mess - time to clean', tantrum: 'is throwing a tantrum' };
+  var NEED_TEXT = { sick: 'is sick!', hunger: 'is hungry!', happy: 'is sad and wants to play', lights: 'is asleep and the lights are still on', poop: 'made a mess - time to clean', tantrum: 'is throwing a tantrum' };
   function checkAttention() {
     var p = G.active(App.state);
     var needs = p && !p.fate ? PP.Care.attention(p) : [];
@@ -372,7 +375,7 @@
       App.scene = 'home';
       if (success !== null) PP.Hints.learn(App.state, kind === 'dummy' ? 'train' : kind);
       if (success === null) { App.toast('Quit - no energy used'); return; }
-      var r = G.exercise(App.state, kind === 'dummy' ? 'train' : kind, success);
+      var r = G.exercise(App.state, kind === 'dummy' ? 'train' : kind, success, kind);
       App.toast(r.msg);
       // 2.2.0 audit: it fell asleep during the game (bedtime came) - no victory dance for a sleeping pal
       if (r.asleep) { App.anim = { kind: 'stillAsleep', t0: performance.now(), dur: 2200, text: 'SHH... ASLEEP' }; PP.Audio.play('no'); App.save(); refreshIcons(); return; }
@@ -395,6 +398,7 @@
   }
   function rndSeed() { return (Math.random() * 4294967296) >>> 0; }
   App.startArena = function (rank) { beginBattle(G.startArena(App.state, rank, rndSeed()), D.ARENA[rank].name.toUpperCase()); };
+  App.startFcup = function () { beginBattle(PP.World.startFcup(App.state, rndSeed()), 'FRIENDS CUP'); };   // 2.4.0
   App.startFriend = function (card, title) { beginBattle(G.startFriend(App.state, card, rndSeed()), title || 'FRIEND'); };
   /* 1.8.4: cup-cleared celebration on the LCD (after the result screen closes) */
   App.celebrate = function (text) { App.anim = { kind: 'cup', t0: performance.now(), dur: 3600, text: text }; PP.Audio.play('cup'); };
@@ -490,7 +494,7 @@
       var top = UI.top(); if (UI.isOpen() && top && top.live && !document.activeElement.matches('input,textarea')) UI.refresh();
       PP.TestPanel.update(); refreshIcons();
       if (Date.now() - App.lastSaveReal > 10000) { App.save(); if (PP.CloudSync && !App.passive) PP.CloudSync.auto(App.state); }
-      pumpDaily(); updateHint(); favicon();
+      pumpDaily(); updateHint(); favicon(); if (PP.WorldUI) PP.WorldUI.tick();   // 2.4.0: event hello, gift mailbox
       if (App.scene === 'home' && !App.cut && !UI.isOpen() && !App.awayInfo && !App.pendingFate && backupDue()) { App.state.backup.snoozeUntil = Date.now() + 3 * 864e5; UI.open(UI.screens.backupReminder); }
     }
     var ctx = App.ctx;
@@ -499,7 +503,7 @@
     if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; UI.close(); App.clearToasts(); cutJingle(App.cut); }
     if (App.cut) {
       R.drawCut(ctx, App, tNow);
-      if (tNow - App.cut.t0 > R.cutDuration(App.cut)) App.cut = null;
+      if (tNow - App.cut.t0 > R.cutDuration(App.cut)) { var done = App.cut; App.cut = null; if (done.after) done.after(); }   // 2.4.0: a trip / visit opens its result
     } else if (App.scene === 'battle') PP.BattleView.draw(ctx, tNow);
     else if (App.scene === 'mini') PP.Mini.draw(ctx, tNow);
     else {

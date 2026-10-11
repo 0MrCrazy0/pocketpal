@@ -322,3 +322,18 @@ body.finish-gilded .device { background:
 .room-in { font: 700 1.8em ui-monospace, Menlo, Consolas, monospace; letter-spacing: .3em; text-transform: uppercase; width: 6.2em; text-align: center; display: block; margin: .3em auto; }
 .next-alert { font-size: 1.05em; padding: .35em .5em; border-left: 4px solid currentColor; }
 .alert-limits li, .live-limits li { font-size: .92em; }
+/* 2.4.0: evolution hint (Status > report) and the young pal's training-style bars */
+.ov-body .evo-hint { color: #e8f0c0; background: rgba(155, 188, 15, .12); border-left: calc(var(--u) * 1) solid #9bbc0f; padding: calc(var(--u) * 1.5) calc(var(--u) * 2.5); margin: calc(var(--u) * 2) 0; font-size: calc(var(--u) * 6.4); }
+.ov-body td.style-bars { line-height: 1.5; white-space: nowrap; }
+/* 2.4.0: things, family line, memory book */
+.thing-ic { display: inline-block; flex: none; width: calc(var(--u) * 15); height: calc(var(--u) * 15); image-rendering: pixelated; background-color: var(--lcd); border-radius: calc(var(--u) * 2); vertical-align: middle; }
+.thing-ic.sil { filter: brightness(0) opacity(.5); background-color: transparent; }
+.goals li .thing-ic { width: calc(var(--u) * 10); height: calc(var(--u) * 10); }
+.family-line { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(var(--u) * 1.5); }
+.family-line li { display: flex; gap: calc(var(--u) * 2); align-items: center; overflow-wrap: anywhere; }
+.family-line li small { color: var(--lcd-lite); }
+.mem { list-style: none; margin: 0; padding: 0; display: grid; gap: calc(var(--u) * 1.2); }
+.mem li { display: flex; gap: calc(var(--u) * 2); align-items: baseline; overflow-wrap: anywhere; flex-wrap: wrap; }
+.mem li .mk { flex: none; width: calc(var(--u) * 6); color: #f0d060; }
+.mem li small { color: var(--lcd-lite); margin-left: auto; }
+.fam-h { font-size: 1em; margin: calc(var(--u) * 2) 0 calc(var(--u) * 1); color: #f0d060; }

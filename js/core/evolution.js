@@ -30,12 +30,37 @@
     return false;
   }
   function championMet(p, s) { var E = D.EVO; return p.mistakes <= E.perfect.maxMistakes && s >= E.perfect.minScore && p.discipline >= E.perfect.minDiscipline; }
+  /* 2.4.0: style points of a child / teen -> { power, swift, guard, total, lead, why }. lead = the style form it would
+   * take with good care (null = balanced / too little training = the classic Solid form). Deterministic (saved fields only). */
+  function style(p) {
+    var S = D.STYLE, e = (p && p.evo) || {}, v = e.sty || {};
+    var o = { power: U.int(v.power, 0, 0), swift: U.int(v.swift, 0, 0), guard: U.int(v.guard, 0, 0) };
+    var played = o.power + o.swift + o.guard;
+    o.calm = !!p && (p.discipline || 0) >= S.guardDisc && (p.mistakes || 0) <= S.guardMistakes && played > 0;
+    if (o.calm) o.guard += Math.round(played * S.guardCare);       // a very well-behaved youth leans Sturdy
+    o.total = o.power + o.swift + o.guard;
+    var rank = D.STYLE_FORMS.slice().sort(function (a, b) { return o[b] - o[a] || D.STYLE_FORMS.indexOf(a) - D.STYLE_FORMS.indexOf(b); });
+    var top = rank[0], second = o[rank[1]];
+    o.lead = o[top] >= S.minPts && o[top] >= S.minShare * o.total && o[top] - second >= S.minLead ? top : null;
+    o.top = o.total ? top : null;
+    return o;
+  }
   function adultForm(p) {
     var s = careScore(p), E = D.EVO;
     if (championMet(p, s) && secretMet(p, s)) return 'secret';
     if (championMet(p, s)) return 'perfect';
-    if (s >= E.good.minScore) return 'good';
+    if (s >= E.good.minScore) return style(p).lead || 'good';
     return 'bad';
+  }
+  /* 2.4.0: one plain-English line for Status: what the young pal's life is pointing to (never names the secret). */
+  function hint(p) {
+    if (!p || p.stage === 'adult' || p.stage === 'egg' || p.fate) return null;
+    var f = forecast(p), st = style(p), lab = function (k) { return D.FORM_INFO[k].label; };
+    if (f === 'bad') return 'Care is slipping: fewer mistakes and more love lead to a stronger adult.';
+    if (f === 'perfect') return 'Champion care! Keep mistakes at 2 or fewer and discipline at 50%+.';
+    if (D.STYLE_FORMS.indexOf(f) >= 0) return 'Good care + ' + (f === 'power' ? 'lots of power training' : f === 'swift' ? 'lots of quick games' : st.calm ? 'great manners' : 'lots of Match') + ' = leaning ' + lab(f) + '.';
+    if (!st.total) return 'Good care. How you train it (power, quick games or Match) can shape its adult form.';
+    return 'Good care, balanced training = ' + lab('good') + '. Train one way more to lean ' + lab(st.top) + '.';
   }
   /* What the pal is currently on track for (shown as a hint in Status). */
   function forecast(p) {
@@ -100,6 +125,13 @@
     e.tday = day; e.best = Math.max(e.best || 0, e.streak);
   }
 
-  PP.Evolution = { careScore: careScore, adultForm: adultForm, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
+  /* 2.4.0: a finished child / teen training or mini-game adds its style points (mini = the exact game played). */
+  function noteStyle(p, mini, success) {
+    if (!p || (p.stage !== 'child' && p.stage !== 'teen') || !p.evo) return;
+    var r = D.STYLE.pts[mini]; if (!r) return;
+    var v = p.evo.sty || (p.evo.sty = { power: 0, swift: 0, guard: 0 });
+    v[r[2]] = Math.min(9999, (v[r[2]] || 0) + (success ? r[0] : r[1]));
+  }
+  PP.Evolution = { careScore: careScore, adultForm: adultForm, style: style, hint: hint, noteStyle: noteStyle, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
     becomeAdult: becomeAdult, forceStage: forceStage, minutesToNextStage: minutesToNextStage };
 })(typeof window !== 'undefined' ? window : globalThis);

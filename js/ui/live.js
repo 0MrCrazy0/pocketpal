@@ -6,7 +6,7 @@
   'use strict';
   var PP = root.PP = root.PP || {};
   var D = PP.DATA, G = PP.Game;
-  var POLL_FAST = 1200, POLL_SLOW = 3000;
+  var POLL_FAST = 700, POLL_SLOW = 2000;
   var L = null;                                     // the current room session
   function cfg() { return PP.CONFIG || {}; }
   function App() { return PP.App; }
@@ -31,7 +31,7 @@
   function stopPoll() { if (L && L.timer) { clearTimeout(L.timer); L.timer = null; } }
   function poll(fn, ms) { stopPoll(); if (L) L.timer = setTimeout(function () { if (L) fn(); }, ms); }
   function getRoom() { return call('/room/' + L.room + '?side=' + L.side); }
-  /* 404: the room expired (30 min without a write); 403: our seat was taken (two guests joined at once) */
+  /* 404: the room expired (45 min without a write); 403: our seat was taken (two guests joined at once) */
   function gone(e) { return e && (e.status === 404 || e.status === 403); }
   function secs(ms) { return Math.max(0, Math.ceil(ms / 1000)); }
 

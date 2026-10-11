@@ -15,7 +15,7 @@
   var U = PP.util;
 
   var TYPES = [
-    { id: 'lights', label: 'Bedtime', text: 'Bedtime! Turn the lights off.' },
+    { id: 'lights', label: 'Bedtime', text: 'Bedtime. Your pal is asleep and the lights are still on.' },
     { id: 'hunger', label: 'Hungry', text: 'Your pal is hungry.' },
     { id: 'medicine', label: 'Medicine', text: 'Your pal is sick - medicine time.' },
     { id: 'poop', label: 'Clean-up', text: 'Time to clean up after your pal.' },

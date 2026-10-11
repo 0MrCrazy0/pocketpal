@@ -17,6 +17,7 @@
     ['Time', [['+10m', function () { skip(10); }], ['+1h', function () { skip(60); }], ['+6h', function () { skip(360); }], ['+1 day', function () { skip(1440); }]]],
     ['Stage', [['Egg', function () { stage('egg'); }], ['Baby', function () { stage('baby'); }], ['Child', function () { stage('child'); }], ['Teen', function () { stage('teen'); }]]],
     ['Adult', [['Scrappy', function () { stage('adult', 'bad'); }], ['Solid', function () { stage('adult', 'good'); }], ['Champion', function () { stage('adult', 'perfect'); }], ['Secret', function () { stage('adult', 'secret'); }]]],
+    ['Style', [['Mighty', function () { stage('adult', 'power'); }], ['Swift', function () { stage('adult', 'swift'); }], ['Sturdy', function () { stage('adult', 'guard'); }]]],   // 2.4.0
     ['Needs', [['Fill all', function () { T.fill(st()); done('All needs filled'); }], ['Hungry', function () { var p = pet(); if (p) { p.hunger = 0; p.happy = Math.min(p.happy, 1); } done('Hungry'); }],
       ['Poop', function () { T.poop(st()); done('Poop!'); }], ['Sick', function () { T.sick(st()); done('Sick'); }], ['Tantrum', function () { T.fake(st()); done('Tantrum started'); }]]],
     ['Battle', [['+100 XP', function () { var n = T.xp(st(), 100); done('+100 XP' + (n ? ' (+' + n + ' Lv)' : '')); }], ['+1 Lv', function () { lvl(1); }], ['Max Lv', function () { lvl(99); }],
@@ -24,6 +25,11 @@
     ['Extra', [['Spawn mate', function () { var r = T.mate(st(), Date.now()); done(r.msg); }], ['Quick battle', quickBattle], ['Unlock arena', function () { T.unlockArena(st()); done('All cups unlocked'); }],
       ['Full energy', function () { var p = pet(); if (p) p.energy = 100; done('Energy 100'); }],
       ['Revive RIP', function () { var r = T.revive(st()); done(r && r.msg ? r.msg : 'Nothing to revive'); }]]],
+    // 2.4.0: seasonal events (Auto = the device date) and the wider world
+    ['Event', [['Auto', function () { ev(null); }], ['Halloween', function () { ev('halloween'); }], ['Christmas', function () { ev('christmas'); }], ['Easter', function () { ev('easter'); }], ['Off', function () { ev('off'); }]]],
+    ['World', [['Trip ready', function () { var T9 = st().trips; T9.last = null; T9.n = 0; done('Trips ready'); }], ['All things', function () { Object.keys(PP.World.THINGS).forEach(function (id) { PP.World.give(st(), id, Date.now()); }); done('Every thing owned'); }],
+      ['Elder', function () { var p = pet(); if (p && p.stage === 'adult') { p.stageMin = Math.max(p.stageMin, PP.World.RETIRE.elderDays * 1440); done('Elder (can retire)'); } else done('Adults only'); }],
+      ['Gift in', function () { var r = PP.World.receive(st(), [{ g: 'treat', n: 'Tester', s: 1 }], G.now(st())); done(r.length ? 'Got a ' + r[0].name + (r[0].used ? '' : ' (note)') : 'No gift'); }]]],
     ['Unlock', [['Champion (all cups)', function () { unlocked(T.champion(st()), 'Arena Champion!'); }], ['Fill Paldex', function () { unlocked(T.fillDex(st()), 'Paldex filled'); }],
       ['+500 coins', function () { T.coins(st(), 500); done('+500 coins (' + PP.Shop.coins(st()) + ')'); }]]]
   ];
@@ -32,6 +38,7 @@
     A().handleEvents(fresh.map(function (s) { return { t: 'unlock', shell: s.id, name: s.name }; }), false);
     done(msg + (fresh.length ? '' : ' (no new shells)'));
   }
+  function ev(k) { st().settings.eventForce = k; done('Event: ' + (k ? k : 'auto (device date)')); }
   function setSpeed(n) { st().settings.speed = n; done('Time x' + n); }
   function skip(min) {
     var ev = T.skip(st(), min, Date.now());

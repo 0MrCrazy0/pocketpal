@@ -5,14 +5,15 @@
  * edited code cannot create an impossible pal.
  * Versions: v1 = every pal up to 1.9.4. v2 (1.9.7) = the same layout, used only for a SECRET form,
  * so a 1.9.4 client says "newer PocketPal - update" instead of failing on an unknown form;
- * normal pals keep v1 so older friends can still read them. */
+ * normal pals keep v1 so older friends can still read them. v3 (2.4.0) = the same layout again, used only for the
+ * new STYLE forms (power / swift / guard), so a 2.3.x client asks for an update instead of reading a wrong form. */
 (function (root) {
   'use strict';
   var PP = root.PP = root.PP || {};
   var U = PP.util, D = PP.DATA;
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   var MAX_LEN = 700;
-  var CARD_V = 2;            // newest card version this client understands
+  var CARD_V = 3;            // newest card version this client understands
 
   function b64enc(str) {
     var out = '', i;
@@ -41,13 +42,15 @@
       skills: (p.skills || []).slice(), innate: (p.innate || []).slice(), gen: p.gen || 1, stage: 'adult',
       boost: PP.Shop ? PP.Shop.boosts(p) : undefined };
   }
-  function encode(p) {
+  /* extra.mb (2.4.0): your gift mailbox id, so friends can send you gifts. Older games ignore the field. */
+  function encode(p, extra) {
     if (!p || p.stage !== 'adult') return null;
     var c = cardFromPet(p), tree = PP.Skills.tree(c.species).map(function (s) { return s.id; });
-    var payload = { v: c.form === 'secret' ? 2 : 1, i: c.id, n: c.name, s: D.SPECIES.indexOf(c.species), x: c.sex, f: D.FORMS.indexOf(c.form), l: c.level,
+    var payload = { v: c.form === 'secret' ? 2 : D.STYLE_FORMS.indexOf(c.form) >= 0 ? 3 : 1, i: c.id, n: c.name, s: D.SPECIES.indexOf(c.species), x: c.sex, f: D.FORMS.indexOf(c.form), l: c.level,
       g: [c.genes.hp, c.genes.atk, c.genes.def, c.genes.spd],
       k: c.skills.map(function (id) { return tree.indexOf(id); }), in: c.innate.map(function (id) { return tree.indexOf(id); }), gen: c.gen };
     if (c.boost && PP.Shop.boostTotal(c)) payload.b = [c.boost.hp, c.boost.atk, c.boost.def, c.boost.spd];   // Pal Store boosts (optional, capped)
+    if (extra && typeof extra.mb === 'string' && /^[0-9a-f]{16}$/.test(extra.mb)) payload.mb = extra.mb;
     var json = JSON.stringify(payload);
     return 'PP2-' + b64enc(json) + '-' + checksum(json);
   }
@@ -84,7 +87,7 @@
     var p;
     try { p = JSON.parse(json); } catch (e) { return fail('Code is damaged'); }
     if (p && typeof p.v === 'number' && p.v > CARD_V) return fail('This code is from a newer PocketPal - update the game to use it');
-    if (!p || (p.v !== 1 && p.v !== 2)) return fail('Unsupported code version');
+    if (!p || (p.v !== 1 && p.v !== 2 && p.v !== 3)) return fail('Unsupported code version');
     var species = D.SPECIES[p.s];
     if (!species) return fail('Unknown species');
     var tree = PP.Skills.tree(species).map(function (s) { return s.id; });
@@ -100,6 +103,7 @@
     if (card.innate.some(function (s) { return !s; })) return fail('Impossible skill set');
     var err = validateCard(card);
     if (err) return fail(err);
+    if (typeof p.mb === 'string' && /^[0-9a-f]{16}$/.test(p.mb)) card.mb = p.mb;   // 2.4.0 gift mailbox (optional)
     return { ok: true, card: card };
   }
 

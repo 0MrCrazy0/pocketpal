@@ -347,6 +347,7 @@
   function bannerText() {
     var m = bv.B.meta || {};
     if (m.kind === 'arena' && D.ARENA[m.rank]) return D.ARENA[m.rank].name.toUpperCase() + '  FOE ' + ((m.foe | 0) + 1) + '/' + foeTotal(m);
+    if (m.fcup) return 'FRIENDS CUP  ' + ((m.foe | 0) + 1) + '/' + (m.foes | 0);
     if (m.live) return 'LIVE BATTLE';
     if (m.kind === 'friend') return 'FRIEND BATTLE';
     if (m.kind === 'visitor') return 'VISITOR';
@@ -366,7 +367,7 @@
         } else ctx.fillRect(px - 2, py - 2, 4, 4);
       }
     } else {
-      var tag = m.live ? 'LIVE' : m.kind === 'friend' ? 'PAL' : m.kind === 'visitor' ? 'VISIT' : null;
+      var tag = m.live ? 'LIVE' : m.fcup ? ((m.foe | 0) + 1) + '/' + (m.foes | 0) : m.kind === 'friend' ? 'PAL' : m.kind === 'visitor' ? 'VISIT' : null;
       if (tag) F.draw(ctx, tag, W / 2, 9, C.dark, 1, 'center');
     }
     var txt = bannerText();

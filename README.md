@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.3.21**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.4.7**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -14,7 +14,7 @@ This is **version 2.3.21**. It's free, has no ads or accounts, and works offline
 4. **Watch it grow:** egg, then baby, child, teen and adult (about 4 days). Good care gives the best adult form.
 5. **Battle and collect.** Adults fight in the arena, learn skills, battle friends and have eggs of their own.
 
-There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 adult forms: **Scrappy**, **Solid** and **Champion**. Each animal also has one **secret form** that only appears for something special, like a perfect childhood, a long training streak or a Myth Cup win. The Paldex shows a dark silhouette and a hint until you find it.
+There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 main adult forms: **Scrappy**, **Solid** and **Champion**. A Solid pal can also grow into a **Mighty**, **Swift** or **Sturdy** form, depending on the training games it played most as a teen. **Status, page 2** shows which way it's heading. Each animal also has one **secret form** that only appears for something special, like a perfect childhood, a long training streak or a Myth Cup win. The Paldex shows a dark silhouette and a hint until you find it.
 
 ## Buttons
 
@@ -34,7 +34,7 @@ You can also just tap things on the screen. **MENU** opens the main menu, and **
 - 🧹 **Clean:** cleans up poop
 - ➕ **Medicine:** cures sickness
 - 💡 **Lights:** turn them off when your pal goes to sleep
-- ⚔ **Battle:** the arena and friend battles
+- ⚔ **Battle:** the arena, friend battles and the Friends Cup
 - 📢 **Discipline:** scold a tantrum, or praise good behaviour
 
 ## The status strip
@@ -63,6 +63,16 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 - **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed. **Settings ▸ Care alerts** shows the next alert and lets you switch each kind (bedtime, hunger, medicine, clean-up, calls, wake-up) on or off.
 - **Live battles:** **Battle ▸ Live battle** opens a room with a 4-letter code. Your friend joins with the code and you both pick moves turn by turn. Battle codes still work offline.
 
+## New in 2.4.0
+
+- **Trips (MENU ▸ Trips):** take your pal (a child or older) to the **beach**, the **forest** or **town**. A trip uses energy, and then your pal rests for 2 hours (up to 3 trips a day). You might find things to keep, meet a wild pal for your Paldex or earn a few coins.
+- **Things (MENU ▸ Things):** **hats** your pal wears, plus **toys** and **garden decorations** shown on the home screen. Buy some in the Pal Store, find others on trips, and collect seasonal ones.
+- **Family (MENU ▸ Family):** once an adult has been grown up for 5 days, it can **retire**. It rests in the Album, and an **heir egg** of the next generation takes its place, carrying ONE family trait you choose: a strong gene, a skill it knows from birth, or the Family Ribbon hat. You never have to retire a pal; an Elder (after 20 days) just gets a gentle note. The family line shows every generation.
+- **Memory book:** every pal keeps a diary of its big moments (hatching, growing up, wins, trips, gifts and more). It stays readable in the Album after the pal retires, and the family memory book walks back through the generations.
+- **Gifts and visits (MENU ▸ Gifts & visits):** set up a mailbox, then share your battle code. Friends can send you a treat (free, 3 a day) or a Berry Cake or Deluxe Feast from their own Bag. Visits work offline: your pal and a friend's pal play together in the garden.
+- **Friends Cup (Battle ▸ Friends Cup):** your newest 3 friend pals, from weakest to strongest. Beat them in a row to win the cup (+20 coins once a day).
+- **Seasonal events:** Halloween (Oct 20 – Nov 1), Christmas (Dec 10 – 26) and Easter (Palm Sunday to Easter Monday) decorate the home screen and bring a free hat plus two event items. Events follow your device's date.
+
 ## Keep your pal safe
 
 Your game is saved in your browser. Before switching phones or clearing your browser data, make a backup:
@@ -72,7 +82,7 @@ Your game is saved in your browser. Before switching phones or clearing your bro
 
 ## Privacy
 
-There are no ads, tracking or accounts. Your pal stays on your device unless you use care alerts, cloud save or live battles. Care alerts send only the alert times, cloud saves are scrambled so nobody else can read them, and live battles send your pal's battle code to the room.
+There are no ads, tracking or accounts. Your pal stays on your device unless you use care alerts, cloud save, live battles or gifts. Care alerts send only the alert times, cloud saves are scrambled so nobody else can read them, live battles send your pal's battle code to the room, and a gift carries only the gift, your pal's name and its animal.
 
 ---
 
@@ -83,7 +93,7 @@ You need Node 18 or newer. From the source folder:
 
 ```
 npm install        # installs Playwright (the only dev dependency)
-npm test           # about 300 unit tests, no browser needed, any timezone
+npm test           # about 360 unit tests, no browser needed, any timezone
 npm run test:e2e   # downloads Chromium for Playwright if needed, then runs the browser suites
 ```
 

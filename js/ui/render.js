@@ -246,18 +246,10 @@
     // 2.3.3: bedtime follows the pal's own schedule, so a sleeping pal gets the star sky
     if (pal && pal.stage !== 'egg' && !pal.fate && PP.Sleep.isNight(PP.Time.minuteOfDay(now), PP.Sleep.of(pal))) phase = 'night';
     var base = dayWeather(st, now), w = PP.Behave.weather(pal, base);
-    // a clear day can be windy so the clouds actually move. Mood weather (rain, storm, snow, sun) still wins.
+    // a clear day can be windy so the clouds actually move. Mood weather still wins.
     if (phase !== 'night' && w === 'clear' && PP.util.roll(st.seed, PP.Shop.dayOf(now), 'wind') < 0.4) w = 'wind';
     var bow = phase !== 'night' && (w === 'sunny' || PP.Behave.rainbow(bowMemo, w, Date.now()));
     return { phase: phase, weather: w, base: base, rainbow: bow };
-  }
-  function hills(ctx, shift) {
-    var top = FLOOR_TOP, s = shift || 0;   // 2.3.21: the far hills now stand on the horizon of the new floor
-    ctx.fillStyle = C.dark;
-    for (var x = 0; x < W; x++) {
-      var hgt = Math.round(8 + 6 * Math.sin((x + s) / 34 + 0.6) + 3 * Math.sin((x + s) / 13 + 2));
-      if (hgt > 0) ctx.fillRect(x, top - hgt, 1, hgt);
-    }
   }
   /* 2.3.21: a pixel-art FLOOR the pal stands on, and two TREES in the LCD style. Day: a mid-green ground strip with a
    * dark edge, tufts and pebbles; round trees with a lit side and a shaded side. Night: the ground goes dark and the
@@ -308,15 +300,14 @@
   }
   function skyCloud(ctx, x, y, scale) {
     var s = scale || 1;
-    ctx.fillStyle = C.lite;
-    fshape(ctx, x - 2, y - 8 * s, x + 26 * s, y + 8 * s, function (u, v) {
-      return inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
-    });
-    ctx.fillStyle = C.ink;
-    fshape(ctx, x - 3, y - 9 * s, x + 27 * s, y + 9 * s, function (u, v) {
-      var inn = inDisc(u, v, x + 6 * s, y + 1, 4 * s) || inDisc(u, v, x + 12 * s, y, 5 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 3.4 * s);
-      var out = inDisc(u, v, x + 6 * s, y + 1, 5 * s) || inDisc(u, v, x + 12 * s, y, 6 * s) || inDisc(u, v, x + 17 * s, y + 1.4, 4.3 * s);
-      return out && !inn;
+    stamp(ctx, 'sky:' + s, x, y, function () {   // 2.4.0: cached (the shape is the same every frame, only its spot moves)
+      return [[C.lite, -2, -8 * s, 26 * s, 8 * s, function (u, v) {
+        return inDisc(u, v, 6 * s, 1, 4 * s) || inDisc(u, v, 12 * s, 0, 5 * s) || inDisc(u, v, 17 * s, 1.4, 3.4 * s);
+      }], [C.ink, -3, -9 * s, 27 * s, 9 * s, function (u, v) {
+        var inn = inDisc(u, v, 6 * s, 1, 4 * s) || inDisc(u, v, 12 * s, 0, 5 * s) || inDisc(u, v, 17 * s, 1.4, 3.4 * s);
+        var out = inDisc(u, v, 6 * s, 1, 5 * s) || inDisc(u, v, 12 * s, 0, 6 * s) || inDisc(u, v, 17 * s, 1.4, 4.3 * s);
+        return out && !inn;
+      }]];
     });
   }
   /* 1.9.8: fill a shape on the x5 backing grid (1/5 LCD px rows): inside(u, v) in LCD px. Each row is one run per
@@ -324,13 +315,38 @@
   var SUB = 5;
   function fshape(ctx, x0, y0, x1, y1, inside) {
     for (var j = Math.floor(y0 * SUB); j < Math.ceil(y1 * SUB); j++) {
-      var v = (j + 0.5) / SUB, run = -1;
+      var v = (j + 0.5) / SUB, run = null;   // 2.4.0: null, not -1 - a run may start left of 0 (in a stamp's own canvas)
       for (var i = Math.floor(x0 * SUB); i <= Math.ceil(x1 * SUB); i++) {
         var on = i < Math.ceil(x1 * SUB) && inside((i + 0.5) / SUB, v);
-        if (on && run < 0) run = i;
-        else if (!on && run >= 0) { ctx.fillRect(run / SUB, j / SUB, (i - run) / SUB, 1 / SUB); run = -1; }
+        if (on && run === null) run = i;
+        else if (!on && run !== null) { ctx.fillRect(run / SUB, j / SUB, (i - run) / SUB, 1 / SUB); run = null; }
       }
     }
+  }
+  /* 2.4.0: stamp(ctx, key, x, y, parts) - a shape that never changes (cloud, rain drop, sun, moon) is filled with fshape
+   * ONCE into a small x5 canvas and then copied each frame (fshape tests every x5 pixel of its box: rain at 36 drops a
+   * frame cost a slow phone about a third of its frame rate). parts() -> [[colour, x0, y0, x1, y1, inside(u, v)], ...]
+   * relative to the spot (x, y), drawn in order. The spot snaps to the x5 grid, so the copy lands on whole canvas pixels
+   * and looks exactly like a direct fill there. No canvas (node tests): it falls back to filling directly. */
+  var stamps = {};
+  function makeStamp(parts) {
+    var doc = root.document; if (!doc || !doc.createElement) return null;
+    var ox = Infinity, oy = Infinity, ex = -Infinity, ey = -Infinity;
+    parts.forEach(function (p) { ox = Math.min(ox, Math.floor(p[1] * SUB)); oy = Math.min(oy, Math.floor(p[2] * SUB)); ex = Math.max(ex, Math.ceil(p[3] * SUB) + 1); ey = Math.max(ey, Math.ceil(p[4] * SUB)); });
+    try {
+      var cv = doc.createElement('canvas'); cv.width = ex - ox; cv.height = ey - oy;
+      var c = cv.getContext && cv.getContext('2d'); if (!c) return null;
+      c.setTransform(SUB, 0, 0, SUB, -ox, -oy);
+      parts.forEach(function (p) { c.fillStyle = p[0]; fshape(c, p[1], p[2], p[3], p[4], p[5]); });
+      return { cv: cv, ox: ox, oy: oy, w: cv.width, h: cv.height };
+    } catch (e) { return null; }
+  }
+  function stamp(ctx, key, x, y, parts) {
+    var qx = Math.round(x * SUB), qy = Math.round(y * SUB), st = stamps[key];
+    if (st === undefined && ctx.drawImage) st = stamps[key] = makeStamp(parts());
+    if (st && ctx.drawImage) { ctx.drawImage(st.cv, (qx + st.ox) / SUB, (qy + st.oy) / SUB, st.w / SUB, st.h / SUB); return; }
+    var X = qx / SUB, Y = qy / SUB;
+    parts().forEach(function (p) { ctx.fillStyle = p[0]; fshape(ctx, X + p[1], Y + p[2], X + p[3], Y + p[4], function (u, v) { return p[5](u - X, v - Y); }); });
   }
   function inDisc(u, v, cx, cy, r) { return (u - cx) * (u - cx) + (v - cy) * (v - cy) <= r * r; }
   function inCap(u, v, ax, ay, bx, by, r) {
@@ -363,27 +379,28 @@
           var x0 = 16 + skyRand(slot + 4) * (W - 90);
           var y0 = top + 34 + skyRand(slot + 11) * 30;
           var hx = x0 + p * 64, hy = y0 - p * 26;
-          ctx.fillStyle = C.lite;
-          for (var i = 0; i < 18; i++) ctx.fillRect(Math.round(hx - i * 3.4), Math.round(hy + i * 1.4), i === 0 ? 3 : 1, 1);
+          S.drawFx(ctx, 'shot', hx - 28, hy - 8, 2);
         }
       }
       var moon = orbSpot('night', PP.Game.now(st), top);
-      ctx.fillStyle = C.lite;
-      fshape(ctx, moon.x - 8, moon.y - 8, moon.x + 8, moon.y + 8, function (u, v) { return inDisc(u, v, moon.x, moon.y, 7) && !inDisc(u, v, moon.x + 3.4, moon.y - 1, 5.2); });
+      stamp(ctx, 'moon', moon.x, moon.y, function () { return [[C.lite, -8, -8, 8, 8, function (u, v) { return inDisc(u, v, 0, 0, 7) && !inDisc(u, v, 3.4, -1, 5.2); }]]; });
     } else {
       var sun = orbSpot(info.phase, PP.Game.now(st), top);
-      ctx.fillStyle = C.lite;
-      fshape(ctx, sun.x - 8, sun.y - 8, sun.x + 8, sun.y + 8, function (u, v) { return inDisc(u, v, sun.x, sun.y, 7); });
-      ctx.fillStyle = C.ink;
-      fshape(ctx, sun.x - 8, sun.y - 8, sun.x + 8, sun.y + 8, function (u, v) { return inDisc(u, v, sun.x, sun.y, 7.6) && !inDisc(u, v, sun.x, sun.y, 6.2); });
+      stamp(ctx, 'sun', sun.x, sun.y, function () {
+        return [[C.lite, -8, -8, 8, 8, function (u, v) { return inDisc(u, v, 0, 0, 7); }], [C.ink, -8, -8, 8, 8, function (u, v) { return inDisc(u, v, 0, 0, 7.6) && !inDisc(u, v, 0, 0, 6.2); }]];
+      });
       var clouds = w === 'storm' || w === 'rain' ? 4 : w === 'grey' || w === 'cloudy' || w === 'wind' ? 3 : 2;
       var speed = w === 'wind' || w === 'storm' ? 40 : 90;
-      for (var c = 0; c < clouds; c++) skyCloud(ctx, ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 16 + (c % 2) * 12, 1);
+      for (var c = 0; c < clouds; c++) S.drawFx(ctx, 'cloud', ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 12 + (c % 2) * 10, 2);
     }
-    hills(ctx, still ? 0 : tt / 30);
     if (info.rainbow) rainbowArc(ctx, top, FLOOR_TOP);   // 2.3.21: after the far hills, so its feet come down to the ground
     TREES.forEach(function (tr) { treeArt(ctx, tr, info.phase === 'night'); });
     floorStrip(ctx, info.phase === 'night');
+    // 2.4.0: the seasonal touches (event on) and the room's toy + decoration, behind the pal, poop and weather
+    if (PP.WorldArt && PP.World) {
+      PP.WorldArt.drawEvent(ctx, PP.World.eventNow(st, PP.Game.now(st)), info.phase, tt, still);
+      PP.WorldArt.drawRoom(ctx, PP.World.shown(st, PP.Game.active(st)), info.phase === 'night', tt);
+    }
     if (w === 'wind' && !still) {
       ctx.fillStyle = C.dark;
       for (var leaf = 0; leaf < 8; leaf++) {
@@ -396,9 +413,8 @@
   /* 1.9.1 weather layers. Every colour keeps ink text >= 3:1 (checked by the update audit). */
   var RAIN = '#5a8a28', CLOUDG = '#628f2c';
   function bigCloud(ctx, x, y, col) {
-    ctx.fillStyle = col;
-    fshape(ctx, x - 2, y - 8, x + 38, y + 10, function (u, v) {             // 1.9.8: a rounded storm cloud (same 34 x 11 box)
-      return inCap(u, v, x + 3, y + 2.6, x + 31, y + 2.6, 3.2) || inDisc(u, v, x + 11.5, y - 0.2, 4) || inDisc(u, v, x + 21.5, y - 1.2, 4.6) || inDisc(u, v, x + 28, y + 1.2, 3.2);
+    stamp(ctx, 'big:' + col, x, y, function () {             // 1.9.8: a rounded storm cloud (same 34 x 11 box); 2.4.0 cached
+      return [[col, -2, -8, 38, 10, function (u, v) { return inCap(u, v, 3, 2.6, 31, 2.6, 3.2) || inDisc(u, v, 11.5, -0.2, 4) || inDisc(u, v, 21.5, -1.2, 4.6) || inDisc(u, v, 28, 1.2, 3.2); }]];
     });
   }
   function rainbowArc(ctx, top, ground) {
@@ -408,7 +424,7 @@
     var bands = [C.ink, C.dark, C.mid, C.lite];
     for (var b = 0; b < bands.length; b++) {
       ctx.fillStyle = bands[b];
-      var ro = ry - b * 2, ri = ro - 2, rox = Math.round(ro * kx);
+      var ro = ry - b * 4, ri = ro - 4, rox = Math.round(ro * kx);
       for (var x = -rox; x <= rox; x++) {
         var ux = x / kx, yo = Math.sqrt(Math.max(0, ro * ro - ux * ux)), yi = Math.abs(ux) < ri ? Math.sqrt(ri * ri - ux * ux) : 0;
         var y0 = Math.round(cy - yo), y1 = Math.round(cy - yi);
@@ -424,7 +440,7 @@
       ctx.fillStyle = 'rgba(48,98,48,' + (w === 'storm' ? 0.26 : w === 'rain' ? 0.18 : 0.12) + ')';
       ctx.fillRect(0, top, W, h);
       var nc = w === 'storm' ? 4 : 3;
-      for (i = 0; i < nc; i++) bigCloud(ctx, Math.round(((tt / (w === 'storm' ? 160 : 600) + i * (W + 50) / nc) % (W + 50)) - 40), top + 16 + (i % 2) * 8, w === 'grey' ? 'rgba(206,224,110,0.8)' : CLOUDG);
+      for (i = 0; i < nc; i++) S.drawFx(ctx, 'cloud', Math.round(((tt / (w === 'storm' ? 160 : 600) + i * (W + 50) / nc) % (W + 50)) - 40), top + 14 + (i % 2) * 8, 2);
     }
     if (w === 'rain' || w === 'storm' || w === 'drizzle') {
       // clearly falling rain: slanted streaks that drop fast, plus little splashes on the ground
@@ -434,9 +450,12 @@
         var yo = ((i * 53 + Math.floor(tt / speed)) % fall), x0 = (i * 37 + (i % 3) * 11) % W - Math.floor(yo * slant / 3);
         var xs = ((x0 % W) + W) % W, ys = top + 14 + yo;
         // 2.0.0: a smooth streak on the x5 grid (it was a stair of whole LCD pixels) with a bright rounded glint at its head
-        var ex = xs - len * slant / 3, ey = ys + len;
-        ctx.fillStyle = RAIN; fshape(ctx, ex - 1, ys - 1, xs + 1, ey + 1, function (u, v) { return inCap(u, v, xs + .5, ys + .5, ex + .5, ey - .5, .42); });
-        ctx.fillStyle = 'rgba(206,224,110,1)'; fshape(ctx, ex, ey - 2.4, ex + 2, ey + .4, function (u, v) { return inCap(u, v, ex + 1.15 + slant * .25, ey - 1.6, ex + 1.0, ey - .6, .36); });
+        // 2.4.0: every drop is the same shape, so it is filled once and stamped (xs, ys are whole LCD px: pixel-identical)
+        stamp(ctx, 'drop:' + len + ':' + slant, xs, ys, function () {
+          var ex = -len * slant / 3, ey = len;
+          return [[RAIN, ex - 1, -1, 1, ey + 1, function (u, v) { return inCap(u, v, .5, .5, ex + .5, ey - .5, .42); }],
+            ['rgba(206,224,110,1)', ex, ey - 2.4, ex + 2, ey + .4, function (u, v) { return inCap(u, v, ex + 1.15 + slant * .25, ey - 1.6, ex + 1.0, ey - .6, .36); }]];
+        });
       }
       ctx.fillStyle = RAIN;
       if (!still) for (i = 0; i < (w === 'drizzle' ? 3 : 6); i++) {   // splashes: two little droplets jumping out (2.0.0: round, x5 grid)
@@ -459,15 +478,6 @@
         if (!still) { ctx.fillStyle = RAIN; fshape(ctx, bx - 8, by - 1, bx + 6, by + 25, bolt(2, 1)); }
         ctx.fillStyle = still ? CLOUDG : 'rgba(206,224,110,1)';
         fshape(ctx, bx - 8, by - 1, bx + 6, by + 24, bolt(0, 0));
-      }
-    }
-    if (w === 'snow') {
-      // 2.0.0: a six-armed flake drawn on the x5 grid - a dark halo and bright arms (it was a 5-pixel cross of LCD pixels)
-      var flake = function (fx, fy, r) { return function (u, v) { for (var q = 0; q < 3; q++) { var a = q * Math.PI / 3, c = Math.cos(a) * 2.3, d = Math.sin(a) * 2.3; if (inCap(u, v, fx - c, fy - d, fx + c, fy + d, r)) return true; } return false; }; };
-      for (i = 0; i < 20; i++) {
-        var fy = top + 8 + ((i * 19 + Math.floor(tt / 55)) % (h - 14)) + .5, fx = ((i * 41 + Math.round(4 * Math.sin(tt / 700 + i))) % W + W) % W + .5;
-        ctx.fillStyle = RAIN; fshape(ctx, fx - 3.2, fy - 3.2, fx + 3.2, fy + 3.2, flake(fx, fy, .62));
-        ctx.fillStyle = 'rgba(206,224,110,1)'; fshape(ctx, fx - 3, fy - 3, fx + 3, fy + 3, flake(fx, fy, .3));
       }
     }
   }
@@ -525,6 +535,8 @@
     app.reaction = react;
     if (app.anim && app.anim.kind === 'eat') flip = eatFacing(p.species, S.stageKeyOf(p), px, flip, p.poop);   // 2.3.21: room for the food
     S.draw(ctx, p.species, S.stageKeyOf(p), pose, frame, px, y, PET, flip);
+    // 2.4.0: the pal's hat, on the head-top anchor of this very frame (off while it sleeps)
+    if (p.hat && !p.asleep && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
 
     // poop pile (bottom right)
@@ -578,7 +590,7 @@
   var MOUTH_STAGES = ['baby', 'child', 'teen', 'adult_bad', 'adult_good', 'adult_perfect', 'adult_secret'];
   var FOOD = 32, BITE = 6;            // the food cell is drawn 32 px wide; it overlaps the front of the mouth by 6 px
   function mouthAt(species, stageKey) {
-    var row = MOUTH[species], i = MOUTH_STAGES.indexOf(stageKey);
+    var row = MOUTH[species], i = MOUTH_STAGES.indexOf(/^adult_(power|swift|guard)$/.test(stageKey) ? 'adult_good' : stageKey);   // 2.4.0: style forms share the Solid head
     return row && i >= 0 ? row[i] : [90, 52];
   }
   /* Top-left of the food while eating (pal at px, y; flip = facing left). Kept on screen and above the floor line. */
@@ -707,15 +719,19 @@
         F.draw(ctx, 'HATCHED!', W / 2, 10, C.ink, 2, 'center');
         F.draw(ctx, c.name.toUpperCase() + ' THE ' + PP.DATA.NAMES[c.species].baby.toUpperCase(), W / 2, L.bottomText, C.dark, 1, 'center');
       }
+    } else if (c.kind === 'trip' && PP.WorldArt) {   // 2.4.0
+      PP.WorldArt.drawTrip(ctx, c, t);
+    } else if (c.kind === 'visit' && PP.WorldArt) {
+      PP.WorldArt.drawVisit(ctx, c, t, app);
     } else if (c.kind === 'die') {
       if (k < 1500) S.draw(ctx, c.species, c.key, 'faint', Math.floor(k / 400), cx, y + 6, PET);
       else S.drawFx(ctx, 'tomb', W / 2 - 24, 64, 3);
       F.draw(ctx, c.title, W / 2, 16, C.ink, 1, 'center');
     }
   }
-  function cutDuration(c) { return c.kind === 'evolve' ? (c.secret ? 6400 : 5200) : c.kind === 'hatch' ? 3600 : 3200; }
+  function cutDuration(c) { return c.kind === 'evolve' ? (c.secret ? 6400 : 5200) : c.kind === 'hatch' ? 3600 : c.kind === 'trip' ? PP.WorldArt.TRIP_MS : c.kind === 'visit' ? PP.WorldArt.VISIT_MS : 3200; }
 
-  PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
+  PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, PS: PS, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
     statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI, mini: mini, poopAt: poopAt,
     sceneInfo: sceneInfo, drawScene: drawScene, FLOOR_TOP: FLOOR_TOP, TREES: TREES, foodSpot: foodSpot, eatFacing: eatFacing, mouthAt: mouthAt, forceScene: function (v) { sceneForce = v || null; } };
 })(typeof window !== 'undefined' ? window : globalThis);

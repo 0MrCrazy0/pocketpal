@@ -164,7 +164,6 @@
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
       p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' });
     }
-    if (ctx.offline && p.asleep && p.sleepKind === 'night' && p.lights) p.lights = false; // mercy: pal switches lights off itself while you're away
     if (p.asleep && p.sleepKind === 'night' && p.night) { p.night.mins++; if (p.lights) p.night.lit++; else p.night.dark++; }
 
     // ---- meters
@@ -488,8 +487,9 @@
     if (p.energy < cost) { var t = res(false, 'Too tired... (needs ' + cost + ' energy)'); t.tired = cost; return t; }
     return res(true, '');
   }
-  function exercise(p, kind, success) {
+  function exercise(p, kind, success, mini) {
     var c = canExercise(p, kind); if (!c.ok) return c;
+    PP.Evolution.noteStyle(p, mini || kind, !!success);       // 2.4.0: young pals' training style (style adult forms)
     p.energy = Math.max(0, p.energy - (kind === 'train' ? R.costs.train : R.costs.game));
     p.weight = Math.max(Math.ceil(baseWeight(p) * 0.5), p.weight - 1);
     var msg;
