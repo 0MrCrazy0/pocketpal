@@ -502,6 +502,7 @@
     var c = canExercise(p, kind); if (!c.ok) return c;
     PP.Evolution.noteStyle(p, mini || kind, !!success);       // 2.4.0: young pals' training style (style adult forms)
     p.energy = Math.max(0, p.energy - (kind === 'train' ? R.costs.train : R.costs.game));
+    if (success) p.energy = Math.min(100, p.energy + (kind === 'train' ? 4 : 2));
     p.weight = Math.max(Math.ceil(baseWeight(p) * 0.5), p.weight - 1);
     var msg;
     if (kind === 'train') {
