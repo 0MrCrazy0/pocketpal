@@ -410,6 +410,7 @@
   function firstEgg() {
     UI.open(UI.screens.speciesPicker(function (sp) {
       var r = G.startEgg(App.state, sp, Date.now());
+      if (r && r.ok && PP.Net) PP.Net.scheduleAlert(App.state);
       if (r.ok) { G.setActive(App.state, r.slot, Date.now()); App.toast('Your ' + D.SPECIES_INFO[sp].label + ' egg is warming up...'); }
       App.resetWalker(); App.save(); UI.close();
     }, 'CHOOSE YOUR EGG'));

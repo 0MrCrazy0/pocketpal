@@ -50,7 +50,7 @@
       for (var i = 1; i <= (opts.maxMin || AHEAD_MIN); i++) {
         var ev = [], at = fromMs + i * U.MIN;
         PP.Care.stepMinute(egg, at, ctx, ev);
-        for (var j = 0; j < ev.length; j++) if (ev[j].t === 'hatch') { first.hatch = Math.max(fromMs + U.MIN, at - 2 * U.MIN); break; }
+        for (var j = 0; j < ev.length; j++) if (ev[j].t === 'hatch') { first.hatch = Math.max(fromMs + 30e3, at - 3 * U.MIN); break; }
         if (first.hatch) break;
       }
       return first.hatch ? [{ type: 'hatch', at: first.hatch }] : [];
@@ -87,7 +87,7 @@
       if (!on[e.type]) return;
       var at = realNow + Math.max(60e3, e.at - nowG);
       var last = out[out.length - 1];
-      if (last && at - last.at < MERGE_MS) return;          // one ping covers both
+      if (last && at - last.at < MERGE_MS && e.type !== 'hatch' && last.type !== 'hatch') return;
       out.push({ at: at, type: e.type });
     });
     var any = TYPES.some(function (t) { return on[t.id]; });
