@@ -68,7 +68,132 @@
   "cell": 40,
   "base": 16,
   "src": "sprites/fx.png",
-  "cells": {"poop": [0, 0], "poop2": [1, 0], "meal": [2, 0], "meal_bitten": [3, 0], "snack": [4, 0], "heart": [5, 0], "heart_empty": [6, 0], "zzz": [7, 0], "zzz2": [8, 0], "skull": [9, 0], "germ": [10, 0], "spark": [0, 1], "spark2": [1, 1], "star": [2, 1], "sweat": [3, 1], "anger": [4, 1], "note": [5, 1], "pill": [6, 1], "tomb": [7, 1], "call": [8, 1], "bubble": [9, 1], "swirl": [10, 1], "fish": [0, 2], "fish_bitten": [1, 2], "honey": [2, 2], "honey_bitten": [3, 2], "fruit": [4, 2], "fruit_bitten": [5, 2], "snack_bitten": [6, 2], "cloud": [7, 2], "shot": [8, 2]}
+  "cells": {
+   "poop": [
+    0,
+    0
+   ],
+   "poop2": [
+    1,
+    0
+   ],
+   "meal": [
+    2,
+    0
+   ],
+   "meal_bitten": [
+    3,
+    0
+   ],
+   "snack": [
+    4,
+    0
+   ],
+   "heart": [
+    5,
+    0
+   ],
+   "heart_empty": [
+    6,
+    0
+   ],
+   "zzz": [
+    7,
+    0
+   ],
+   "zzz2": [
+    8,
+    0
+   ],
+   "skull": [
+    9,
+    0
+   ],
+   "germ": [
+    10,
+    0
+   ],
+   "spark": [
+    0,
+    1
+   ],
+   "spark2": [
+    1,
+    1
+   ],
+   "star": [
+    2,
+    1
+   ],
+   "sweat": [
+    3,
+    1
+   ],
+   "anger": [
+    4,
+    1
+   ],
+   "note": [
+    5,
+    1
+   ],
+   "pill": [
+    6,
+    1
+   ],
+   "tomb": [
+    7,
+    1
+   ],
+   "call": [
+    8,
+    1
+   ],
+   "bubble": [
+    9,
+    1
+   ],
+   "swirl": [
+    10,
+    1
+   ],
+   "fish": [
+    0,
+    2
+   ],
+   "fish_bitten": [
+    1,
+    2
+   ],
+   "honey": [
+    2,
+    2
+   ],
+   "honey_bitten": [
+    3,
+    2
+   ],
+   "fruit": [
+    4,
+    2
+   ],
+   "fruit_bitten": [
+    5,
+    2
+   ],
+   "snack_bitten": [
+    6,
+    2
+   ],
+   "cloud": [
+    7,
+    2
+   ],
+   "shot": [
+    8,
+    2
+   ]
+  }
  },
  "names": {
   "croc": [

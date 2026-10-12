@@ -214,9 +214,9 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 @media (prefers-reduced-motion: reduce) { .cupclear { animation: none; } }
 .bm-grid.rows3 { grid-template-rows: repeat(3, 1fr); }
 
-/* toasts sit at the TOP of the LCD, under the clock bar, so they never cover the name bar */
+/* toasts sit under the status strip (clock, hearts, discipline), so they never cover the meters */
 .toast {
-  position: absolute; left: calc(var(--u) * 4); right: calc(var(--u) * 4); top: calc(var(--u) * 13); z-index: 25; padding: calc(var(--u) * 1.5) calc(var(--u) * 4); text-align: center; border-radius: calc(var(--u) * 2.5);
+  position: absolute; left: calc(var(--u) * 4); right: calc(var(--u) * 4); top: calc(var(--u) * 33); z-index: 25; padding: calc(var(--u) * 1.5) calc(var(--u) * 4); text-align: center; border-radius: calc(var(--u) * 2.5);
   background: var(--ink); color: var(--lcd-lite); font: 700 calc(var(--u) * 6.2)/1.25 'PocketPal LCD', 'Courier New', monospace; font-synthesis: none; box-shadow: 0 2px 0 rgba(0,0,0,.3); pointer-events: none; overflow-wrap: anywhere;
 }
 /* while a menu is open the toast drops to the bottom hint row, so it never hides a menu's title or first lines */

@@ -58,7 +58,7 @@
     snackWindowMin: 180, snackLimit: 3,   // 4th snack within 3 h = overfeeding mistake
     fakeCallPerHour: 0.10, fakeCallMin: 15,
     energyAwakeMin: 10,      // -1 energy every 10 min awake
-    energySleepMin: 2,       // 1.8.2: +1 every 2 min asleep with lights off - naps AND night sleep (was 4)
+    energySleepMin: 1,       // +1 every minute asleep with lights off, so a nap visibly fills the meter
     energySleepLitMin: 8,    // +1 every 8 min asleep with the lights left on (unchanged)
     napEnergy: 60,           // lights off in the day and energy under this = nap
     wokenAwakeMin: 30,       // 2.2.0: lights on at night wakes the pal (grumpy, happy -1 once a night); it stays up this long, then dozes off again
@@ -353,7 +353,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.4.16',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.4.18',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

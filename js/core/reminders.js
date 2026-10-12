@@ -20,7 +20,8 @@
     { id: 'medicine', label: 'Medicine', text: 'Your pal is sick - medicine time.' },
     { id: 'poop', label: 'Clean-up', text: 'Time to clean up after your pal.' },
     { id: 'calls', label: 'Calls', text: 'Your pal is calling you.' },
-    { id: 'wake', label: 'Wake-up', text: 'Your pal is waking up.' }
+    { id: 'wake', label: 'Wake-up', text: 'Your pal is waking up.' },
+    { id: 'rested', label: 'Rested', text: 'Your pal woke from its nap with full energy. Lights are on.' }
   ];
   var CHECK = { id: 'check', label: 'Check-in', text: 'Your pal misses you - come and say hi.' };
   var MAX = 8;                  // times per upload
@@ -29,7 +30,7 @@
   var CHECK_MS = 3 * 3600e3;    // nothing due: one welfare check-in after 3 h
   var POOP_LEAD_MIN = 60;
 
-  function defaults() { return { lights: true, hunger: true, medicine: true, poop: true, calls: true, wake: false }; }
+  function defaults() { return { lights: true, hunger: true, medicine: true, poop: true, calls: true, wake: false, rested: true }; }
   function clean(o) {
     var d = defaults(), out = {};
     TYPES.forEach(function (t) { out[t.id] = o && typeof o === 'object' && typeof o[t.id] === 'boolean' ? o[t.id] : d[t.id]; });
@@ -55,6 +56,7 @@
         else if (e.t === 'poop') hit('poop', at + POOP_LEAD_MIN * U.MIN);
         else if (e.t === 'sleep' && q.lights) hit('lights', at);
         else if (e.t === 'wake' && e.from === 'night') hit('wake', at);
+        else if (e.t === 'wake' && e.from === 'nap') hit('rested', at);
       }
       if (q.fate) { hit('calls', at - 60 * U.MIN); break; }
     }

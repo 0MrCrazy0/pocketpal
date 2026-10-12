@@ -426,9 +426,9 @@
         deed(p);
         return Object.assign(res(true, 'Lights off - straight to sleep.', null), { resleep: true });
       }
-      if (!inNight && p.energy < R.napEnergy && !p.asleep) {
+      if (!inNight && !p.asleep) {
         p.asleep = true; p.sleepKind = 'nap'; p.fake = null;
-        return Object.assign(res(true, 'Lights off - a nap.', null), { resleep: true });
+        return Object.assign(res(true, 'Lights off - a nap. Energy is recovering.', null), { resleep: true });
       }
       return res(true, 'Lights off', null);
     }

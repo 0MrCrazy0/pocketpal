@@ -114,10 +114,12 @@
     var night = p.stage !== 'egg' && PP.Sleep.isNight(PP.Time.minuteOfDay(PP.Game.now(PP.App.state)), PP.Sleep.of(p));
     stripBoxes(p, night).forEach(function (q) {
       if (q.k === 'hunger' || q.k === 'happy') for (var i = 0; i < 4; i++) mini(ctx, i < q.n ? MINI.heart : MINI.empty, q.x + i * 6, q.y + 1, i < q.n ? C.ink : C.dark);
-      else if (q.k === 'energy') for (var j = 0; j < 4; j++) {          // 4 pips, 25 energy each; they blink when tired
-        var on = j < q.n, blink = PP.Care.isTired(p) && Math.floor(t / 500) % 2;
-        ctx.fillStyle = on ? (blink ? C.dark : C.ink) : C.dark;
+      else if (q.k === 'energy') for (var j = 0; j < 4; j++) {          // 4 pips, 25 energy each; a partial pip shows a nap filling
+        var e = p.energy || 0, full = Math.floor(e / 25), part = (e % 25) / 25;
+        var on = j < full, partial = j === full && part > 0.04, blink = PP.Care.isTired(p) && Math.floor(t / 500) % 2;
+        ctx.fillStyle = (on || partial) ? (blink ? C.dark : C.ink) : C.dark;
         if (on) ctx.fillRect(q.x + j * 5, q.y + 1, 4, 5);
+        else if (partial) ctx.fillRect(q.x + j * 5, q.y + 1 + Math.round(5 * (1 - part)), 4, Math.max(1, Math.round(5 * part)));
         else { ctx.fillRect(q.x + j * 5, q.y + 1, 4, 1); ctx.fillRect(q.x + j * 5, q.y + 5, 4, 1); ctx.fillRect(q.x + j * 5, q.y + 1, 1, 5); ctx.fillRect(q.x + j * 5 + 3, q.y + 1, 1, 5); }
       } else if (q.k === 'discipline') {                                   // a small bar, 0-100 %
         ctx.fillStyle = C.ink; ctx.fillRect(q.x, q.y + 1, q.w, 1); ctx.fillRect(q.x, q.y + 5, q.w, 1); ctx.fillRect(q.x, q.y + 1, 1, 5); ctx.fillRect(q.x + q.w - 1, q.y + 1, 1, 5);
@@ -395,7 +397,10 @@
       });
       var clouds = w === 'storm' || w === 'rain' ? 4 : w === 'grey' || w === 'cloudy' || w === 'wind' ? 3 : 2;
       var speed = w === 'wind' || w === 'storm' ? 40 : 90;
-      for (var c = 0; c < clouds; c++) S.drawFx(ctx, 'cloud', ((tt / speed + c * (W + 50) / clouds) % (W + 50)) - 24, top + 12 + (c % 2) * 10, 2);
+      for (var c = 0; c < clouds; c++) {
+        var back = c % 2 === 0, spd = back ? speed * 1.6 : speed * 0.7;   // far clouds drift, near clouds move faster
+        S.drawFx(ctx, 'cloud', ((tt / spd + c * (W + 50) / clouds) % (W + 50)) - 24, top + 8 + (back ? 0 : 14), 2);
+      }
     }
     if (info.rainbow) rainbowArc(ctx, top, FLOOR_TOP);   // 2.3.21: after the far hills, so its feet come down to the ground
     TREES.forEach(function (tr) { treeArt(ctx, tr, info.phase === 'night'); });
@@ -444,7 +449,7 @@
       ctx.fillStyle = 'rgba(48,98,48,' + (w === 'storm' ? 0.26 : w === 'rain' ? 0.18 : 0.12) + ')';
       ctx.fillRect(0, top, W, h);
       var nc = w === 'storm' ? 4 : 3;
-      for (i = 0; i < nc; i++) S.drawFx(ctx, 'cloud', Math.round(((tt / (w === 'storm' ? 160 : 600) + i * (W + 50) / nc) % (W + 50)) - 40), top + 14 + (i % 2) * 8, 2);
+      for (i = 0; i < nc; i++) S.drawFx(ctx, 'cloud', Math.round(((tt / (w === 'storm' ? 90 : 220) + i * (W + 50) / nc) % (W + 50)) - 40), top + 20 + (i % 2) * 6, 2);
     }
     if (w === 'rain' || w === 'storm' || w === 'drizzle') {
       // clearly falling rain: slanted streaks that drop fast, plus little splashes on the ground

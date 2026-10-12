@@ -208,7 +208,7 @@
       items.push({ label: '\u25c0 Previous animal', act: function () { replace(paldexScreen(si - 1)); } });
       items.push({ label: 'Back', act: pop });
       return { title: 'PALDEX \u00b7 ' + D.SPECIES_INFO[sp].label.toUpperCase() + ' ' + c.perSpecies[sp] + '/' + keys.length,
-        html: '<div class="dex-sum"><span>Adults <b>' + c.adults + '/' + D.SPECIES.length * D.FORMS.length + '</b></span><span>All <b>' + c.total + '/' + D.SPECIES.length * keys.length + '</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
+        html: '<p class="tip">Egg \u2192 Baby \u2192 Child \u2192 Teen \u2192 Adult<br>Poor care: <b>Scrappy</b> \u00b7 Good care: <b>Solid</b><br>Solid + how you train: <b>Mighty</b> (power) \u00b7 <b>Swift</b> (quick games) \u00b7 <b>Sturdy</b> (Match)<br>Champion care + a secret: the rare form</p><div class="dex-sum"><span>Adults <b>' + c.adults + '/' + D.SPECIES.length * D.FORMS.length + '</b></span><span>All <b>' + c.total + '/' + D.SPECIES.length * keys.length + '</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
         items: items, detail: function (i) {
           var k = keys[i]; if (!k) return i === keys.length ? 'Show the next animal' : i === keys.length + 1 ? 'Show the previous animal' : 'Back to the menu';
           var e = PP.Collection.get(s, sp, k) || {};
