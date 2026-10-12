@@ -604,6 +604,16 @@
     root.requestAnimationFrame(frame);
     initServiceWorker();
     if (navigator.serviceWorker) navigator.serviceWorker.ready.then(function () { if (PP.Net) PP.Net.scheduleAlert(App.state); });
+    /* 2.4.27: a push action (Clean / Feed / Lights off / Medicine) opens the game and does it */
+    function doAction(act) {
+      if (!act) return;
+      var map = { clean: 'clean', meal: 'meal', snack: 'snack', lights: 'lights', medicine: 'medicine' };
+      if (!map[act]) return;
+      setTimeout(function () { var r = G.act(App.state, map[act]); if (r && r.ok) { App.save(); refreshIcons(); App.toast(r.msg || 'Done'); } }, 400);
+    }
+    var qs = new URLSearchParams(root.location.search);
+    if (qs.get('do')) { doAction(qs.get('do')); history.replaceState(null, '', root.location.pathname); }
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.do) doAction(e.data.do); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })(typeof window !== 'undefined' ? window : globalThis);

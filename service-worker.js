@@ -16,7 +16,7 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v2.4.25';
+var CACHE = 'pocketpal-v2.4.28';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
@@ -132,13 +132,18 @@ function pickEntry(list, now) {        /* same rule as PP.Reminders.pick */
   });
   return best;
 }
-function notify(body) {
-  return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', renotify: true });
+function notify(body, type) {
+  var actions = [{ action: 'dismiss', title: 'Dismiss' }];
+  if (type === 'poop') actions.unshift({ action: 'clean', title: 'Clean' });
+  else if (type === 'hunger') actions.unshift({ action: 'meal', title: 'Feed' }, { action: 'snack', title: 'Snack' });
+  else if (type === 'lights') actions.unshift({ action: 'lights', title: 'Lights off' });
+  else if (type === 'medicine') actions.unshift({ action: 'medicine', title: 'Medicine' });
+  return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', renotify: true, actions: actions });
 }
 self.addEventListener('push', function (e) {
   e.waitUntil(readSched().then(function (s) {
     var hit = s && pickEntry(s.list, Date.now());
-    return notify(hit && hit.text ? hit.text : GENERIC);
+    return notify(hit && hit.text ? hit.text : GENERIC, hit && hit.type);
   }));
 });
 self.addEventListener('periodicsync', function (e) {
@@ -148,13 +153,16 @@ self.addEventListener('periodicsync', function (e) {
     var now = Date.now(), due = s.list.filter(function (x) { return x.at <= now && x.at > (s.shown || 0); });
     if (!due.length) return;
     s.shown = now;
-    return writeSched(s).then(function () { return notify(due[due.length - 1].text || GENERIC); });
+    return writeSched(s).then(function () { return notify(due[due.length - 1].text || GENERIC, due[due.length - 1].type); });
   }));
 });
 self.addEventListener('notificationclick', function (e) {
   e.notification.close();
+  var act = e.action || '';
+  if (act === 'dismiss') return;
   e.waitUntil(self.clients.matchAll({ type: 'window' }).then(function (list) {
-    for (var i = 0; i < list.length; i++) if ('focus' in list[i]) return list[i].focus();
-    return self.clients.openWindow('./');
+    var url = './' + (act ? '?do=' + encodeURIComponent(act) : '');
+    for (var i = 0; i < list.length; i++) if ('focus' in list[i]) { list[i].focus(); if (act && list[i].postMessage) list[i].postMessage({ do: act }); return; }
+    return self.clients.openWindow(url);
   }));
 });
