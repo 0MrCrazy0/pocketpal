@@ -42,7 +42,19 @@
   /* First upcoming moment of each type, in GAME ms. Pure: works on a copy. */
   function upcoming(p, fromMs, opts) {
     opts = opts || {};
-    if (!p || p.fate || p.stage === 'egg') return [];
+    if (!p || p.fate) return [];
+    if (p.stage === 'egg') {
+      var egg = U.deepCopy(p), first = {};
+      var ctx = { minuteOf: opts.minuteOf || PP.Care.defaultMinuteOf, offline: false };
+      egg.lastTickAt = fromMs;
+      for (var i = 1; i <= (opts.maxMin || AHEAD_MIN); i++) {
+        var ev = [], at = fromMs + i * U.MIN;
+        PP.Care.stepMinute(egg, at, ctx, ev);
+        for (var j = 0; j < ev.length; j++) if (ev[j].t === 'hatch') { first.hatch = at; break; }
+        if (first.hatch) break;
+      }
+      return first.hatch ? [{ type: 'hatch', at: first.hatch }] : [];
+    }
     var q = U.deepCopy(p), max = opts.maxMin || AHEAD_MIN, first = {}, n = 0;
     var ctx = { minuteOf: opts.minuteOf || PP.Care.defaultMinuteOf, offline: false };
     q.lastTickAt = fromMs;

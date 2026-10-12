@@ -91,7 +91,7 @@
         /* times = the 1.9.7 schedule; at = its first time, for a worker that is still on 1.9.4 */
         return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null });
       }).then(function (j) {
-        if (announce && PP.App && PP.App.toast && j) PP.App.toast(j.scheduled ? 'Next alert: ' + nextText(list) : 'No alert types are on');
+        if (announce && PP.App && PP.App.toast && j) PP.App.toast(j.scheduled ? 'Next alert: ' + nextText(list) : (list.length ? 'Next alert: ' + nextText(list) : 'No alert types are on'));
       });
     }).catch(function (e) { if (announce && PP.App && PP.App.toast) PP.App.toast('Alerts: ' + (e && e.message || 'blocked')); });
   }
