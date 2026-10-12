@@ -22,7 +22,7 @@
     { id: 'calls', label: 'Calls', text: 'Your pal is calling you.' },
     { id: 'wake', label: 'Wake-up', text: 'Your pal is waking up.' },
     { id: 'rested', label: 'Rested', text: 'Your pal woke from its nap with full energy. Lights are on.' },
-    { id: 'hatch', label: 'Hatch', text: 'Your egg hatched! Come meet your new pal.' }
+    { id: 'hatch', label: 'Hatch', text: 'Your egg is about to hatch! Open the game and watch.' }
   ];
   var CHECK = { id: 'check', label: 'Check-in', text: 'Your pal misses you - come and say hi.' };
   var MAX = 8;                  // times per upload
@@ -50,7 +50,7 @@
       for (var i = 1; i <= (opts.maxMin || AHEAD_MIN); i++) {
         var ev = [], at = fromMs + i * U.MIN;
         PP.Care.stepMinute(egg, at, ctx, ev);
-        for (var j = 0; j < ev.length; j++) if (ev[j].t === 'hatch') { first.hatch = at; break; }
+        for (var j = 0; j < ev.length; j++) if (ev[j].t === 'hatch') { first.hatch = Math.max(fromMs + U.MIN, at - 2 * U.MIN); break; }
         if (first.hatch) break;
       }
       return first.hatch ? [{ type: 'hatch', at: first.hatch }] : [];
