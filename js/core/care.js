@@ -159,6 +159,7 @@
       p.asleep = false; p.sleepKind = null; p.lights = true;
       ev.push({ t: 'wake', from: 'night', report: nightReport(p) });
     }
+    if (night && p.asleep && p.sleepKind === 'nap') { p.sleepKind = 'night'; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
       p.asleep = true; p.sleepKind = 'nap'; p.fake = null; ev.push({ t: 'nap' });   // 2.3.21: a pal does not sulk in its sleep (every other way to fall asleep ends a tantrum too)
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
@@ -421,13 +422,13 @@
     p.lights = !p.lights;
     if (!p.lights && p.need) p.need.lights = null;
     if (!p.lights) {
-      if (inNight && !(p.asleep && p.sleepKind === 'night')) {
+      if (inNight) {
         p.wokeAt = null; p.asleep = true; p.sleepKind = 'night'; p.fake = null;
         if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
         deed(p);
         return Object.assign(res(true, 'Lights off - straight to sleep.', null), { resleep: true });
       }
-      if (!inNight && !p.asleep) {
+      if (!p.asleep) {
         p.asleep = true; p.sleepKind = 'nap'; p.fake = null;
         return Object.assign(res(true, 'Lights off - a nap. Energy is recovering.', null), { resleep: true });
       }
