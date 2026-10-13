@@ -297,18 +297,14 @@
     if (d.weekDone === PP.Daily.weekOf(now(state))) return { ok: false, msg: 'Already beaten this week' };
     var card = PP.Daily.weeklyFoe(state);
     if (!card) return { ok: false, msg: 'Only adults can battle' };
-    var r = startBattle(state, card, { kind: 'weekly' }, seed);
-    if (r.ok) d.weekDone = PP.Daily.weekOf(now(state));
-    return r;
+    return startBattle(state, card, { kind: 'weekly' }, seed);
   }
   function startDaily(state, seed) {
     var d = state.daily || (state.daily = {});
     if (d.arenaDay === PP.Shop.dayOf(now(state))) return { ok: false, msg: 'Already beaten today' };
     var card = PP.Daily.arenaCard(state);
     if (!card) return { ok: false, msg: 'Only adults can battle' };
-    var r = startBattle(state, card, { kind: 'daily' }, seed);
-    if (r.ok) d.arenaDay = PP.Shop.dayOf(now(state));
-    return r;
+    return startBattle(state, card, { kind: 'daily' }, seed);
   }
   function startVisitor(state, seed) {
     if (!PP.Daily.visitorReady(state, now(state))) return { ok: false, msg: 'No visitor today' };
@@ -386,8 +382,8 @@
     memoBattle(p, out, lv0, now(state));                    // 2.4.0 memory book
     var bc = PP.Shop.battleCoins(won, oppLv, B.meta, cleared, champ, out.myth);
     if (won && B.meta.kind === 'visitor') { bc.bonus += PP.Daily.VISITOR_BONUS; out.visitor = true; }
-    if (won && B.meta.kind === 'daily') { bc.bonus += 50; out.daily = true; }
-    if (won && B.meta.kind === 'weekly') { bc.bonus += 150; out.weekly = true; }
+    if (won && B.meta.kind === 'daily') { bc.bonus += 50; out.daily = true; var d = state.daily || (state.daily = {}); d.arenaDay = PP.Shop.dayOf(now(state)); }
+    if (won && B.meta.kind === 'weekly') { bc.bonus += 150; out.weekly = true; var d = state.daily || (state.daily = {}); d.weekDone = PP.Daily.weekOf(now(state)); }
     out.coins = PP.Shop.earn(state, bc.capped, now(state)) + PP.Shop.earn(state, bc.bonus, now(state), false);
     if (won) { var dr = PP.Daily.record(state, 'battle', now(state)); out.coins += dr.coins; }
     out.capped = bc.capped > 0 && out.coins < bc.capped + bc.bonus;
