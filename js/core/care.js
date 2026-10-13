@@ -162,7 +162,8 @@
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
       p.asleep = true; p.sleepKind = 'nap'; p.fake = null; ev.push({ t: 'nap' });   // 2.3.21: a pal does not sulk in its sleep (every other way to fall asleep ends a tantrum too)
     } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
-      p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' });
+      if (night) { p.sleepKind = 'night'; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
+      else { p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' }); }
     }
     if (p.asleep && p.sleepKind === 'night' && p.night) { p.night.mins++; if (p.lights) p.night.lit++; else p.night.dark++; }
 
