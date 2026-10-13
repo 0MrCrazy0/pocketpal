@@ -91,7 +91,8 @@
       return ev.concat(placeGolden(state, t));
     }
     if (!p || p.fate || p.stage === 'egg') return ev.concat(placeGolden(state, t));   // goals start once a pal has hatched
-    d.day = dk; d.goals = pickGoals(state, p, dk); d.allPaid = false;
+    d.day = dk; d.goals = pickGoals(state, p, dk); d.allPaid = false; d.wonDaily = false;
+    if (d.weekDone != null && PP.Daily.weekOf(t) > d.weekDone) d.wonWeekly = false;
     d.event = pickEvent(state, p, dk); d.eventUsed = false;
     ev.push({ t: 'dailyGoals', goals: d.goals.map(function (g) { return text(g); }) });
     if (d.event) {
@@ -165,6 +166,7 @@
     o.day = num(d.day); o.maxSeen = num(d.maxSeen); o.lastAll = num(d.lastAll);
     o.loginDay = num(d.loginDay); o.loginStreak = U.int(d.loginStreak, 0, 0, 9999);
     o.arenaDay = num(d.arenaDay); o.weekDone = num(d.weekDone);
+    if (!d.wonDaily) o.arenaDay = null; if (!d.wonWeekly) o.weekDone = null;
     o.event = EVENTS[d.event] ? d.event : null; o.pendingGolden = !!d.pendingGolden; o.golden = U.int(d.golden, 0, 0, 9999);
     o.goals = Array.isArray(d.goals) ? d.goals.filter(function (g) { return g && POOL.some(function (x) { return x.id === g.id; }); }).slice(0, 4).map(function (g) {
       var need = U.int(g.need, 1, 1, 10); return { id: g.id, need: need, n: U.int(g.n, 0, 0, need), done: !!g.done };
