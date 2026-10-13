@@ -70,8 +70,9 @@
     function offer(worker) {
       if (!worker || !navigator.serviceWorker.controller) return;   // first install: nothing to update
       var bar = document.getElementById('updateBar'); if (!bar) return;
+      if (localStorage.getItem('pp-updated') === '2.4.72') return;   // already updated to this version
       bar.hidden = false;
-      bar.onclick = function () { bar.hidden = true; App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
+      bar.onclick = function () { bar.hidden = true; localStorage.setItem('pp-updated', '2.4.72'); App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
     }
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (reloading || !App.updateRequested) return;
