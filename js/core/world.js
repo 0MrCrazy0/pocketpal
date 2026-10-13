@@ -13,6 +13,7 @@
    * src: shop (price) | trip (place) | event (season) | heir (only from a retiring pal). rare: a rare trip find. */
   var THINGS = {
     bow:       { name: 'Red Bow',       kind: 'hat',  src: 'shop', price: 30 },
+    bowtie:    { name: 'Bowtie',        kind: 'hat',  src: 'shop', price: 35 },
     cap:       { name: 'Sports Cap',    kind: 'hat',  src: 'shop', price: 45 },
     sunhat:    { name: 'Sun Hat',       kind: 'hat',  src: 'trip', place: 'beach' },
     leafcrown: { name: 'Leaf Crown',    kind: 'hat',  src: 'trip', place: 'forest' },
@@ -332,7 +333,9 @@
   var GIFTS = {
     treat: { name: 'Treat', free: true, desc: 'Happy +1 for their pal' },
     cake:  { name: 'Berry Cake', item: 'cake', desc: 'Goes into their Bag (from yours)' },
-    feast: { name: 'Deluxe Feast', item: 'feast', desc: 'Goes into their Bag (from yours)' }
+    feast: { name: 'Deluxe Feast', item: 'feast', desc: 'Goes into their Bag (from yours)' },
+    tonic: { name: 'Energy Tonic', item: 'tonic', desc: 'Goes into their Bag (from yours)' },
+    remedy: { name: 'Super Medicine', item: 'remedy', desc: 'Goes into their Bag (from yours)' }
   };
   var GIFT = { freePerDay: 3, sendPerDay: 5, usePerDay: 3, keepLog: 20 };
   var VISIT = { perDay: 2 };

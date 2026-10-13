@@ -58,9 +58,10 @@
     snackWindowMin: 180, snackLimit: 3,   // 4th snack within 3 h = overfeeding mistake
     fakeCallPerHour: 0.10, fakeCallMin: 15,
     energyAwakeMin: 10,      // -1 energy every 10 min awake
-    energySleepMin: 1,       // +1 every minute asleep with lights off, so a nap visibly fills the meter
-    energySleepLitMin: 8,    // +1 every 8 min asleep with the lights left on (unchanged)
-    napEnergy: 60,           // lights off in the day and energy under this = nap
+    energySleepMin: 1,       // +1 every minute asleep with lights off
+    energyNapMin: 0.5,           // +2 every minute on a daytime nap with lights off
+    energySleepLitMin: 8,    // +1 every 8 min asleep with the lights left on
+    napEnergy: 40,           // lights off in the day and energy under this = nap
     wokenAwakeMin: 30,       // 2.2.0: lights on at night wakes the pal (grumpy, happy -1 once a night); it stays up this long, then dozes off again
     healthDrain: { hunger: 0.08, sick: 0.06, poop: 0.03, happy: 0.02 },  // per minute
     healthRegen: 0.12, healthRegenSleep: 0.2,
@@ -70,7 +71,7 @@
     offlineMercyMin: 24 * 60,
     offlineMaxSimMin: 14 * 24 * 60,
     medicineDoses: { baby: 1, child: 1, teen: 2, adult: 2 },
-    costs: { train: 12, game: 6, battle: 20 },   // 1.8.2: training 15 -> 12, play games 8 -> 6
+    costs: { train: 8, game: 4, battle: 16 },
     tiredEnergy: 30,         // 1.8.3: under this the pal LOOKS tired (droopy eyes, yawns, nodding, Zz in the status strip)
     trainDayFull: 8,         // 1.8.2 anti-farm: the first 8 trainings per pet-day pay in full; after that only 1 XP, no discipline/happy
     energyFood: { meal: 10, snack: 4 },
@@ -353,7 +354,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.4.29',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.4.71',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

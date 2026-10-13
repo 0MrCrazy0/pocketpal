@@ -453,6 +453,7 @@
       if (bv.hurt === i && k < 0.6) { off += (Math.floor((t - bv.t0) / 60) % 2 ? 2 : -2); hide = Math.floor((t - bv.t0) / 90) % 3 === 2; }
       if (!hide && !bv.down[i]) shadow(ctx, x + off + PS / 2, 22);
       if (!hide) S.draw(ctx, f.species, 'adult_' + f.form, i === 0 && bv.run ? 'walk' : bv.pose[i], Math.floor(t / (i === 0 && bv.run ? 140 : 280)), x + off, TOP, 3, flipMe);
+      if (!hide && i === 0 && PP.App && PP.App.state && PP.WorldArt && PP.World) { var p = PP.Game.active(PP.App.state); if (p && p.hat) PP.WorldArt.drawHat(ctx, p.hat, f.species, 'adult_' + f.form, i === 0 && bv.run ? 'walk' : bv.pose[i], Math.floor(t / (i === 0 && bv.run ? 140 : 280)), x + off, TOP, flipMe, false); }
     }
     burstFx(ctx, t);
     bv.fx = bv.fx.filter(function (e) { return t - e.t0 < e.dur; });

@@ -102,7 +102,7 @@
       if (p.sick) row2('sick', 7);
       if (p.poop > 0) { row2('poop', 7); x2 -= 1; row2('poopN', F.width(String(p.poop)), { text: String(p.poop) }); }
       if (!p.fate && PP.Care.attention(p).length) row2('attn', 2);
-      if (p.asleep || night) row2('moon', 5);   // 2.3.21: asleep shows the moon too (the 'ZZ' text is gone; the pal's sprite Zzz's show sleep)
+      if (p.asleep || night) row2(p.sleepKind === 'nap' ? 'bolt' : 'moon', 5);
       if (PP.Care.isTired(p) && !p.asleep) row2('tired', 9);   // 2.3.21: no 'Zz' glyph in the strip while it sleeps
     }
     var sa = stageAge(p), sw = F.width(sa);
@@ -125,6 +125,7 @@
         ctx.fillStyle = C.ink; ctx.fillRect(q.x, q.y + 1, q.w, 1); ctx.fillRect(q.x, q.y + 5, q.w, 1); ctx.fillRect(q.x, q.y + 1, 1, 5); ctx.fillRect(q.x + q.w - 1, q.y + 1, 1, 5);
         ctx.fillRect(q.x + 1, q.y + 2, Math.round((q.w - 2) * q.n / 100), 3);
       } else if (q.k === 'attn') mini(ctx, MINI.attn, q.x, q.y, Math.floor(t / 400) % 2 ? C.dark : C.ink);
+      else if (q.k === 'bolt' && p.sleepKind === 'nap') mini(ctx, MINI.bolt, q.x, q.y, Math.floor(t / 300) % 2 ? C.ink : C.dark);
       else if (MINI[q.k]) mini(ctx, MINI[q.k], q.x, q.y + (q.k === 'poop' ? 2 : 0), (q.k === 'poop' && p.poop >= 2 || q.k === 'tired') && Math.floor(t / 500) % 2 ? C.dark : C.ink);
       else if (q.text) F.draw(ctx, q.text, q.x, q.y, q.k === 'stage' || q.k === 'weight' ? C.dark : C.ink);
     });
@@ -396,11 +397,14 @@
       stamp(ctx, 'sun', sun.x, sun.y, function () {
         return [[C.lite, -8, -8, 8, 8, function (u, v) { return inDisc(u, v, 0, 0, 7); }], [C.ink, -8, -8, 8, 8, function (u, v) { return inDisc(u, v, 0, 0, 7.6) && !inDisc(u, v, 0, 0, 6.2); }]];
       });
-      var clouds = w === 'storm' || w === 'rain' ? 4 : w === 'grey' || w === 'cloudy' || w === 'wind' ? 3 : 2;
       var speed = w === 'wind' || w === 'storm' ? 40 : 90;
-      for (var c = 0; c < clouds; c++) {
-        var back = c % 2 === 0, spd = back ? speed * 1.6 : speed * 0.7;   // far clouds drift, near clouds move faster
-        S.drawFx(ctx, 'cloud', ((tt / spd + c * (W + 50) / clouds) % (W + 50)) - 24, top + 8 + (back ? 0 : 14), 2);
+      S.drawFx(ctx, 'cloud', ((tt / (speed * 2.4)) % (W + 60)) - 20, top + 2, 1.3);
+      S.drawFx(ctx, 'cloud', ((tt / (speed * 2.1) + 80) % (W + 60)) - 20, top + 6, 1.5);
+      var small = w === 'storm' || w === 'rain' ? 6 : 4;
+      for (var c = 0; c < small; c++) {
+        var sx = ((tt / (speed * 1.4) + c * 47 + (c * 13) % 30) % (W + 50)) - 16;
+        var sy = top + 12 + (c * 7) % 14;
+        S.drawFx(ctx, 'cloud', sx, sy, 1.2 + (c % 3) * 0.2);
       }
     }
     TREES.forEach(function (tr) { treeArt(ctx, tr, info.phase === 'night'); });
@@ -545,7 +549,7 @@
     if (app.anim && app.anim.kind === 'eat') flip = eatFacing(p.species, S.stageKeyOf(p), px, flip, p.poop);   // 2.3.21: room for the food
     S.draw(ctx, p.species, S.stageKeyOf(p), pose, frame, px, y, PET, flip);
     // 2.4.0: the pal's hat, on the head-top anchor of this very frame (off while it sleeps)
-    if (p.hat && !p.asleep && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
+    if (p.hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
 
     // poop pile (bottom right)
@@ -565,7 +569,10 @@
 
     dotted(ctx, L.floorLine);
     F.draw(ctx, p.name.toUpperCase() + ' ' + (p.sex === 'M' ? '\u2642' : '\u2640'), 3, L.bottomText, C.ink);
-    if (p.stage === 'adult') F.draw(ctx, 'LV' + p.level, W - 3, L.bottomText, C.ink, 1, 'right');
+    if (p.stage === 'adult') {
+      var bp = PP.Battle && PP.Battle.fighter ? PP.Battle.fighter(p).bp : 0;
+      F.draw(ctx, 'LV' + p.level + (bp ? '  BP' + bp : ''), W - 3, L.bottomText, C.ink, 1, 'right');
+    }
 
     if (!p.lights) {   // lights off: dim the room, but leave the night sky readable
       var top = L.stripEnd;

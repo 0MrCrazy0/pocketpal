@@ -41,11 +41,11 @@
       return q ? { id: q.id, name: q.name, species: q.species, form: q.form, sex: q.sex, gen: q.gen,
         parents: (q.parents || []).map(function (g) { return g ? { id: g.id, name: g.name, species: g.species, form: g.form, sex: g.sex, gen: g.gen } : null; }) } : null;
     });
-    e.fate = p.fate || e.fate || null; e.hatchedAt = p.hatchedAt || e.hatchedAt || null;
+    e.fate = p.fate == null ? null : p.fate; e.hatchedAt = p.hatchedAt || e.hatchedAt || null;
     e.days = PP.Pet.ageDays(p);
     if (p.hard) e.hard = true; else delete e.hard;          // 1.9.0: hard-mode memorial
     if (p.golden) e.golden = true; else delete e.golden;
-    if (p.fateCause) e.cause = String(p.fateCause).slice(0, 30);
+    if (p.fateCause) e.cause = String(p.fateCause).slice(0, 30); else if (!p.fate) delete e.cause;
     e.mem = (p.mem || []).slice(-30);                       // 2.4.0: the memory book stays with the album entry
     // a full copy is only needed to revive a pal that died or ran away (keeps the save small)
     if (e.fate === 'dead' || e.fate === 'gone') e.snap = U.deepCopy(p); else delete e.snap;
@@ -292,6 +292,24 @@
     c.name = 'Visitor'; c.id = 'visitor' + PP.Shop.dayOf(t || now(state));
     return c;
   }
+  function startWeekly(state, seed) {
+    var d = state.daily || (state.daily = {});
+    if (d.weekDone === PP.Daily.weekOf(now(state))) return { ok: false, msg: 'Already beaten this week' };
+    var card = PP.Daily.weeklyFoe(state);
+    if (!card) return { ok: false, msg: 'Only adults can battle' };
+    var r = startBattle(state, card, { kind: 'weekly' }, seed);
+    if (r.ok) d.weekDone = PP.Daily.weekOf(now(state));
+    return r;
+  }
+  function startDaily(state, seed) {
+    var d = state.daily || (state.daily = {});
+    if (d.arenaDay === PP.Shop.dayOf(now(state))) return { ok: false, msg: 'Already beaten today' };
+    var card = PP.Daily.arenaCard(state);
+    if (!card) return { ok: false, msg: 'Only adults can battle' };
+    var r = startBattle(state, card, { kind: 'daily' }, seed);
+    if (r.ok) d.arenaDay = PP.Shop.dayOf(now(state));
+    return r;
+  }
   function startVisitor(state, seed) {
     if (!PP.Daily.visitorReady(state, now(state))) return { ok: false, msg: 'No visitor today' };
     var card = visitorCard(state);
@@ -343,6 +361,7 @@
     if (won) {
       p.wins++; out.xp = D.LEVEL.winXp(p.level, oppLv);
       p.happy = Math.min(4, p.happy + 1);
+      p.energy = Math.min(100, p.energy + 4);
       if (arena) {
         var fi = B.meta.foe | 0, n = PP.Arena.foeCount(rank);
         rec.wins++; rec.beat[fi] = true; rec.best = Math.max(rec.best, fi + 1);
@@ -367,6 +386,8 @@
     memoBattle(p, out, lv0, now(state));                    // 2.4.0 memory book
     var bc = PP.Shop.battleCoins(won, oppLv, B.meta, cleared, champ, out.myth);
     if (won && B.meta.kind === 'visitor') { bc.bonus += PP.Daily.VISITOR_BONUS; out.visitor = true; }
+    if (won && B.meta.kind === 'daily') { bc.bonus += 50; out.daily = true; }
+    if (won && B.meta.kind === 'weekly') { bc.bonus += 150; out.weekly = true; }
     out.coins = PP.Shop.earn(state, bc.capped, now(state)) + PP.Shop.earn(state, bc.bonus, now(state), false);
     if (won) { var dr = PP.Daily.record(state, 'battle', now(state)); out.coins += dr.coins; }
     out.capped = bc.capped > 0 && out.coins < bc.capped + bc.bonus;
@@ -458,6 +479,6 @@
   };
 
   PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, visitorCard: visitorCard, finishBattle: finishBattle,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

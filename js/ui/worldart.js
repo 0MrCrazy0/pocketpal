@@ -9,6 +9,7 @@
   /* facing right; mirrored when the pal faces left. Hats: bottom-centre on the anchor. Toys / decos: bottom-left. */
   var ART = {
     bow: ['kk.....kk', 'kdkk.kkdk', 'kddkkkddk', 'kdkk.kkdk', 'kk.....kk'],
+    bowtie: ['kk....kk', 'kkk..kkk', '.kkkkkk.', '..kkkk..', '.kkkkkk.', 'kkk..kkk', 'kk....kk'],
     cap: ['..kkkkk....', '.kdddddk...', 'kdlldddk...', 'kddddddkkkk', 'kkkkkkkkkkk'],
     sunhat: ['....kkkkk....', '...kmllmmk...', '...kdddddk...', '.kkkkkkkkkkk.', 'kmmmmmmmmmmmk', 'kkkkkkkkkkkkk'],
     leafcrown: ['.k...k...k.', 'kmk.kmk.kmk', 'kmmkmmmkmmk', 'kddddddddk.', '.kkkkkkkk..'],
@@ -80,7 +81,7 @@
   /* ---------------------------------------------------------------- the room: toy + decoration (behind the pal) */
   /* the decoration stands far left (left of the left tree's trunk), the toy on the grass between the trees; both behind
    * the pal, under the tree tops and well clear of the poop pile (right) */
-  var SPOT = { deco: { x: 2, bottom: 137, s: 2 }, toy: { x: 58, bottom: 138, s: 1.6 } };
+  var SPOT = { deco: { x: 55, bottom: 137, s: 2.2 }, toy: { x: 90, bottom: 138, s: 1.6 } };
   function drawRoom(ctx, shown, night, t) {
     if (!shown) return;
     if (shown.deco) {

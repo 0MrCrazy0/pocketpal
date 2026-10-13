@@ -32,7 +32,10 @@
     { id: 'happy', need: 1, text: 'Fill every happy heart' },
     { id: 'battle', need: 1, text: 'Win a battle', adult: true },
     { id: 'praise', need: 1, text: 'Praise a good deed', notBaby: true },
-    { id: 'lights', need: 1, text: 'Lights off at bedtime' }
+    { id: 'lights', need: 1, text: 'Lights off at bedtime' },
+    { id: 'snack', need: 1, text: 'Give a snack' },
+    { id: 'visit', need: 1, text: 'Visit a friend' },
+    { id: 'gift', need: 1, text: 'Send a gift' }
   ];
   var SEASONS = [
     { id: 'spooky', name: 'Spooky', months: [9], window: 'October' },
@@ -49,7 +52,7 @@
   function dayOf(t) { return PP.Shop.dayOf(t); }
   function blank() {
     return { day: null, goals: [], allPaid: false, streak: 0, lastAll: null, maxSeen: null, event: null, eventUsed: false,
-      season: {}, golden: 0, pendingGolden: false };
+      season: {}, golden: 0, pendingGolden: false, loginDay: null, loginStreak: 0, arenaDay: null, weekDone: null };
   }
   function ensure(state) {
     if (!state.daily || typeof state.daily !== 'object') state.daily = blank();
@@ -61,7 +64,7 @@
   }
   function pickGoals(state, p, dk) {
     var list = eligible(p).slice(), out = [], rng = U.makeRng(U.hash(state.seed, 'goals', dk) >>> 0);
-    while (out.length < 3 && list.length) {
+    while (out.length < 4 && list.length) {
       var i = Math.floor(rng() * list.length), g = list.splice(i, 1)[0];
       out.push({ id: g.id, n: 0, need: g.need, done: false });
     }
@@ -160,9 +163,10 @@
     if (!d || typeof d !== 'object') return o;
     var num = function (v) { return Number.isFinite(v) ? Math.round(v) : null; };
     o.day = num(d.day); o.maxSeen = num(d.maxSeen); o.lastAll = num(d.lastAll);
-    o.streak = U.int(d.streak, 0, 0, 9999); o.allPaid = !!d.allPaid; o.eventUsed = !!d.eventUsed;
+    o.loginDay = num(d.loginDay); o.loginStreak = U.int(d.loginStreak, 0, 0, 9999);
+    o.arenaDay = num(d.arenaDay); o.weekDone = num(d.weekDone);
     o.event = EVENTS[d.event] ? d.event : null; o.pendingGolden = !!d.pendingGolden; o.golden = U.int(d.golden, 0, 0, 9999);
-    o.goals = Array.isArray(d.goals) ? d.goals.filter(function (g) { return g && POOL.some(function (x) { return x.id === g.id; }); }).slice(0, 3).map(function (g) {
+    o.goals = Array.isArray(d.goals) ? d.goals.filter(function (g) { return g && POOL.some(function (x) { return x.id === g.id; }); }).slice(0, 4).map(function (g) {
       var need = U.int(g.need, 1, 1, 10); return { id: g.id, need: need, n: U.int(g.n, 0, 0, need), done: !!g.done };
     }) : [];
     if (d.season && typeof d.season === 'object') SEASONS.forEach(function (s) {
@@ -172,7 +176,29 @@
     return o;
   }
 
+  function loginBonus(state, t) {
+    var d = ensure(state), dk = dayOf(t);
+    if (d.loginDay === dk) return { ok: false, msg: 'Already claimed today' };
+    d.loginDay = dk;
+    var coins = 10 + (d.loginStreak || 0) * 2;
+    d.loginStreak = d.loginDay === dk ? (d.loginStreak || 0) + 1 : 1;
+    PP.Shop.earn(state, coins, t, false);
+    return { ok: true, coins: coins, streak: d.loginStreak };
+  }
+  function weekOf(t) { return Math.floor(dayOf(t) / 7); }
+  function weeklyFoe(state) {
+    var wk = weekOf(Date.now()), seed = U.hash(state.seed, 'weekly', wk);
+    var sp = PP.DATA.SPECIES[seed % PP.DATA.SPECIES.length], form = ['good', 'power', 'swift'][seed % 3];
+    return { id: 'weekly' + wk, name: 'Weekly Champion', species: sp, form: form, level: 18 + (seed % 8), genes: { hp: 2, atk: 2, def: 1, spd: 1 }, skills: [], sex: 'M' };
+  }
+  function arenaReset(t) { var d = new Date(t), midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); return midnight - d; }
+  function weekReset(t) { var d = new Date(t), day = d.getDay(), daysToSun = (7 - day) % 7 || 7; return daysToSun * 86400000 - (d.getHours() * 3600000 + d.getMinutes() * 60000 + d.getSeconds() * 1000); }
+  function arenaCard(state) {
+    var day = PP.Shop.dayOf(Date.now()), seed = U.hash(state.seed, 'daily', day);
+    var sp = PP.DATA.SPECIES[seed % PP.DATA.SPECIES.length], form = ['bad', 'good', 'power'][seed % 3];
+    return { id: 'daily' + day, name: 'Daily Challenger', species: sp, form: form, level: 12 + (seed % 6), genes: { hp: 1, atk: 1, def: 0, spd: 0 }, skills: [], sex: 'M' };
+  }
   PP.Daily = { POOL: POOL, SEASONS: SEASONS, EVENTS: EVENTS, SEASON_DAYS: SEASON_DAYS, GOAL_COINS: GOAL_COINS, ALL_BONUS: ALL_BONUS, VISITOR_BONUS: VISITOR_BONUS, HARD_BONUS: HARD_BONUS,
     ensure: ensure, roll: roll, record: record, observe: observe, today: today, text: text, coinMult: coinMult, seasonsAt: seasonsAt,
-    visitorReady: visitorReady, useVisitor: useVisitor, seasonDays: seasonDays, season: season, placeGolden: placeGolden, drain: drain, clean: clean, notes: notes };
+    visitorReady: visitorReady, useVisitor: useVisitor, seasonDays: seasonDays, season: season, placeGolden: placeGolden, drain: drain, clean: clean, notes: notes, arenaCard: arenaCard, loginBonus: loginBonus, weeklyFoe: weeklyFoe, weekOf: weekOf, arenaReset: arenaReset, weekReset: weekReset };
 })(typeof window !== 'undefined' ? window : globalThis);

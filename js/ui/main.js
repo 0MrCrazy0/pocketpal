@@ -403,7 +403,8 @@
   /* 1.8.4: cup-cleared celebration on the LCD (after the result screen closes) */
   App.celebrate = function (text) { App.anim = { kind: 'cup', t0: performance.now(), dur: 3600, text: text }; PP.Audio.play('cup'); };
   App.startQuick = function (card, title) { beginBattle(G.startQuick(App.state, card, rndSeed()), title || 'SPAR'); };
-  App.startVisitor = function () { beginBattle(G.startVisitor(App.state, rndSeed()), 'VISITOR'); };
+  App.startWeekly = function () { beginBattle(G.startWeekly(App.state, rndSeed()), 'WEEKLY'); };
+  App.startDaily = function () { beginBattle(G.startDaily(App.state, rndSeed()), 'DAILY'); };
 
   App.afterGuide = function () { if (!G.active(App.state)) setTimeout(firstEgg, 150); };
   App.firstEgg = function () { firstEgg(); };

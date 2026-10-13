@@ -73,8 +73,10 @@
         return { icon: thingIcon(id, !own), label: own ? T.name : T.name + ' (not yet)', sub: own ? (on ? (kind === 'hat' ? 'Wearing it - tap to take off' : 'Out - tap to put away') : (kind === 'hat' ? 'Tap to wear' : 'Tap to put out')) : where(id),
           right: on ? '\u2714' : '', disabled: !own, reason: own ? null : where(id),
           act: function () {
-            var r = on ? W.unequip(s, p, kind) : W.equip(s, p, id);
-            if (kind === 'hat' && !p) r = { ok: false, msg: 'No pal to wear it' };
+            var s2 = st(), p2 = pet();
+            if (kind === 'hat' && !p2) { PP.Audio.play('no'); toast('No pal to wear it'); return; }
+            var on2 = kind === 'hat' ? !!(p2 && p2.hat === id) : s2.things[kind] === id;
+            var r = on2 ? W.unequip(s2, p2, kind) : W.equip(s2, p2, id);
             PP.Audio.play(r.ok ? 'ok' : 'no'); toast(r.msg); if (r.ok) App().save(); K().refresh();
           } };
       });

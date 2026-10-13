@@ -16,7 +16,7 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v2.4.29';
+var CACHE = 'pocketpal-v2.4.71';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
@@ -138,7 +138,7 @@ function notify(body, type) {
   else if (type === 'hunger') actions.unshift({ action: 'meal', title: 'Feed' }, { action: 'snack', title: 'Snack' });
   else if (type === 'lights') actions.unshift({ action: 'lights', title: 'Lights off' });
   else if (type === 'medicine') actions.unshift({ action: 'medicine', title: 'Medicine' });
-  return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', renotify: true, actions: actions });
+  return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', renotify: true, actions: actions, vibrate: [100, 50, 100] });
 }
 self.addEventListener('push', function (e) {
   e.waitUntil(readSched().then(function (s) {

@@ -25,6 +25,10 @@
     if (kind === 'memory') seqStart(now());
     if (kind === 'match') { memDeal(g); g.phase = 'preview'; g.t0 = now(); }
     if (kind === 'game') armTimer(now());
+    if (kind === 'rhythm') {
+      g.beats = 8; g.beatMs = 560; g.win = 5; g.hitN = 0; g.beat = 0;
+      g.notes = []; g.line = 136; g.spawn = now() + 400; g.spawned = 0;
+    }
   }
   /* 2.3.1: the Training dummy's zone narrows a little with every hit in a row (min DUMMY.minZone) */
   function zoneHalf() { return g && g.kind === 'dummy' ? Math.max(DUMMY.minZone, DUMMY.zone - DUMMY.shrink * (g.combo || 0)) / 2 : 0.11; }
@@ -75,9 +79,8 @@
   /* Memory (1.8.1): Simon-style. The pal looks LEFT or RIGHT in a sequence; repeat it.
    * Round 1 is 3 looks, each round adds one (3, 4, 5). Clear 3 rounds to win; one wrong look ends the game. */
   var SEQ = { start: 3, rounds: 3, onMs: 650, gapMs: 300, leadMs: 700, echoMs: 260 };
-  function rounds() { return g.kind === 'match' ? MEM_PAIRS : g.kind === 'memory' ? SEQ.rounds : g.kind === 'game' ? 5 : g.kind === 'dummy' ? DUMMY.swings : 3; }
-  // 1.8.2: Left or Right needs 4 of 5 (was 3 of 5 = a coin flip for a random presser: 50% -> 19%; watching the eyes still wins every time)
-  function need() { return g.kind === 'match' ? MEM_PAIRS : g.kind === 'memory' ? SEQ.rounds : g.kind === 'game' ? 4 : g.kind === 'dummy' ? DUMMY.hp : 2; }
+  function rounds() { return g.kind === 'match' ? MEM_PAIRS : g.kind === 'memory' ? SEQ.rounds : g.kind === 'game' ? 5 : g.kind === 'dummy' ? DUMMY.swings : g.kind === 'rhythm' ? 8 : 3; }
+  function need() { return g.kind === 'match' ? MEM_PAIRS : g.kind === 'memory' ? SEQ.rounds : g.kind === 'game' ? 4 : g.kind === 'dummy' ? DUMMY.hp : g.kind === 'rhythm' ? 5 : 2; }
   /* Pure sequence logic (also used by the Node tests): */
   function seqNew(rng) { var r = rng || Math.random, out = []; for (var i = 0; i < SEQ.start; i++) out.push(r() < 0.5 ? -1 : 1); return out; }
   function seqGrow(seq, rng) { var r = rng || Math.random; return seq.concat([r() < 0.5 ? -1 : 1]); }
@@ -97,6 +100,18 @@
     if (g.phase !== 'play') return;
     var t = now();
     if (g.kind === 'memory') { if (btn === 'A' || btn === 'PREV' || btn === 'LEFT') seqInput(-1); else if (btn === 'B' || btn === 'RIGHT') seqInput(1); return; }
+    if (g.kind === 'rhythm') {
+      if (btn !== 'B' && btn !== 'A') return;
+      var hit = false;
+      for (var ni = 0; ni < g.notes.length; ni++) {
+        var n = g.notes[ni];
+        if (n.done) continue;
+        var ny = 24 + (t - n.t) / g.beatMs * (g.line - 24);
+        if (Math.abs(ny - g.line) < 18) { n.done = true; n.hit = true; g.hitN++; hit = true; break; }
+      }
+      PP.Audio.play(hit ? 'ok' : 'no');
+      return;
+    }
     if (g.kind === 'match') {
       if (!g.cards) memDeal(g);
       if (btn === 'RIGHT') btn = 'A';
@@ -357,11 +372,12 @@
     step(t); if (!g) return;
     var p = g.pet, sk = S.stageKeyOf(p);
     ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, 160);
-    var title = g.kind === 'train' ? 'POWER TRAINING' : g.kind === 'dummy' ? 'TRAINING DUMMY' : g.kind === 'memory' ? 'MEMORY' : g.kind === 'match' ? 'MATCH' : 'LEFT OR RIGHT?';
+    var title = g.kind === 'train' ? 'POWER TRAINING' : g.kind === 'dummy' ? 'TRAINING DUMMY' : g.kind === 'memory' ? 'MEMORY' : g.kind === 'match' ? 'MATCH' : g.kind === 'rhythm' ? 'KEEP THE RHYTHM' : 'LEFT OR RIGHT?';
     F.draw(ctx, title, W / 2, 3, C.ink, 1, 'center');
     if (g.kind === 'memory') F.draw(ctx, 'ROUND ' + Math.min(SEQ.rounds, g.score + 1) + '/' + SEQ.rounds + '   LENGTH ' + (g.seq ? g.seq.length : SEQ.start), W / 2, 13, C.dark, 1, 'center');
     else if (g.kind === 'match') F.draw(ctx, 'PAIRS ' + g.score + '/' + MEM_PAIRS + '   MISSES ' + (g.misses || 0) + '/' + MEM_MISSES, W / 2, 13, C.dark, 1, 'center');
     else if (g.kind === 'dummy') F.draw(ctx, 'SWING ' + Math.min(rounds(), g.round + 1) + '/' + rounds() + '   PTS ' + g.points, W / 2, 13, C.dark, 1, 'center');
+    else if (g.kind === 'rhythm') F.draw(ctx, 'HITS ' + g.hitN + '/' + g.beats, W / 2, 13, C.dark, 1, 'center');
     else F.draw(ctx, 'ROUND ' + Math.min(rounds(), g.round + 1) + '/' + rounds() + '   SCORE ' + g.score, W / 2, 13, C.dark, 1, 'center');
     var done = g.phase === 'done', good = g.score >= need();
     if (g.kind === 'train') {
@@ -378,7 +394,8 @@
       dummySack(ctx, 148, 48, t);
       if (hit && hel < 700) S.drawFx(ctx, g.perfect ? 'spark2' : 'spark', g.perfect ? 152 : 158, g.perfect ? 34 : 40, 2);
       dummyHp(ctx, 156, 23);
-      F.draw(ctx, curMove().toUpperCase(), 160, 100, C.ink, 1, 'center');   // under the sack, clear of the 96-px pal
+      F.draw(ctx, curMove().toUpperCase(), 160, 92, C.ink, g.perfect && hit && hel < 400 ? 2 : 1, 'center');
+      if (g.perfect && hit && hel < 400) F.draw(ctx, 'PERFECT!', 160, 104, C.ink, 1, 'center');
       if (g.combo > 1 && !done) F.draw(ctx, 'COMBO X' + g.combo, 160, 109, C.dark, 1, 'center');
       meter(ctx);
       F.draw(ctx, done ? (good ? 'DUMMY DOWN! ' + g.points + ' PTS' : 'TRY THOSE MOVES AGAIN') : g.phase === 'show' ? (hit ? (g.perfect ? 'PERFECT! ' : 'HIT! ') + curMove().toUpperCase() : 'WHIFF') : 'MIDDLE = PERFECT!',
@@ -387,6 +404,33 @@
       drawSeq(ctx, t, p, sk, done, good);
     } else if (g.kind === 'match') {
       drawMemory(ctx, t, p, sk, done, good);
+    } else if (g.kind === 'rhythm') {
+      if (g.phase === 'play' && g.beat < g.beats && t > g.spawn) {
+        g.notes.push({ t: t, done: false, hit: false });
+        g.beat++;
+        g.spawn = t + g.beatMs;
+        if (g.spawned !== g.beat) { PP.Audio.play('move'); g.spawned = g.beat; }
+      }
+      var alive = 0;
+      for (var ni = 0; ni < g.notes.length; ni++) {
+        var n = g.notes[ni];
+        if (n.done) continue;
+        var ny = 24 + (t - n.t) / g.beatMs * (g.line - 24);
+        if (ny > g.line + 16) { n.done = true; n.hit = false; } else alive++;
+      }
+      if (g.beat >= g.beats && alive === 0 && !g.ended) { g.ended = true; g.phase = 'done'; g.t0 = t; g.score = g.hitN; PP.Audio.play(g.hitN >= g.win ? 'happy' : 'sad'); }
+      if (g.phase === 'done' && t - g.t0 > 1200 && !g.finished) { g.finished = true; var cb = g.onDone, ok = g.score >= need(); g = null; cb(ok); return; }
+      S.draw(ctx, p.species, sk, 'idle', Math.floor(t / 200), 16, 16, BIG);
+      ctx.fillStyle = C.ink;
+      ctx.fillRect(70, g.line, W - 90, 2);
+      for (ni = 0; ni < g.notes.length; ni++) {
+        n = g.notes[ni];
+        if (n.done) continue;
+        ny = 24 + (t - n.t) / g.beatMs * (g.line - 24);
+        ctx.fillStyle = Math.abs(ny - g.line) < 12 ? C.ink : C.dark;
+        ctx.fillRect(120, ny - 4, 14, 8);
+      }
+      F.draw(ctx, done ? (g.hitN >= g.win ? 'IN TIME!' : 'OFF BEAT') : 'TAP B ON THE LINE', W / 2, 140, C.ink, 1, 'center');
     } else {
       if (g.phase === 'play' && !g.answer) g.answer = Math.random() < 0.5 ? -1 : 1;
       var glance = g.phase === 'play' ? g.answer : (g.phase === 'show' ? g.answer : 1);

@@ -153,8 +153,8 @@
   /* ------------------------------------------------------------ 1.9.0 daily goals */
   function dailyItem() {
     var d = PP.Daily.today(st(), G.now(st())), n = d ? d.goals.filter(function (g) { return g.done; }).length : 0;
-    return { label: 'Daily goals', sub: d ? n + '/3 done' + (d.streak > 1 ? ' \u00b7 ' + d.streak + '-day streak' : '') + (d.event ? ' \u00b7 ' + PP.Daily.EVENTS[d.event].name : '') : 'Start once your egg hatches',
-      right: d ? n + '/3' : '', act: function () { push(dailyScreen); } };
+    return { label: 'Daily goals', sub: d ? n + '/4 done' + (d.streak > 1 ? ' \u00b7 ' + d.streak + '-day streak' : '') + (d.event ? ' \u00b7 ' + PP.Daily.EVENTS[d.event].name : '') : 'Start once your egg hatches',
+      right: d ? n + '/4' : '', act: function () { push(dailyScreen); } };
   }
   function dailyScreen() {
     var s = st(), t = G.now(s), d = PP.Daily.today(s, t), D9 = PP.Daily;
@@ -166,7 +166,7 @@
           (g.need > 1 ? ' <small>' + g.n + '/' + g.need + '</small>' : '') + '<span class="r">+' + D9.GOAL_COINS + 'c</span></li>';
       }).join('') + '</ul>';
       var nb = D9.ALL_BONUS + 2 * Math.min((d.lastAll === d.day - 1 ? d.streak : 0), 5) + (pet() && pet().hard ? D9.HARD_BONUS : 0);
-      h += '<p class="tip">' + (d.allPaid ? 'All done today! Streak: <b>' + d.streak + '</b> day' + (d.streak === 1 ? '' : 's') + '.' : 'Finish all three for <b>+' + nb + 'c</b>' + (d.streak ? ' (streak ' + d.streak + ')' : '') + '.') + ' New goals tomorrow.</p>';
+      h += '<p class="tip">' + (d.allPaid ? 'All done today! Streak: <b>' + d.streak + '</b> day' + (d.streak === 1 ? '' : 's') + '.' : 'Finish all four for <b>+' + nb + 'c</b>' + (d.streak ? ' (streak ' + d.streak + ')' : '') + '.') + ' New goals tomorrow.</p>';
       if (d.event) h += '<p class="rare"><b>' + esc(D9.EVENTS[d.event].name) + '</b> ' + esc(D9.EVENTS[d.event].text) + (d.event === 'visitor' && d.eventUsed ? ' (done)' : '') + '</p>';
     }
     var cur = D9.seasonsAt(t);
@@ -175,6 +175,7 @@
       return '<b>' + esc(se.name) + '</b> ' + (have ? '\u2714' : Math.min(D9.SEASON_DAYS, D9.seasonDays(s, se.id)) + '/' + D9.SEASON_DAYS + (cur.indexOf(se.id) >= 0 ? ' (now!)' : ' (' + esc(se.window) + ')'));
     }).join(' \u00b7 ') + '. Finish all 3 goals on ' + D9.SEASON_DAYS + ' days in the season.</p>';
     var items = [];
+    if (d && d.loginDay !== PP.Shop.dayOf(t)) items.push({ label: 'Claim daily bonus', sub: 'Coins for opening the game today', act: function () { var r = PP.Daily.loginBonus(s, t); App().toast(r.ok ? '+' + r.coins + ' coins (streak ' + r.streak + ')' : r.msg); App().save(); refresh(); } });
     if (d && D9.visitorReady(s, t)) items.push({ label: 'Battle the visitor', sub: 'One try today \u00b7 win for +' + D9.VISITOR_BONUS + ' coins', disabled: !!G.canBattle(pet()), reason: G.canBattle(pet()), act: function () { close(); App().startVisitor(); } });
     items.push({ label: 'Back', act: pop });
     return { title: 'DAILY GOALS', html: h, items: items, live: true };
@@ -501,12 +502,13 @@
     var p = pet(), R = D.RULES;
     var a = p ? PP.Care.canExercise(p, 'train') : { ok: false, msg: 'No pal' }, b = p ? PP.Care.canExercise(p, 'game') : a;
     return { title: 'TRAIN & PLAY', html: p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '</p>' : '', items: [
-      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Win: happy +1, discipline +5%' + (p && p.stage === 'adult' ? ', XP' : ''), disabled: !a.ok, reason: a.msg,
+      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Win: happy +1, discipline +5%, XP' + (p && p.stage !== 'adult' ? ' (feeds Mighty)' : ''), disabled: !a.ok, reason: a.msg,
         act: function () { close(); App().startMini('train'); } },
-      { label: 'Left or Right?', sub: '-' + R.costs.game + ' energy. Watch the eyes. Win: happy +2', disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('game'); } },
-      { label: 'Memory', sub: '-' + R.costs.game + ' energy. Repeat the looks: A = left, B = right. Win: happy +2', disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('memory'); } },
-      { label: 'Match', sub: '-' + R.costs.game + ' energy. Remember the 4 pairs, 3 misses ends it. Win: happy +2', disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('match'); } },
-      { label: 'Training dummy', sub: '-' + R.costs.train + ' energy. Practice every unlocked attack', disabled: !a.ok, reason: a.msg,
+      { label: 'Left or Right?', sub: '-' + R.costs.game + ' energy. Watch the eyes. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('game'); } },
+      { label: 'Memory', sub: '-' + R.costs.game + ' energy. Repeat the looks. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('memory'); } },
+      { label: 'Match', sub: '-' + R.costs.game + ' energy. Find the 4 pairs. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Sturdy)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('match'); } },
+      { label: 'Keep the Rhythm', sub: '-' + R.costs.game + ' energy. Tap B on the line. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('rhythm'); } },
+      { label: 'Training dummy', sub: '-' + R.costs.train + ' energy. Practice attacks. Win: happy +1, discipline +5%, XP' + (p && p.stage !== 'adult' ? ' (feeds Mighty)' : ''), disabled: !a.ok, reason: a.msg,
         act: function () { close(); App().startMini('dummy'); } }
     ] };
   }
@@ -521,6 +523,8 @@
   function battleMenu() {
     var p = pet(), why = G.canBattle(p);
     var items = [
+      { label: 'Daily Arena', sub: 'One special foe today. Win for +50 bonus coins. Resets in ' + resetText() + '.', right: dailyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || dailyDone(st()), reason: dailyDone(st()) ? 'Already beaten today' : why, act: function () { close(); App().startDaily(); } },
+      { label: 'Weekly Tournament', sub: 'One tough foe this week. Win for +150 bonus coins. Resets in ' + weekResetText() + '.', right: weeklyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || weeklyDone(st()), reason: weeklyDone(st()) ? 'Already beaten this week' : why, act: function () { close(); App().startWeekly(); } },
       { label: 'Arena', sub: 'Computer ladder: ' + D.ARENA_MAIN + ' cups + a post-game cup', disabled: !!why, reason: why, act: function () { push(arenaScreen); } },
       { label: 'Friend battle', sub: 'Fight a pal from a battle code', disabled: !!why, reason: why, act: function () { push(friendsScreen); } },
       { label: 'Friends Cup', sub: 'Beat your friends\u2019 pals in a row (' + PP.World.FCUP.size + ' at most)', right: (st().fcup && st().fcup.wins) ? '\u2605' + st().fcup.wins : '', disabled: !!why, reason: why, act: function () { push(fcupScreen); } },
@@ -534,6 +538,10 @@
   /* 1.8.4: per-cup progress. A star only for a cup really won (state.arena.cups[i].won). */
   var ROLE = { challenger: 'Challenger', rival: 'Rival', boss: 'Cup boss' };
   function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); return Math.min.apply(null, l) + '-' + Math.max.apply(null, l); }
+  function dailyDone(s) { var d = s.daily || {}; return d.arenaDay === PP.Shop.dayOf(Date.now()); }
+  function weeklyDone(s) { var d = s.daily || {}; return d.weekDone === PP.Daily.weekOf(Date.now()); }
+  function resetText() { var ms = PP.Daily.arenaReset(Date.now()); return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm'; }
+  function weekResetText() { var ms = PP.Daily.weekReset(Date.now()); return Math.floor(ms / 86400000) + 'd ' + Math.floor((ms % 86400000) / 3600000) + 'h'; }
   function arenaScreen() {
     var s = st(), p = pet(), A = PP.Arena, note = s.arena.note === 'reset';
     var items = D.ARENA.map(function (cup, i) {
@@ -825,7 +833,14 @@
       h += '<div class="trow me">' + nodeHtml(t) + '</div></div>';
       if (e.hard && (e.fate === 'dead' || e.fate === 'gone')) h += '<p class="memorial-note">\u2020 In memory of <b>' + esc(e.name) + '</b>, raised in hard mode' + (e.days != null ? ' for ' + e.days + ' day' + (e.days === 1 ? '' : 's') : '') + ' (' + esc(e.cause || e.fate) + '). Hard-mode pals cannot be revived.</p>';
       if (e.fate === 'retired') h += '<p class="tip">Retired' + (e.trait ? ' - passed on ' + ({ gene: 'a strong gene', skill: 'an innate skill', ribbon: 'the Family Ribbon' })[e.trait] : '') + '.</p>';   // 2.4.0
-      var mi = [{ label: 'Memory book', sub: ((e.mem || []).length) + ' memories', act: function () { push(PP.WorldUI.memScreen(e.id)); } }, { label: 'Back', act: pop }];
+      var mi = [{ label: 'Memory book', sub: ((e.mem || []).length) + ' memories', act: function () { push(PP.WorldUI.memScreen(e.id)); } }];
+      if (e.fate === 'released' || e.fate === 'retired') mi.push({ label: 'Remove from album', sub: 'Deletes this record', act: function () {
+        push(confirmScreen('Remove ' + e.name + '?', 'This record will be gone.', function () {
+          s.album = s.album.filter(function (a) { return a.id !== e.id; });
+          App().toast('Removed ' + e.name); App().save(); pop(); pop();
+        }));
+      } });
+      mi.push({ label: 'Back', act: pop });
       return { title: 'FAMILY OF ' + String(e.name).toUpperCase(), html: h, items: mi };
     };
   }
@@ -875,6 +890,7 @@
     var canNotify = typeof Notification !== 'undefined';
     return { title: 'SETTINGS', items: [
       { label: 'Sound', right: s.settings.sound ? 'ON' : 'OFF', sub: 'Beeps, calls and music', act: function () { s.settings.sound = !s.settings.sound; PP.Audio.setEnabled(s.settings.sound); App().updateSoundBtn(); App().save(); refresh(); } },
+      { label: 'Vibrate', right: s.settings.vibrate !== false ? 'ON' : 'OFF', sub: 'Haptic feedback for actions and alerts', act: function () { s.settings.vibrate = s.settings.vibrate === false; App().save(); refresh(); } },
       { label: 'Music', right: s.settings.music !== false ? 'ON' : 'OFF', sub: 'Jingles for hatching, growing up, wins and goals (needs Sound)', act: function () { s.settings.music = s.settings.music === false; PP.Audio.setMusic(s.settings.music); App().save(); refresh(); if (s.settings.music) PP.Audio.play('goal'); } },
       { label: 'Morning report', right: s.settings.reportCard !== false ? 'ON' : 'OFF', sub: 'A care report card when your pal wakes up', act: function () { s.settings.reportCard = s.settings.reportCard === false; App().save(); refresh(); } },
       { label: 'Tips', right: s.settings.hints !== false ? 'ON' : 'OFF', sub: 'Short hints for young pals', act: function () { s.settings.hints = s.settings.hints === false; App().save(); refresh(); } },
@@ -1127,6 +1143,7 @@
           (out.fbonus ? '<li>Friends Cup bonus +' + out.fbonus + ' coins</li>' : '') +
           (out.kind === 'arena' ? '<li>' + esc(out.cup) + ': foe ' + out.foe + '/' + out.foes + (won ? (out.cleared ? ' - cup ' + (out.firstClear ? 'cleared!' : 'cleared again') : ' beaten') : ' - run over') + '</li>' : '') +
           '<li>+' + out.xp + ' XP' + (out.levels ? ' \u00b7 LEVEL UP \u2192 Lv ' + p.level + ' (+' + out.levels + ' SP)' : '') + '</li>' +
+          '<li>Battle power: ' + (PP.Battle && PP.Battle.fighter ? PP.Battle.fighter(p).bp : '?') + '</li>' +
           '<li>Happy ' + (won ? '+1' : '-1') + ', weight -1g</li>' +
           (out.unlocked ? '<li>Unlocked: <b>' + esc(out.unlocked) + '</b></li>' : '') +
           (out.shells && out.shells.length ? '<li>New shell colour: <b>' + esc(out.shells.join(', ')) + '</b>!</li>' : '') +

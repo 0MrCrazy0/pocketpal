@@ -107,6 +107,10 @@
       if (music && JINGLES[name] && enabled && ctx && ctx.state === 'running') { jingle(name); return; }
       if (SFX[name]) SFX[name]();
       else if (JINGLES[name]) SFX[{ cup: 'win', goal: 'ok', allgoals: 'happy', rare: 'level', gameover: 'die', morning: 'hatch', lullaby: 'sad', secret: 'evolve' }[name] || 'ok']();
+      if (navigator.vibrate && enabled && !(PP.App && PP.App.state && PP.App.state.settings && PP.App.state.settings.vibrate === false)) {
+        var v = { ok: 30, happy: 50, win: 80, hatch: 100, die: 200, no: 20 }[name];
+        if (v) navigator.vibrate(v);
+      }
     } catch (e) { /* ignore */ }
   }
   function setEnabled(v) { enabled = !!v; }

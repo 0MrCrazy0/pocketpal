@@ -191,7 +191,7 @@
         if (p.acc.weight >= 1) { p.acc.weight -= 1; p.weight = Math.max(cfg.weight, p.weight - 1); }
       } else p.acc.weight = 0;
     } else {
-      p.energy = Math.min(100, p.energy + 1 / (p.lights ? R.energySleepLitMin : R.energySleepMin));
+      p.energy = Math.min(100, p.energy + 1 / (p.lights ? R.energySleepLitMin : (p.sleepKind === 'nap' ? R.energyNapMin : R.energySleepMin)));
     }
 
     // ---- sickness
