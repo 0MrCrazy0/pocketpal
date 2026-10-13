@@ -538,8 +538,8 @@
   /* 1.8.4: per-cup progress. A star only for a cup really won (state.arena.cups[i].won). */
   var ROLE = { challenger: 'Challenger', rival: 'Rival', boss: 'Cup boss' };
   function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); return Math.min.apply(null, l) + '-' + Math.max.apply(null, l); }
-  function dailyDone(s) { var d = s.daily || {}; return d.arenaDay === PP.Shop.dayOf(Date.now()); }
-  function weeklyDone(s) { var d = s.daily || {}; return d.weekDone === PP.Daily.weekOf(Date.now()); }
+  function dailyDone(s) { var p = pet(); return p && p.arenaDay === PP.Shop.dayOf(Date.now()); }
+  function weeklyDone(s) { var p = pet(); return p && p.weekDone === PP.Daily.weekOf(Date.now()); }
   function resetText() { var ms = PP.Daily.arenaReset(Date.now()); return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm'; }
   function weekResetText() { var ms = PP.Daily.weekReset(Date.now()); return Math.floor(ms / 86400000) + 'd ' + Math.floor((ms % 86400000) / 3600000) + 'h'; }
   function arenaScreen() {

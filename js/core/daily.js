@@ -91,8 +91,9 @@
       return ev.concat(placeGolden(state, t));
     }
     if (!p || p.fate || p.stage === 'egg') return ev.concat(placeGolden(state, t));   // goals start once a pal has hatched
-    d.day = dk; d.goals = pickGoals(state, p, dk); d.allPaid = false; d.wonDaily = false;
-    if (d.weekDone != null && PP.Daily.weekOf(t) > d.weekDone) d.wonWeekly = false;
+    d.day = dk; d.goals = pickGoals(state, p, dk); d.allPaid = false;
+    if (p && p.arenaDay != null && dk > p.arenaDay) { p.arenaDay = null; p.wonDaily = false; }
+    if (p && p.weekDone != null && PP.Daily.weekOf(t) > p.weekDone) { p.weekDone = null; p.wonWeekly = false; }
     d.event = pickEvent(state, p, dk); d.eventUsed = false;
     ev.push({ t: 'dailyGoals', goals: d.goals.map(function (g) { return text(g); }) });
     if (d.event) {

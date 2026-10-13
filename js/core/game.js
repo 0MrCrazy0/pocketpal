@@ -293,15 +293,17 @@
     return c;
   }
   function startWeekly(state, seed) {
-    var d = state.daily || (state.daily = {});
-    if (d.weekDone === PP.Daily.weekOf(now(state))) return { ok: false, msg: 'Already beaten this week' };
+    var p = active(state);
+    if (!p) return { ok: false, msg: 'No pal' };
+    if (p.weekDone === PP.Daily.weekOf(now(state))) return { ok: false, msg: 'Already beaten this week' };
     var card = PP.Daily.weeklyFoe(state);
     if (!card) return { ok: false, msg: 'Only adults can battle' };
     return startBattle(state, card, { kind: 'weekly' }, seed);
   }
   function startDaily(state, seed) {
-    var d = state.daily || (state.daily = {});
-    if (d.arenaDay === PP.Shop.dayOf(now(state))) return { ok: false, msg: 'Already beaten today' };
+    var p = active(state);
+    if (!p) return { ok: false, msg: 'No pal' };
+    if (p.arenaDay === PP.Shop.dayOf(now(state))) return { ok: false, msg: 'Already beaten today' };
     var card = PP.Daily.arenaCard(state);
     if (!card) return { ok: false, msg: 'Only adults can battle' };
     return startBattle(state, card, { kind: 'daily' }, seed);
@@ -382,8 +384,8 @@
     memoBattle(p, out, lv0, now(state));                    // 2.4.0 memory book
     var bc = PP.Shop.battleCoins(won, oppLv, B.meta, cleared, champ, out.myth);
     if (won && B.meta.kind === 'visitor') { bc.bonus += PP.Daily.VISITOR_BONUS; out.visitor = true; }
-    if (won && B.meta.kind === 'daily') { bc.bonus += 50; out.daily = true; var d = state.daily || (state.daily = {}); d.arenaDay = PP.Shop.dayOf(now(state)); d.wonDaily = true; }
-    if (won && B.meta.kind === 'weekly') { bc.bonus += 150; out.weekly = true; var d = state.daily || (state.daily = {}); d.weekDone = PP.Daily.weekOf(now(state)); d.wonWeekly = true; }
+    if (won && B.meta.kind === 'daily') { bc.bonus += 50; out.daily = true; var p = active(state); if (p) { p.arenaDay = PP.Shop.dayOf(now(state)); p.wonDaily = true; } }
+    if (won && B.meta.kind === 'weekly') { bc.bonus += 150; out.weekly = true; var p = active(state); if (p) { p.weekDone = PP.Daily.weekOf(now(state)); p.wonWeekly = true; } }
     out.coins = PP.Shop.earn(state, bc.capped, now(state)) + PP.Shop.earn(state, bc.bonus, now(state), false);
     if (won) { var dr = PP.Daily.record(state, 'battle', now(state)); out.coins += dr.coins; }
     out.capped = bc.capped > 0 && out.coins < bc.capped + bc.bonus;
