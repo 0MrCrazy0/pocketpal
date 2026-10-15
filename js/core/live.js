@@ -21,7 +21,7 @@
   function sum(B) {
     var bo3 = B.meta && B.meta.bo3;
     return U.hash(JSON.stringify([B.turn, B.rng, !!B.over, B.winner,
-      bo3 ? [bo3.wins[0], bo3.wins[1], bo3.round, bo3.turn0 || 0] : null,
+      bo3 ? [bo3.wins[0], bo3.wins[1], bo3.round, bo3.turn0 || 0] : null, !!(B.meta && B.meta.sudden),
       B.f.map(function (x) {
       return [x.hp, x.cds, x.used, x.buffs.map(function (b) { return [b.key, b.stat, b.mult, b.turns]; }), !!x.stunned, x.stunGuard, x.bleed, x.evade, x.evadeTurns, !!x.skip];
     })])) >>> 0;
@@ -74,6 +74,8 @@
   }
   function validRoom(c) { return typeof c === 'string' && /^[A-HJ-NP-Z]{4}$/.test(c.toUpperCase()); }
 
-  PP.Live = { seedFor: seedFor, create: create, sum: sum, validMove: validMove, mapEvents: mapEvents, resolve: resolve, view: view, canon: canon,
+  /* 2.4.94: battle-rules version. Bump it whenever the engine or move numbers change, so two different versions never
+   * meet in a room (they would fall out of sync). 2 = 2.4.94 ties / sudden death + balance; older games = 0. */
+  PP.Live = { ENGINE: 2, seedFor: seedFor, create: create, sum: sum, validMove: validMove, mapEvents: mapEvents, resolve: resolve, view: view, canon: canon,
     endBy: endBy, checkCards: checkCards, validRoom: validRoom, idx: idx };
 })(typeof window !== 'undefined' ? window : globalThis);

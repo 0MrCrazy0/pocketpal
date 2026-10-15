@@ -205,8 +205,8 @@
     var R = PP.Render, F = PP.Font, C = R.C, S = PP.Sprites, k = t - c.t0;
     R.clear(ctx);
     if (app && app.state) R.drawScene(ctx, app.state, t);
-    // the two pals end up 52 px apart (tails may leave the screen) so the hearts rise in the gap, never over a face
-    var y = R.GROUND - R.PS, me = Math.round(-30 + Math.min(1, k / 1200) * 16), fr = Math.round(R.W - R.PS + 30 - Math.min(1, k / 1200) * 16);
+    // the two pals end up close but fully on screen so the hearts rise in the gap, never over a face
+    var y = R.GROUND - R.PS, me = Math.round(-16 + Math.min(1, k / 1200) * 16), fr = Math.round(R.W - R.PS + 16 - Math.min(1, k / 1200) * 16);   // 2.4.94: both pals fully on screen at rest
     var hop = function (ph) { return k > 1400 && k < 3400 ? Math.round(5 * Math.abs(Math.sin((k + ph) / 260 * Math.PI))) : 0; };
     var pose = k < 1200 ? 'walk' : k < 3400 ? 'happy' : 'idle';
     S.draw(ctx, c.species, c.key, pose, Math.floor(k / 230), me, y - hop(0), R.PET, false);

@@ -270,13 +270,36 @@
     if (!PP.Stats.isJunior(p)) return { ok: false, msg: 'Quick battles here are for child and teen pals' };
     return startBattle(state, juniorFoe(state, p, 'quick:' + p.clock), { kind: 'quick', junior: true }, seed);
   }
-  /* Junior Cup: 3 stage-matched foes in a row; a loss ends the run. Clearing it pays a bonus once per stage. */
+  /* 2.4.94 Junior Cup = a ladder per stage (DATA.JUNIOR.ladders), built like an arena cup: fixed foes of rising strength,
+   * the same for everyone, so the menu can list them and tick off the ones beaten in this run. */
+  function ladderOf(stage) { return JUNIOR.ladders[stage] || null; }
+  function ladderFoe(stage, idx) {
+    var L = ladderOf(stage); if (!L) return null;
+    idx = U.clamp(idx | 0, 0, L.foes.length - 1);
+    var f = L.foes[idx], rng = U.makeRng(U.hash('jr-ladder', stage, idx)), genes = { hp: f[2][0], atk: f[2][1], def: f[2][2], spd: f[2][3] };   // fixed species + genes: each rung only ever gets stronger
+    var sp = f[1];
+    return { id: 'jl' + stage.charAt(0) + idx, name: f[0], species: sp, sex: rng.chance(0.5) ? 'M' : 'F', form: 'good', level: 1, genes: genes,
+      skills: [], innate: [], gen: 1, stage: stage, cpu: true, jpow: f[3], rung: idx, ladder: L.name };
+  }
+  /* the saved run of the pal that is out: { stage, foe } (foe = index of the next rung) */
+  function ladderRun(p) { return p && p.jcup && p.jcup.stage === p.stage ? p.jcup : null; }
+  /* save-wide trophies and the daily junior coin cap */
+  function juniorState(state) {
+    var j = state.junior;
+    if (!j || typeof j !== 'object') j = state.junior = {};
+    if (!j.trophies || typeof j.trophies !== 'object') j.trophies = {};
+    if (!j.paid || typeof j.paid !== 'object') j.paid = {};
+    JUNIOR.stages.forEach(function (st) { j.trophies[st] = j.trophies[st] | 0; if (j.paid[st] == null) j.paid[st] = -1; });
+    if (j.day == null) j.day = -1;
+    j.coins = j.coins | 0;
+    return j;
+  }
   function startJuniorCup(state, seed) {
     var p = active(state);
     if (!PP.Stats.isJunior(p)) return { ok: false, msg: 'The Junior Cup is for child and teen pals' };
-    var run = p.jcup && p.jcup.stage === p.stage ? p.jcup.foe | 0 : 0;
-    var r = startBattle(state, juniorFoe(state, p, 'cup', run), { kind: 'junior', foe: run, foes: JUNIOR.cupFoes }, seed);
-    if (r.ok) p.jcup = { stage: p.stage, foe: run, won: (p.jcup && p.jcup.won) || [] };
+    var L = ladderOf(p.stage), c = ladderRun(p), run = c ? U.clamp(c.foe | 0, 0, L.foes.length - 1) : 0;
+    var r = startBattle(state, ladderFoe(p.stage, run), { kind: 'junior', foe: run, foes: L.foes.length, ladder: p.stage }, seed);
+    if (r.ok) p.jcup = { stage: p.stage, foe: run };
     return r;
   }
   function startBattle(state, oppCard, meta, seed) {
@@ -313,6 +336,36 @@
     var err = PP.Cards.validateCard(card);
     if (err) return { ok: false, msg: err };
     return startBattle(state, card, { kind: 'quick' }, seed);
+  }
+  /* 2.4.94 adult Quick battle: a fast practice fight against a computer pal of your own level. No stakes: no arena rank or
+   * run change, no injury, no happy loss, no coins, no win / loss record or daily goal. The normal battle energy; small
+   * XP under the training anti-farm limit (the first trainDayFull quick fights a pet-day, then 1 XP). */
+  function quickFoe(state, p) {
+    var h = U.hash(state.seed, p.id, 'quick', p.clock), rng = U.makeRng(h), lv = U.clamp(p.level | 0, 1, PP.Stats.levelCap('good'));
+    var sp = D.SPECIES[h % D.SPECIES.length], names = ['Sparring pal', 'Practice pal', 'Wild pal'];
+    var card = { id: ('qk' + (h % 1e8).toString(36)).slice(0, 12), name: names[(h >>> 4) % names.length], species: sp, sex: rng.chance(0.5) ? 'M' : 'F', form: 'good',
+      level: lv, genes: { hp: 0, atk: 0, def: 0, spd: 0 }, skills: [], innate: [], gen: 1, stage: 'adult', sp: PP.Stats.totalSpForLevel(lv) };
+    PP.Skills.autoLearn(card, rng); delete card.sp;
+    return card;
+  }
+  function startAdultQuick(state, seed) {
+    var p = active(state);
+    if (!p || p.stage !== 'adult') return { ok: false, msg: 'Quick battle here is for adult pals' };
+    return startBattle(state, quickFoe(state, p), { kind: 'quick', practice: true }, seed);
+  }
+  function finishPractice(state, p, B, won, out) {
+    out.practice = true;
+    var day = Math.floor(p.clock / 1440);
+    if (!p.trainDay || p.trainDay.d !== day) p.trainDay = { d: day, n: 0 };
+    p.trainDay.q = (p.trainDay.q || 0) + 1;
+    var full = p.trainDay.q <= R.trainDayFull, txp = D.LEVEL.trainXp(p.level);
+    out.xp = !full ? 1 : won ? Math.ceil(txp / 2) : 1; out.limit = !full;
+    if (won) { p.happy = Math.min(4, p.happy + 1); p.energy = Math.min(100, p.energy + 4); }
+    var lv0 = p.level; out.levels = PP.Stats.addXp(p, out.xp);
+    memoBattle(p, { won: false }, lv0, now(state));          // level memos only (practice wins are not battle wins)
+    albumUpsert(state, p);
+    PP.Collection.markSeen(state, B.opp, now(state));
+    return out;
   }
   /* 1.9.0 rare event: a visiting wild pal (one try a day, +25 coins for a win). */
   function visitorCard(state, t) {
@@ -426,17 +479,25 @@
     else { p.losses++; p.happy = Math.max(0, p.happy - 1); }
     out.xp = bankJunior(p, won ? JUNIOR.xpWin[p.stage] : JUNIOR.xpLoss);
     out.bank = p.jxp; out.bankCap = JUNIOR.bankCap;
-    var bonus = 0;
+    var bonus = 0, J = juniorState(state), day = PP.Shop.dayOf(now(state));
+    if (day > J.day) { J.day = day; J.coins = 0; }                     // (a clock set back never resets the cap)
     if (B.meta.kind === 'junior') {
-      var c = p.jcup && p.jcup.stage === p.stage ? p.jcup : (p.jcup = { stage: p.stage, foe: 0, won: [] });
-      out.cup = JUNIOR.cupName; out.foe = (B.meta.foe | 0) + 1; out.foes = JUNIOR.cupFoes;
+      var L = ladderOf(p.stage), n = L.foes.length, i = U.clamp(B.meta.foe | 0, 0, n - 1);
+      var c = ladderRun(p) || (p.jcup = { stage: p.stage, foe: 0 });
+      out.cup = L.name; out.foe = i + 1; out.foes = n; out.ladder = p.stage;
       if (!won) c.foe = 0;
-      else if ((B.meta.foe | 0) + 1 >= JUNIOR.cupFoes) {
+      else if (i + 1 >= n) {
         c.foe = 0; out.cleared = true;
-        if (c.won.indexOf(p.stage) < 0) { c.won.push(p.stage); out.firstClear = true; bonus = JUNIOR.coins.cup; }
-      } else { c.foe = (B.meta.foe | 0) + 1; out.next = c.foe + 1; }
+        J.trophies[p.stage] = (J.trophies[p.stage] | 0) + 1; out.trophies = J.trophies[p.stage];
+        if (J.trophies[p.stage] === 1) { out.firstClear = true; out.trophy = L.trophy; }
+        if (J.paid[p.stage] !== day) { J.paid[p.stage] = day; bonus = JUNIOR.coins.clear; } else out.bonusPaid = true;
+      } else { c.foe = i + 1; out.next = c.foe + 1; }
     }
-    out.coins = PP.Shop.earn(state, won ? JUNIOR.coins.win : JUNIOR.coins.loss, now(state)) + (bonus ? PP.Shop.earn(state, bonus, now(state), false) : 0);
+    // coins: the junior cap first (JUNIOR.dailyCoins a day), then the game's normal daily battle cap
+    var want = (won ? JUNIOR.coins.win : JUNIOR.coins.loss) + bonus, room = Math.max(0, JUNIOR.dailyCoins - J.coins), give = Math.min(want, room);
+    J.coins += give;
+    out.coins = give ? PP.Shop.earn(state, give, now(state)) : 0;
+    out.jrCap = give < want;
     albumUpsert(state, p);
     PP.Collection.markSeen(state, B.opp, now(state));
     return out;
@@ -502,6 +563,7 @@
     }
     p.weight = Math.max(Math.ceil(PP.Care.baseWeight(p) * 0.5), p.weight - 1);
     if (PP.Stats.isJunior(p)) return finishJunior(state, p, B, won, out);   // 2.4.92
+    if (B.meta.practice) return finishPractice(state, p, B, won, out);       // 2.4.94 adult Quick battle
     if (won) {
       p.wins++; out.xp = D.LEVEL.winXp(p.level, oppLv);
       p.happy = Math.min(4, p.happy + 1);
@@ -624,6 +686,6 @@
   };
 
   PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, juniorFoe: juniorFoe, startJuniorQuick: startJuniorQuick, startJuniorCup: startJuniorCup, bankJunior: bankJunior, canTrainDummy: canTrainDummy, startDummy: startDummy, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, juniorFoe: juniorFoe, ladderFoe: ladderFoe, ladderRun: ladderRun, juniorState: juniorState, startJuniorQuick: startJuniorQuick, startAdultQuick: startAdultQuick, quickFoe: quickFoe, startJuniorCup: startJuniorCup, bankJunior: bankJunior, canTrainDummy: canTrainDummy, startDummy: startDummy, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

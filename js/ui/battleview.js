@@ -4,7 +4,8 @@
   'use strict';
   var PP = root.PP = root.PP || {};
   var S = PP.Sprites, F = PP.Font, D = PP.DATA;
-  var W = 216, PS = 96, TOP = 14, BOX = 112;
+  var W = 216, PS = 96, TOP = 18, BOX = 112;   // 2.4.94: TOP 14 -> 18 (the happy bounce of a lion stays out of the top band), the tallest heads (mane tufts, ears) cleared the HUD band
+  var HP_W = 82;                                                 // 2.4.94: HP bars leave a 48 px gap for the round score
   var FLOOR_Y = 99;                                              // 2.4.93: intro ribbon / plate / VS sit on the floor strip, below every face
   /* 2.4.93: young pals are drawn smaller, feet on the same floor, so a teen never looks like an adult */
   var JR_SCALE = { child: 2.25, teen: 2.6 };
@@ -52,6 +53,13 @@
         }
         dur = 1600; break;
       case 'round': {
+        if (e.draw) {                                   // 2.4.94: double KO (or a dead-level timeout) - nobody scores
+          bv.down = [B.f[0].hp <= 0, B.f[1].hp <= 0];
+          bv.pose = [bv.down[0] ? 'faint' : 'sad', bv.down[1] ? 'faint' : 'sad'];
+          bv.msg = (bv.down[0] && bv.down[1] ? 'Double KO! ' : 'Dead level! ') + 'ROUND ' + e.n + ' is a draw.  Score ' + e.score[0] + '-' + e.score[1];
+          bv.endFx = { draw: true, t0: t };
+          PP.Audio.play('ok'); dur = 1800; break;
+        }
         // Full celebrate style for this round - winner happy, loser down, ROUND WIN/LOSS banner
         var lostR = 1 - e.who;
         bv.down[e.who] = false; bv.down[lostR] = true;
@@ -75,6 +83,11 @@
         bv.ghost = [B.f[0].hp, B.f[1].hp];
         bv.hpFrom = [B.f[0].hp, B.f[1].hp];
         bv.hpTo = [B.f[0].hp, B.f[1].hp];
+        if (e.sudden) {                                 // 2.4.94: level score - one last round at low HP
+          bv.msg = 'SUDDEN DEATH!  Both pals at 40% HP - pick your move!';
+          bv.endFx = { sudden: true, t0: t };
+          PP.Audio.play('ok'); dur = 1800; break;
+        }
         bv.msg = (e.n >= 3 ? 'FINAL ROUND!' : ('ROUND ' + e.n + '!')) +
           '  Score ' + e.score[0] + '-' + e.score[1] + ' - pick your move!';
         PP.Audio.play('ok');
@@ -133,7 +146,7 @@
         if (e.fled === 'escaped') { bv.msg = 'Got away safely! (no XP or coins)'; PP.Audio.play('ok'); dur = 1300; break; }
         if (e.fled === 'forfeit') { bv.msg = 'FORFEIT - it counts as a loss. No XP or coins.'; bv.pose[1] = 'happy'; bv.endFx = { won: false, t0: t, forfeit: true }; PP.Audio.play('lose'); dur = 1500; break; }
         var score = e.bo3 ? ('  (' + e.bo3[0] + '-' + e.bo3[1] + ')') : '';
-        bv.msg = (e.timeout ? 'Time up! ' : '') + (won ? 'YOU WIN!' : 'YOU LOSE...') + score;
+        bv.msg = (e.tiebreak ? 'Double KO - tiebreak! ' : (e.timeout ? 'Time up! ' : '')) + (won ? 'YOU WIN!' : 'YOU LOSE...') + score;
         bv.pose[e.winner] = 'happy';
         if (e.winner === 1) bv.pose[0] = bv.down[0] ? 'faint' : 'sad';
         if (e.winner === 0) bv.pose[1] = bv.down[1] ? 'faint' : 'sad';
@@ -144,6 +157,12 @@
   }
   function tweenHp(i, to, t) { bv.hpFrom[i] = bv.hp[i]; bv.hpTo[i] = to; bv.hpT0 = t; if (to > bv.ghost[i]) bv.ghost[i] = to; }
   function impact(i, t, crit) { bv.shake = t; bv.shakeAmp = crit ? 3 : 1.6; bv.burst = { who: i, t0: t, crit: !!crit }; bv.cheer = t; }
+  /* 2.4.94: name + tag always fits its half of the top band - a long name is cut and ends in '.' */
+  function fitName(nm, tag, maxW) {
+    if (F.width(nm + tag, 1) <= maxW) return nm + tag;
+    while (nm.length > 1 && F.width(nm + '.' + tag, 1) > maxW) nm = nm.slice(0, -1);
+    return nm + '.' + tag;
+  }
   function petX(i) { return i === 0 ? 6 : W - PS - 6; }
   function addFloat(i, text, t) { bv.floats.push({ text: text, x: petX(i) + PS / 2, y: TOP + 30 + yOff(i), t0: t }); }
   function yOff(i) { return (3 - scaleOf(bv.B.f[i])) * 32 * 0.8; }   // 2.4.93: hits land on a smaller young pal
@@ -215,7 +234,7 @@
     return f.moves.map(function (id) {
       var m = D.MOVES[id], ok = ready.indexOf(id) >= 0, tag;
       if (!ok) tag = m.uses && (f.used[id] || 0) >= m.uses ? 'USED' : 'WAIT ' + f.cds[id];
-      else tag = m.power > 0 ? 'PWR ' + m.power + (m.hits ? 'x' + m.hits[1] : '') : (m.fx && m.fx[0].t === 'heal' ? 'HEAL' : 'SUPPORT');
+      else tag = m.power > 0 ? 'PWR ' + m.power + (m.hits ? 'x' + m.hits[1] : '') : (m.fx && m.fx[0] && m.fx[0].t === 'heal' ? 'HEAL' : 'SUPPORT');
       return { id: id, name: m.name, ok: ok, tag: tag };
     }).concat([fleeItem()]);
   }
@@ -415,23 +434,31 @@
     return null;
   }
   function foeTotal(m) { return PP.Arena && PP.Arena.foeCount ? PP.Arena.foeCount(m.rank) : D.ARENA[m.rank].foes.length; }
+  /* 2.4.94 HUD layout (the round tag used to sit on top of both HP bars):
+   *   row 1 (y 1-7):   names, left / right
+   *   row 2 (y 9-16):  HP bars (HP_W wide) - the round score "R1 0-0" sits in the gap between them
+   *   row 3 (y 17-23): "HP x/y" left / right - the cup pips, "2/3", LIVE / PAL / VISIT sit in the middle */
   function banner(ctx, t) {
-    var m = bv.B.meta || {}, R = PP.Render, intro = bv.cur && bv.cur.t === 'intro';
-    if (m.kind === 'arena' && D.ARENA[m.rank]) {
-      var n = foeTotal(m), cx0 = W / 2 - (n - 1) * 3.5;
-      for (var i = 0; i < n; i++) {
-        var px = cx0 + i * 7, py = 12.5, done = i < (m.foe | 0), now = i === (m.foe | 0);
+    var m = bv.B.meta || {}, R = PP.Render;
+    bv.hudRects = bv.hudRects || [];
+    var pipN = m.kind === 'arena' && D.ARENA[m.rank] ? foeTotal(m) : m.kind === 'junior' ? ((m.foes | 0) || 3) : 0;
+    if (pipN) {
+      var cx0 = W / 2 - (pipN - 1) * 3.5;
+      for (var i = 0; i < pipN; i++) {
+        var px = cx0 + i * 7, py = 20, done = i < (m.foe | 0), now = i === (m.foe | 0);
         ctx.fillStyle = C.ink;
         if (R && R.fshape) {
           R.fshape(ctx, px - 3, py - 3, px + 3, py + 3, function (u, v) { var d = (u - px) * (u - px) + (v - py) * (v - py); return done ? d <= 6.25 : d <= 6.25 && d >= 2.6; });
           if (now && Math.floor(t / 400) % 2) R.fshape(ctx, px - 1, py - 1, px + 1, py + 1, function (u, v) { return R.inDisc(u, v, px, py, 0.9); });
         } else ctx.fillRect(px - 2, py - 2, 4, 4);
       }
+      bv.hudRects.push({ kind: 'pips', x: cx0 - 3, y: 17, w: (pipN - 1) * 7 + 6, h: 6 });
     } else {
       var tag = m.live ? 'LIVE' : m.fcup ? ((m.foe | 0) + 1) + '/' + (m.foes | 0) : m.kind === 'friend' ? 'PAL' : m.kind === 'visitor' ? 'VISIT' : null;
-      if (m.bo3) tag = 'R' + m.bo3.round + '  ' + m.bo3.wins[0] + '-' + m.bo3.wins[1];
-      if (tag) F.draw(ctx, tag, W / 2, 9, C.dark, 1, 'center');
+      if (tag) { F.draw(ctx, tag, W / 2, 17, C.dark, 1, 'center'); }
     }
+    if (m.bo3 && m.kind !== 'dummy') F.draw(ctx, (m.sudden ? 'SD ' : 'R' + m.bo3.round + ' ') + m.bo3.wins[0] + '-' + m.bo3.wins[1], W / 2, 9, C.ink, 1, 'center');
+    else if (m.bo3) F.draw(ctx, m.bo3.wins[0] + '-' + m.bo3.wins[1], W / 2, 9, C.ink, 1, 'center');
   }
   function burstFx(ctx, t) {
     var b = bv.burst; if (!b) return;
@@ -468,7 +495,7 @@
     var kk = txt ? (k - 0.45) / 0.55 : k;             // phase 2: foe name plate sweeps in from the right, then 'VS'
     var f = bv.B.f[1], plate = f.name.toUpperCase() + '  ' + tagOf(f);
     w = F.width(plate, 1) + 10;
-    var px = q5(W - w - 4 + Math.max(0, 1 - kk * 3) * (w + 10));
+    var px = q5(W - w - 4 + Math.max(0, 1 - kk * 3) * (w + 10)); bv.plateIn = kk * 3 < 1;
     ctx.fillStyle = C.ink; ctx.fillRect(px, y, w, 11);
     ctx.fillStyle = C.dark; ctx.fillRect(px + 0.8, y + 0.8, w - 1.6, 9.4);
     F.draw(ctx, plate, px + w / 2, y + 2.5, C.lite, 1, 'center');
@@ -484,6 +511,15 @@
   function endFx(ctx, t) {
     var e = bv.endFx; if (!e) return;
     var k = Math.min(1, (t - e.t0) / 500);
+    if (e.draw || e.sudden) {                         // 2.4.94: centred on the floor strip like the intro plate - below every face
+      var st = e.sudden ? 'SUDDEN DEATH' : 'DRAW', sw = F.width(st, 1) + 14, sx0 = q5(W / 2 - sw / 2), sy0 = FLOOR_Y;
+      var blink = e.sudden && Math.floor((t - e.t0) / 260) % 2;
+      e.rect = [sx0, sy0, sw, 11];
+      ctx.fillStyle = C.ink; ctx.fillRect(sx0, sy0, sw, 11);
+      ctx.fillStyle = blink ? C.dark : C.mid; ctx.fillRect(sx0 + 1, sy0 + 1, sw - 2, 9);
+      F.draw(ctx, st, W / 2, sy0 + 2, blink ? C.lite : C.ink, 1, 'center');
+      return;
+    }
     var txt = e.round
       ? (e.won ? 'ROUND WIN!' : 'ROUND LOSS')
       : (e.won ? 'VICTORY!' : (e.forfeit ? 'FORFEIT' : 'DEFEAT'));
@@ -500,7 +536,7 @@
     // 2.2.0: the banner sits over the LOSER's half, so it never covers the winner's head (centred, it hid the face of
     // whichever pal had won - both heads face the middle of the arena)
     var sc = 2, w = F.width(txt, sc) + 16, wi = e.won ? 0 : 1;
-    var x0 = q5(Math.max(2, Math.min(W - w - 2, (wi === 0 ? W * 0.75 : W * 0.25) - w / 2))), y0 = q5(40 - (1 - k) * 30);
+    var x0 = q5(Math.max(2, Math.min(W - w - 2, (wi === 0 ? W * 0.75 : W * 0.25) - w / 2))), y0 = q5(40 - (1 - k) * 14);   // 2.4.94: slides in from below the top band (it crossed the HP bars)
     e.rect = [x0, y0, w, 22]; e.winner = wi;
     ctx.fillStyle = C.ink; ctx.fillRect(x0, y0, w, 22);
     ctx.fillStyle = e.won ? C.lite : C.mid; ctx.fillRect(x0 + 1.2, y0 + 1.2, w - 2.4, 19.6);
@@ -558,7 +594,7 @@
     var sx = sk ? Math.round(Math.sin(t / 16) * sk * 5) / 5 : 0, sy = sk ? Math.round(Math.cos(t / 21) * sk * 2.5) / 5 : 0;
     ctx.save(); ctx.translate(sx, sy);
     backdrop(ctx, t);
-    var slide = introSlide(t);
+    var slide = introSlide(t); bv.slideK = slide;
     bv.drawn = []; bv.seq = 0;
     for (var i = 0; i < 2; i++) {
       var f = B.f[i], x = petX(i), off = 0, k = bv.cur ? (t - bv.t0) / bv.dur : 1;
@@ -580,6 +616,7 @@
           drawDummyBag(ctx, x + off, TOP, t, bv.hurt === i, bv.down[i], bv.pose[i]);
         } else {
           var sk = keyOf(f), sc = scaleOf(f), dx = (3 - sc) * 16, dy = (3 - sc) * 32, pose = i === 0 && bv.run ? 'walk' : bv.pose[i], fr = Math.floor(t / (i === 0 && bv.run ? 140 : 280));
+          if (pose === 'happy') dy += 2;   // 2.4.94: the happy hop of the tallest pals (lion) poked 2 px into the top band
           S.draw(ctx, f.species, sk, pose, fr, x + off + dx, TOP + dy, sc, flipMe);
           bv.drawn[i] = { seq: ++bv.seq, key: sk, scale: sc, x: x + off + dx, y: TOP + dy, size: 32 * sc };
           if (i === 0 && PP.App && PP.App.state && PP.WorldArt && PP.World) { var p = PP.Game.active(PP.App.state); if (p && p.hat) PP.WorldArt.drawHat(ctx, p.hat, f.species, sk, pose, fr, x + off + dx, TOP + dy, flipMe, false, sc); }
@@ -592,11 +629,12 @@
     endFx(ctx, t);
     ctx.restore();
     // HUD (does not shake): name panels + HP bars, then the cup banner
+    bv.hudRects = [{ kind: 'bar', x: 2, y: 9, w: HP_W, h: 7 }, { kind: 'bar', x: W - 2 - HP_W, y: 9, w: HP_W, h: 7 }];
     for (var h = 0; h < 2; h++) {
-      var ff = B.f[h], label = ff.name.toUpperCase() + ' ' + (ff.stage && ff.stage !== 'adult' ? tagOf(ff) : 'L' + ff.level);
-      ctx.fillStyle = C.bg; ctx.fillRect(h === 0 ? 0 : W - 96, 0, 96, 24);
-      if (h === 0) { F.draw(ctx, label, 2, 1, C.ink); hpBar(ctx, 2, 9, 90, bv.hp[0], ff.maxHp, bv.ghost[0], t); }
-      else { F.draw(ctx, label, W - 2, 1, C.ink, 1, 'right'); hpBar(ctx, W - 92, 9, 90, bv.hp[1], ff.maxHp, bv.ghost[1], t); }
+      var ff = B.f[h], label = fitName(ff.name.toUpperCase(), ' ' + (ff.stage && ff.stage !== 'adult' ? tagOf(ff) : 'L' + ff.level), W / 2 - 4);
+      if (h === 0) { ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, 24); }   // 2.4.94: one full-width band (the centre score / pips sat on the crowd)
+      if (h === 0) { F.draw(ctx, label, 2, 1, C.ink); hpBar(ctx, 2, 9, HP_W, bv.hp[0], ff.maxHp, bv.ghost[0], t); }
+      else { F.draw(ctx, label, W - 2, 1, C.ink, 1, 'right'); hpBar(ctx, W - 2 - HP_W, 9, HP_W, bv.hp[1], ff.maxHp, bv.ghost[1], t); }
     }
     F.draw(ctx, 'HP ' + bv.hp[0] + '/' + B.f[0].maxHp, 2, 17, C.dark);
     F.draw(ctx, 'HP ' + bv.hp[1] + '/' + B.f[1].maxHp, W - 2, 17, C.dark, 1, 'right');

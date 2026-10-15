@@ -70,9 +70,9 @@
     function offer(worker) {
       if (!worker || !navigator.serviceWorker.controller) return;   // first install: nothing to update
       var bar = document.getElementById('updateBar'); if (!bar) return;
-      if (localStorage.getItem('pp-updated') === '2.4.93') return;   // already updated to this version
+      if (localStorage.getItem('pp-updated') === PP.DATA.VERSION) return;   // already updated to this version (2.4.94: was a hand-typed version that had to be bumped)
       bar.hidden = false;
-      bar.onclick = function () { bar.hidden = true; localStorage.setItem('pp-updated', '2.4.93'); App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
+      bar.onclick = function () { bar.hidden = true; localStorage.setItem('pp-updated', PP.DATA.VERSION); App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
     }
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (reloading || !App.updateRequested) return;
@@ -408,6 +408,7 @@
   App.startFriend = function (card, title) { beginBattle(G.startFriend(App.state, card, rndSeed()), title || 'FRIEND'); };
   /* 1.8.4: cup-cleared celebration on the LCD (after the result screen closes) */
   App.celebrate = function (text) { App.anim = { kind: 'cup', t0: performance.now(), dur: 3600, text: text }; PP.Audio.play('cup'); };
+  App.startAdultQuick = function () { beginBattle(G.startAdultQuick(App.state, rndSeed()), 'QUICK'); };   // 2.4.94
   App.startQuick = function (card, title) { beginBattle(G.startQuick(App.state, card, rndSeed()), title || 'SPAR'); };
   App.startWeekly = function () { beginBattle(G.startWeekly(App.state, rndSeed()), 'WEEKLY'); };
   App.startDaily = function () { beginBattle(G.startDaily(App.state, rndSeed()), 'DAILY'); };

@@ -109,7 +109,7 @@
   var STYLE = {
     minPts: 8, minShare: 0.45, minLead: 3, guardDisc: 80, guardMistakes: 1, guardCare: 0.3,
     pts: { train: [2, 1, 'power'], dummy: [3, 1, 'power'], memory: [3, 1, 'swift'], match: [3, 1, 'guard'], game: [2, 1, 'swift'], rhythm: [2, 1, 'swift'] },   // [win, try, style]
-    tilt: { power: { atk: 2, def: -1, spd: -1 }, swift: { spd: 2, atk: -1, def: -1 }, guard: { def: 2, atk: -1, spd: -1 } },
+    tilt: { power: { atk: 1, def: -1 }, swift: { spd: 2, atk: -1, def: -1 }, guard: { def: 1, atk: -1 } },   // 2.4.94 balance: Mighty / Sturdy no longer pay SPD (it decides turn order, dodge and crits)
     hint: { power: 'Mostly Power Training while young (with good care). Leans ATK.',
       swift: 'Mostly Memory while young (with good care). Leans SPD.',
       guard: 'Mostly Match, or a very well-behaved youth (discipline 80%+, 0-1 mistakes), with good care. Leans DEF.' }
@@ -132,8 +132,8 @@
     chomp:        { name: 'Chomp', power: 48, acc: 95 },
     tail_whip:    { name: 'Tail Whip', power: 25, acc: 100, cd: 2, fx: [{ t: 'debuff', stat: 'def', mult: 0.85, turns: 3 }] },   // 1.8.0 balance
     ambush_bite:  { name: 'Ambush Bite', power: 50, acc: 95, pri: 1, cd: 1 },   // 1.8.0 balance
-    death_roll:   { name: 'Death Roll', power: 78, acc: 85, cd: 2, fx: [{ t: 'stun', chance: 0.3 }] },   // 1.8.0 balance
-    swamp_soak:   { name: 'Swamp Soak', power: 0, acc: 100, cd: 3, uses: 2, fx: [{ t: 'heal', pct: 18 }] },   // 1.8.0 balance
+    death_roll:   { name: 'Death Roll', power: 69, acc: 85, cd: 2, fx: [{ t: 'stun', chance: 0.3 }] },   // 1.8.0 balance
+    swamp_soak:   { name: 'Swamp Soak', power: 0, acc: 100, cd: 3, uses: 2, fx: [{ t: 'heal', pct: 21 }] },   // 1.8.0 balance
     frenzy_bite:  { name: 'Frenzy Bite', power: 53, acc: 90, cd: 2, fx: [{ t: 'bleed', turns: 3 }] },   // 1.8.0 balance
     leviathan:    { name: 'Leviathan Crush', power: 100, acc: 80, cd: 4 },   // 1.8.0 balance
     claw_swipe:   { name: 'Claw Swipe', power: 45, acc: 95 },
@@ -162,15 +162,15 @@
     bear_hug:     { name: 'Bear Hug', power: 35, acc: 95, cd: 2, fx: [{ t: 'debuff', stat: 'spd', mult: 0.75, turns: 3 }] },
     honey_snack:  { name: 'Honey Snack', power: 0, acc: 100, cd: 3, uses: 2, fx: [{ t: 'heal', pct: 25 }] },   // 1.8.0 balance
     hibernate:    { name: 'Hibernate', power: 0, acc: 100, cd: 4, uses: 1, fx: [{ t: 'heal', pct: 55 }, { t: 'skip' }] },
-    rage:         { name: 'Rage', power: 0, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.5, turns: 3 }, { t: 'buff', stat: 'def', mult: 0.9, turns: 3 }] },   // 1.8.0 balance
-    crush_swipe:  { name: 'Crushing Swipe', power: 84, acc: 90, cd: 2 },   // 1.8.0 balance
+    rage:         { name: 'Rage', power: 0, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.5, turns: 3 }] },   // 1.8.0 balance
+    crush_swipe:  { name: 'Crushing Swipe', power: 80, acc: 90, cd: 2 },   // 1.8.0 balance
     berserk_roar: { name: 'Berserk Roar', power: 64, acc: 90, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.2, turns: 2, self: true }] },
     grizzly:      { name: 'Grizzly Rampage', power: 33, acc: 90, cd: 4, hits: [3, 3] },   // 1.8.0 balance
     bite:         { name: 'Bite', power: 46, acc: 95 },   // 1.8.0 balance
     howl:         { name: 'Howl', power: 36, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.1, turns: 3 }] },   // a hit + small ATK buff, so the AI actually uses it (1.8.0: 30 -> 36)
-    fang_bleed:   { name: 'Fang Bleed', power: 28, acc: 95, cd: 1, fx: [{ t: 'bleed', turns: 3 }] },
+    fang_bleed:   { name: 'Fang Bleed', power: 31, acc: 95, cd: 1, fx: [{ t: 'bleed', turns: 3 }] },
     lunge:        { name: 'Lunge', power: 60, acc: 95, pri: 1, cd: 1 },   // 1.8.0 balance
-    moon_howl:    { name: 'Moon Howl', power: 32, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.22, turns: 3 }, { t: 'buff', stat: 'spd', mult: 1.12, turns: 3 }] },
+    moon_howl:    { name: 'Moon Howl', power: 34, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.22, turns: 3 }, { t: 'buff', stat: 'spd', mult: 1.12, turns: 3 }] },
     frost_fang:   { name: 'Frost Fang', power: 76, acc: 90, cd: 2, fx: [{ t: 'debuff', stat: 'spd', mult: 0.8, turns: 3 }] },   // 1.8.0 balance
     lunar_hunt:   { name: 'Lunar Hunt', power: 64, acc: 95, cd: 4, fx: [{ t: 'bleed', turns: 3 }] }
   };
@@ -190,7 +190,7 @@
       T('thick_hide', 'Thick Hide', 1, 'passive', { defPct: 6 }, null, 'DEF +6%'),
       T('ambush', 'Ambush Bite', 1, 'move', 'ambush_bite', null, 'Fast bite that strikes first'),
       T('death_roll', 'Death Roll', 2, 'move', 'death_roll', ['ambush'], 'Big spin: 30% stun'),
-      T('swamp_soak', 'Swamp Soak', 2, 'move', 'swamp_soak', ['thick_hide'], 'Heal 18% HP (2x per battle)'),
+      T('swamp_soak', 'Swamp Soak', 2, 'move', 'swamp_soak', ['thick_hide'], 'Heal 21% HP (2x per battle)'),
       T('iron_jaw', 'Iron Jaw', 2, 'passive', { atkPct: 16 }, ['thick_hide', 'ambush'], 'ATK +16%'),
       T('ancient_scales', 'Ancient Scales', 3, 'passive', { lowHpGuard: 12 }, ['swamp_soak', 'iron_jaw'], 'Under 50% HP: take 12% less damage'),
       T('frenzy_bite', 'Frenzy Bite', 3, 'move', 'frenzy_bite', ['death_roll', 'iron_jaw'], 'Bite that causes bleeding'),
@@ -207,7 +207,7 @@
       T('sun_king', 'Sun King Strike', 4, 'move', 'sun_king', ['pride_heart', 'rending_fury'], 'Ultimate: always a critical hit')
     ],
     eagle: [
-      T('sharp_eyes', 'Sharp Eyes', 1, 'passive', { accAdd: 10, critAdd: 12 }, null, 'Accuracy +10%, crit +12%'),
+      T('sharp_eyes', 'Sharp Eyes', 1, 'passive', { accAdd: 8, critAdd: 10 }, null, 'Accuracy +8%, crit +10%'),
       T('wind_riding', 'Wind Riding', 1, 'passive', { spdPct: 6 }, null, 'SPD +6%'),
       T('dive_bomb', 'Dive Bomb', 2, 'move', 'dive_bomb', ['wind_riding', 'sharp_eyes'], 'Steep power dive'),
       T('feather_veil', 'Feather Veil', 2, 'move', 'feather_veil', ['wind_riding'], '+35% dodge for 3 turns'),
@@ -230,7 +230,7 @@
       T('honey_snack', 'Honey Snack', 1, 'move', 'honey_snack', null, 'Heal 25% HP (2x per battle)'),
       T('heavy_paws', 'Heavy Paws', 1, 'passive', { atkPct: 8 }, null, 'ATK +8%'),
       T('hibernate', 'Hibernate', 2, 'move', 'hibernate', ['honey_snack'], 'Heal 55%, then rest a turn (1x per battle)'),
-      T('rage', 'Rage', 2, 'move', 'rage', ['heavy_paws'], 'ATK +50%, DEF -10% for 3 turns'),
+      T('rage', 'Rage', 2, 'move', 'rage', ['heavy_paws'], 'ATK +50% for 3 turns'),
       T('crush_swipe', 'Crushing Swipe', 2, 'move', 'crush_swipe', ['heavy_paws', 'honey_snack'], 'Heavy swipe'),
       T('iron_fur', 'Iron Fur', 3, 'passive', { defPct: 18 }, ['hibernate', 'crush_swipe'], 'DEF +18%'),
       T('berserk_roar', 'Berserk Roar', 3, 'move', 'berserk_roar', ['rage', 'crush_swipe'], 'Hit and raise own ATK'),
@@ -242,7 +242,7 @@
       T('pack_tactics', 'Pack Tactics', 2, 'passive', { fasterDmg: 17 }, ['swift_paws'], '+17% damage when faster than foe'),
       T('lunge', 'Lunge', 2, 'move', 'lunge', ['swift_paws', 'fang_bleed'], 'Quick lunge, strikes first'),
       T('moon_howl', 'Moon Howl', 2, 'move', 'moon_howl', ['fang_bleed'], 'Hit + ATK +22%, SPD +12% for 3 turns'),
-      T('alpha', 'Alpha Instinct', 3, 'passive', { critAdd: 10 }, ['pack_tactics', 'moon_howl'], 'Crit chance +10%'),
+      T('alpha', 'Alpha Instinct', 3, 'passive', { critAdd: 11 }, ['pack_tactics', 'moon_howl'], 'Crit chance +11%'),
       T('frost_fang', 'Frost Fang', 3, 'move', 'frost_fang', ['lunge', 'moon_howl'], 'Chilling bite, slows foe'),
       T('lunar_hunt', 'Lunar Hunt', 4, 'move', 'lunar_hunt', ['alpha', 'frost_fang'], 'Ultimate: savage hunt, bleeding')
     ]
@@ -346,8 +346,17 @@
     scale: { child: 0.5, teen: 0.7 },
     xpWin: { child: 6, teen: 9 }, xpLoss: 2, xpTrain: 3,
     bankCap: 150,                      // LEVEL.xpNeed(1) + xpNeed(2) + xpNeed(3): at most an adult at level 4
-    coins: { win: 3, loss: 1, cup: 15 },
-    cupFoes: 3, cupName: 'Junior Cup'
+    coins: { win: 3, loss: 1, clear: 15 },
+    dailyCoins: 30,                    // 2.4.94: junior battle coins a day at most (wins, losses and the clear bonus)
+    cupName: 'Junior Cup',
+    /* 2.4.94: the Junior Cup is a ladder per stage, like an arena cup: fixed foes of rising strength (the same for
+     * everyone), the run is saved, a loss starts it again. foes: [name, species, genes (hp atk def spd), power]. Species
+     * go from the weakest base stats up, power scales the foe's junior stats a notch per rung. Clearing the ladder adds
+     * a trophy; the clear bonus pays once a day. Balance: tests/junior2494.test.js. */
+    ladders: {
+      child: { name: 'Child Ladder', trophy: 'Little Star', foes: [['Scout', 'croc', [-1, -1, 0, 0], 1.0], ['Rival', 'elephant', [0, 0, 0, 0], 1.0], ['Champ', 'wolf', [0, 0, 0, 0], 1.06]] },
+      teen: { name: 'Teen Ladder', trophy: 'Rising Star', foes: [['Scout', 'lion', [-1, -1, 0, 0], 1.0], ['Rival', 'bear', [0, 0, 0, 0], 1.0], ['Ace', 'elephant', [0, 0, 0, 0], 1.03], ['Champ', 'wolf', [0, 0, 0, 0], 1.09]] }
+    }
   };
   var BOX = { start: 4, max: 12, prices: [100, 150, 200, 275, 350, 450, 575, 700] };  // price of slot 5, 6, ... 12
 
@@ -367,7 +376,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.4.93',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.4.94',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

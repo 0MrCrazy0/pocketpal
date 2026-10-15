@@ -142,6 +142,7 @@
     if (typeof p.id !== 'string' || !p.id) return null;
     var base = PP.Pet.createEgg({ species: p.species, seed: p.seed, now: U.num(p.createdAt, Date.now()) });
     var out = Object.assign(base, p);
+    delete out.cpu; delete out.jpow;   // 2.4.94: only computer ladder foes are stronger per rung - never a saved pal
     out.seed = (U.int(p.seed, base.seed) >>> 0) || 1;
     out.name = PP.Pet.cleanName(p.name) || base.name;
     out.sex = p.sex === 'F' ? 'F' : 'M';
@@ -171,12 +172,12 @@
       if (Number.isFinite(p.need.lightsAt)) out.need.lightsAt = p.need.lightsAt;
     }
     out.unhappyMin = U.int(p.unhappyMin, 0, 0, 1e6);
-    if (p.trainDay && Number.isFinite(p.trainDay.d)) { out.trainDay = { d: U.int(p.trainDay.d, 0, 0), n: U.int(p.trainDay.n, 0, 0, 999) }; if (p.trainDay.g != null) out.trainDay.g = U.int(p.trainDay.g, 0, 0, 999); } else delete out.trainDay;   // 2.4.92: g = games today (XP anti-farm)
+    if (p.trainDay && Number.isFinite(p.trainDay.d)) { out.trainDay = { d: U.int(p.trainDay.d, 0, 0), n: U.int(p.trainDay.n, 0, 0, 999) }; if (p.trainDay.q != null) out.trainDay.q = U.int(p.trainDay.q, 0, 0, 999); if (p.trainDay.g != null) out.trainDay.g = U.int(p.trainDay.g, 0, 0, 999); } else delete out.trainDay;   // 2.4.92: g = games today (XP anti-farm)
     // 2.4.92 junior battles: banked XP (capped), Junior Cup run, XP carried into the adult
     if (Number.isFinite(p.jxp) && p.jxp > 0) out.jxp = U.int(p.jxp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.jxp;
     if (Number.isFinite(p.carriedXp)) out.carriedXp = U.int(p.carriedXp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.carriedXp;
-    if (p.jcup && typeof p.jcup === 'object' && PP.DATA.JUNIOR.stages.indexOf(p.jcup.stage) >= 0)
-      out.jcup = { stage: p.jcup.stage, foe: U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.cupFoes - 1), won: Array.isArray(p.jcup.won) ? p.jcup.won.filter(function (x) { return PP.DATA.JUNIOR.stages.indexOf(x) >= 0; }).slice(0, 2) : [] };
+    if (p.jcup && typeof p.jcup === 'object' && PP.DATA.JUNIOR.stages.indexOf(p.jcup.stage) >= 0)   // 2.4.94: { stage, foe } = the ladder run
+      out.jcup = { stage: p.jcup.stage, foe: U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.ladders[p.jcup.stage].foes.length - 1) };
     else delete out.jcup;
     if (p.praiseReady) out.praiseReady = true; else delete out.praiseReady;
     ['praiseAt', 'refuseAt', 'spoilAt'].forEach(function (k) { if (Number.isFinite(p[k])) out[k] = Math.round(p[k]); else delete out[k]; });
@@ -224,6 +225,15 @@
     return out;
   }
 
+  function cleanJunior(j) {
+    j = j && typeof j === 'object' ? j : {};
+    var out = { trophies: {}, paid: {}, day: U.int(j.day, -1, -1), coins: U.int(j.coins, 0, 0, PP.DATA.JUNIOR.dailyCoins) };
+    PP.DATA.JUNIOR.stages.forEach(function (st) {
+      out.trophies[st] = U.int(j.trophies && j.trophies[st], 0, 0, 1e6);
+      out.paid[st] = U.int(j.paid && j.paid[st], -1, -1);
+    });
+    return out;
+  }
   function sanitizeState(s, now) {
     var fresh = PP.Game.newState(now || Date.now());
     if (!s || typeof s !== 'object') return fresh;
@@ -252,6 +262,7 @@
       alertTypes: PP.Reminders.clean(st.alertTypes),   // 1.9.7: per-type alert switches
       eventForce: ['off', 'halloween', 'christmas', 'easter'].indexOf(st.eventForce) >= 0 ? st.eventForce : null };   // 2.4.0 admin: test a seasonal event
     out.daily = PP.Daily.clean(s.daily);
+    out.junior = cleanJunior(s.junior);   // 2.4.94: Junior ladder trophies + the daily junior coin cap
     out.hints = PP.Hints.clean(s.hints);
     var bk = s.backup && typeof s.backup === 'object' ? s.backup : {};
     var fin = function (v) { return Number.isFinite(v) ? Math.round(v) : null; };

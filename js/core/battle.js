@@ -141,7 +141,7 @@
     }
     ev.push({ t: 'flee', who: 0, ok: false });
     useMove(B, 1, 0, choiceB || chooseAI(B, 1, rng), rng, ev);
-    endTurn(B, 1, ev);
+    endTurn(B, 1, ev, rng);
     return ev;
   }
 
@@ -150,6 +150,7 @@
     if (B.over) return [];
     var rng = U.makeRng(B.rng), ev = [];
     if (choiceA === 'flee') { flee(B, choiceB, rng, ev); B.rng = rng.state(); return ev; }
+    B.hp0 = [B.f[0].hp / B.f[0].maxHp, B.f[1].hp / B.f[1].maxHp];   // 2.4.94: HP before this turn's hits (sudden-death tiebreak)
     var picks = [choiceA || chooseAI(B, 0, rng), choiceB || chooseAI(B, 1, rng)];
     var pri = [0, 1].map(function (i) { var m = D.MOVES[picks[i]]; return (m && m.pri) || 0; });
     var first;
@@ -160,13 +161,13 @@
     }
     useMove(B, first, 1 - first, picks[first], rng, ev);
     useMove(B, 1 - first, first, picks[1 - first], rng, ev);
-    endTurn(B, first, ev);
+    endTurn(B, first, ev, rng);
     B.rng = rng.state();
     return ev;
   }
-  function resetRound(B) {
+  function resetRound(B, hpPct) {
     B.f.forEach(function (f) {
-      f.hp = f.maxHp;
+      f.hp = hpPct ? Math.max(1, Math.round(f.maxHp * hpPct)) : f.maxHp;
       f.buffs = [];
       f.stunned = false; f.stunGuard = 0;
       f.bleed = 0; f.evade = 0; f.evadeTurns = 0; f.skip = false;
@@ -176,7 +177,7 @@
     // Per-round stall limit uses bo3.turn0 (set here) instead of zeroing the counter.
     if (B.meta && B.meta.bo3) B.meta.bo3.turn0 = B.turn;
   }
-  function endTurn(B, first, ev) {
+  function endTurn(B, first, ev, rng) {
     B.f.forEach(function (f, i) {
       if (f.hp > 0 && f.bleed > 0) {
         var d = Math.max(1, Math.round(f.maxHp * BLEED_PCT));
@@ -193,25 +194,32 @@
     B.turn++;
     var a = B.f[0].hp > 0, b = B.f[1].hp > 0;
     var turnsInRound = (B.meta && B.meta.bo3 && B.meta.bo3.turn0 != null)
-      ? (B.turn - B.meta.bo3.turn0) : B.turn;
+      ? (B.turn - B.meta.bo3.turn0) : (B.meta && B.meta.suddenTurn0 != null ? B.turn - B.meta.suddenTurn0 : B.turn);
     if (!a || !b || turnsInRound >= MAX_TURNS) {
-      var rw;
+      /* 2.4.94 ties. A round is DRAWN (nobody scores) on a double KO, or on a timeout with equal HP %. If the match is
+       * level when it would end (a single fight, or a best of 3 after round 3 / with a drawn round), a SUDDEN DEATH round
+       * follows: both pals at SUDDEN_HP of their max HP. If that is drawn too, a fixed tiebreak decides: the higher HP %
+       * before the last turn's hits, then the higher speed, then the battle's own RNG (shared by both live players, so
+       * both phones always agree). Before 2.4.94 a double KO went to whoever moved second, and an exact tie to fighter 0. */
+      var rw = null, sudden = B.meta && B.meta.sudden;
       if (a && !b) rw = 0;
       else if (b && !a) rw = 1;
-      else if (!a && !b) rw = first === 0 ? 1 : 0; // both fell: whoever acted second landed last
-      else {
+      else if (a && b) {
         var pa = B.f[0].hp / B.f[0].maxHp, pb = B.f[1].hp / B.f[1].maxHp;
-        rw = pa === pb ? (B.f[0].spd >= B.f[1].spd ? 0 : 1) : (pa > pb ? 0 : 1);
+        if (pa !== pb) rw = pa > pb ? 0 : 1;
       }
-      // Best of 3: first to 2 round wins. Round 3 only if 1-1.
-      var bo3 = B.meta && B.meta.bo3;
+      var tb = rw === null && !!sudden;
+      if (tb) rw = tiebreak(B, rng);
+      var bo3 = B.meta && B.meta.bo3, timeout = a && b;
       if (bo3 && !B.fled) {
-        bo3.wins[rw]++;
-        ev.push({ t: 'round', who: rw, score: [bo3.wins[0], bo3.wins[1]], n: bo3.round });
-        if (bo3.wins[0] >= 2 || bo3.wins[1] >= 2 || bo3.round >= 3) {
+        if (rw !== null) bo3.wins[rw]++;
+        ev.push({ t: 'round', who: rw, draw: rw === null, score: [bo3.wins[0], bo3.wins[1]], n: bo3.round, sudden: !!sudden, tiebreak: tb });
+        var done = bo3.wins[0] >= 2 || bo3.wins[1] >= 2 || sudden || bo3.round >= 3;
+        if (done && !sudden && bo3.wins[0] === bo3.wins[1]) { startSudden(B, ev, [bo3.wins[0], bo3.wins[1]]); return; }
+        if (done) {
           B.over = true;
           B.winner = bo3.wins[0] > bo3.wins[1] ? 0 : (bo3.wins[1] > bo3.wins[0] ? 1 : rw);
-          ev.push({ t: 'end', winner: B.winner, bo3: bo3.wins.slice(), timeout: a && b });
+          ev.push({ t: 'end', winner: B.winner, bo3: bo3.wins.slice(), timeout: timeout, sudden: !!sudden, tiebreak: tb });
         } else {
           bo3.round++;
           resetRound(B);
@@ -219,11 +227,28 @@
           ev.push({ t: 'roundStart', n: bo3.round, score: [bo3.wins[0], bo3.wins[1]] });
         }
       } else {
+        if (rw === null) { startSudden(B, ev, null); return; }
         B.over = true;
         B.winner = rw;
-        ev.push({ t: 'end', winner: B.winner, timeout: a && b });
+        ev.push({ t: 'end', winner: B.winner, timeout: timeout, sudden: !!sudden, tiebreak: tb });
       }
     }
+  }
+  var SUDDEN_HP = 0.4;
+  function startSudden(B, ev, score) {
+    B.meta = B.meta || {}; B.meta.sudden = true;
+    if (B.meta.bo3) B.meta.bo3.round++;
+    resetRound(B, SUDDEN_HP);
+    if (!B.meta.bo3) B.meta.suddenTurn0 = B.turn;
+    ev.push({ t: 'roundStart', n: B.meta.bo3 ? B.meta.bo3.round : 2, sudden: true, score: score || [0, 0] });
+  }
+  /* fixed, fair tiebreak (the same on both live phones: it only reads the canonical battle and its seeded RNG) */
+  function tiebreak(B, rng) {
+    var h = B.hp0 || [0, 0];
+    if (h[0] !== h[1]) return h[0] > h[1] ? 0 : 1;
+    var s0 = eff(B.f[0], 'spd'), s1 = eff(B.f[1], 'spd');
+    if (s0 !== s1) return s0 > s1 ? 0 : 1;
+    return rng() < 0.5 ? 0 : 1;
   }
 
   /* Computer player (1.8.0, from the v1.2 work): every ready move is scored by its EXPECTED VALUE in

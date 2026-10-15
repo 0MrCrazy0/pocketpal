@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.4.93**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.4.94**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -62,6 +62,14 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 - **Hard mode:** for experts only. Pals can't be revived, but they earn more coins.
 - **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed. **Settings ▸ Care alerts** shows the next alert and lets you switch each kind (bedtime, hunger, medicine, clean-up, calls, wake-up) on or off.
 - **Live battles:** **Battle ▸ Live battle** opens a room with a 4-letter code. Your friend joins with the code and you both pick moves turn by turn. Battle codes still work offline.
+
+## New in 2.4.94
+
+- The round score at the top of a battle no longer sits on the health bars.
+- The Junior Cup is a ladder: 3 child foes or 4 teen foes in a row, a trophy for each clear, a small daily bonus.
+- Adults get **Quick battle**: a fast practice fight with no stakes and a little XP.
+- If both pals fall at once, the round is a draw; a level match ends with a **SUDDEN DEATH** round.
+- Fairer battles: Mighty and Sturdy pals are as strong as Solid ones, and a few moves were evened out.
 
 ## New in 2.4.93
 

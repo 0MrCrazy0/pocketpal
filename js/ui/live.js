@@ -41,7 +41,7 @@
     if (why) { App().toast(why); return; }
     var code = PP.Cards.encode(p);
     App().toast('Opening a room...');
-    call('/room', { code: code }).then(function (j) {
+    call('/room', { code: code, eng: PP.Live.ENGINE }).then(function (j) {
       L = { room: j.room, side: 'h', token: j.token, seed: j.seed, hostCode: code, guestCode: null, round: 0, state: 'lobby', at: Date.now() };
       UI().push(lobbyScreen);
       lobbyTick();
@@ -53,7 +53,7 @@
     var p = G.active(st()), why = G.canBattle(p);
     if (why) { App().toast(why); return; }
     var code = PP.Cards.encode(p);
-    call('/room/' + room + '/join', { code: code }).then(function (j) {
+    call('/room/' + room + '/join', { code: code, eng: PP.Live.ENGINE }).then(function (j) {
       L = { room: room, side: 'g', token: j.token, seed: j.seed, hostCode: j.host, guestCode: code, round: 0, state: 'lobby', at: Date.now() };
       begin(0);
     }).catch(function (e) { App().toast('Live battle: ' + e.message); });

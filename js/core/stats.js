@@ -62,7 +62,7 @@
   function isJunior(p) { return !!(p && D.JUNIOR && D.JUNIOR.stages.indexOf(p.stage) >= 0); }
   /* 2.4.92: a child / teen fights with the Solid adult's level-1 stats scaled down by stage (no skills, no boosts) */
   function juniorStats(p) {
-    var r = rawStats(p.species, 'good', 1, p.genes), k = D.JUNIOR.scale[p.stage];
+    var r = rawStats(p.species, 'good', 1, p.genes), k = D.JUNIOR.scale[p.stage] * (p.cpu && p.jpow > 0 ? Math.min(1.3, p.jpow) : 1);   // 2.4.94: ladder foes (cpu) are a notch stronger per rung
     return { hp: Math.max(1, Math.floor(r.hp * k)), atk: Math.max(1, Math.floor(r.atk * k)), def: Math.max(1, Math.floor(r.def * k)), spd: Math.max(1, Math.floor(r.spd * k)) };
   }
   function battleStats(p, opts) {
