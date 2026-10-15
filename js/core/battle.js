@@ -22,12 +22,13 @@
   var SPD_DODGE = 20, SPD_DODGE_CAP = 12, SPD_CRIT = 20, SPD_CRIT_CAP = 12;
 
   /* card: { name, species, form, level, genes, skills, sex, hunger?, happy?, weight? } */
+  function D_JS(card) { return PP.Stats.scale('good', 1) * PP.DATA.JUNIOR.scale[card.stage]; }   // 2.4.92: junior damage scale
   function fighter(card, opts) {
     var s = PP.Stats.battleStats(card, opts);
     return {
-      name: card.name || 'Pal', species: card.species, form: card.form, level: card.level, sex: card.sex || 'M',
-      maxHp: s.hp, hp: s.hp, atk: s.atk, def: s.def, spd: s.spd, bp: PP.Stats.bp(s), scale: PP.Stats.scale(card.form, card.level),
-      moves: PP.Skills.moveList(card.species, card.skills), cds: {}, used: {}, passives: s.passives,
+      name: card.name || 'Pal', species: card.species, form: card.form || 'good', level: card.level || 1, sex: card.sex || 'M', stage: card.stage || 'adult',
+      maxHp: s.hp, hp: s.hp, atk: s.atk, def: s.def, spd: s.spd, bp: PP.Stats.bp(s), scale: PP.Stats.isJunior(card) ? D_JS(card) : PP.Stats.scale(card.form, card.level),
+      moves: PP.Skills.moveList(card.species, PP.Stats.isJunior(card) ? [] : card.skills), cds: {}, used: {}, passives: s.passives,
       buffs: [], stunned: false, stunGuard: 0, bleed: 0, evade: 0, evadeTurns: 0, skip: false
     };
   }
@@ -163,6 +164,18 @@
     B.rng = rng.state();
     return ev;
   }
+  function resetRound(B) {
+    B.f.forEach(function (f) {
+      f.hp = f.maxHp;
+      f.buffs = [];
+      f.stunned = false; f.stunGuard = 0;
+      f.bleed = 0; f.evade = 0; f.evadeTurns = 0; f.skip = false;
+      f.cds = {}; f.used = {};
+    });
+    // Keep B.turn climbing so live rooms can keep sending monotonic turn indexes to the worker.
+    // Per-round stall limit uses bo3.turn0 (set here) instead of zeroing the counter.
+    if (B.meta && B.meta.bo3) B.meta.bo3.turn0 = B.turn;
+  }
   function endTurn(B, first, ev) {
     B.f.forEach(function (f, i) {
       if (f.hp > 0 && f.bleed > 0) {
@@ -179,16 +192,37 @@
     });
     B.turn++;
     var a = B.f[0].hp > 0, b = B.f[1].hp > 0;
-    if (!a || !b || B.turn >= MAX_TURNS) {
-      B.over = true;
-      if (a && !b) B.winner = 0;
-      else if (b && !a) B.winner = 1;
-      else if (!a && !b) B.winner = first === 0 ? 1 : 0; // both fell: whoever acted second landed last
+    var turnsInRound = (B.meta && B.meta.bo3 && B.meta.bo3.turn0 != null)
+      ? (B.turn - B.meta.bo3.turn0) : B.turn;
+    if (!a || !b || turnsInRound >= MAX_TURNS) {
+      var rw;
+      if (a && !b) rw = 0;
+      else if (b && !a) rw = 1;
+      else if (!a && !b) rw = first === 0 ? 1 : 0; // both fell: whoever acted second landed last
       else {
         var pa = B.f[0].hp / B.f[0].maxHp, pb = B.f[1].hp / B.f[1].maxHp;
-        B.winner = pa === pb ? (B.f[0].spd >= B.f[1].spd ? 0 : 1) : (pa > pb ? 0 : 1);
+        rw = pa === pb ? (B.f[0].spd >= B.f[1].spd ? 0 : 1) : (pa > pb ? 0 : 1);
       }
-      ev.push({ t: 'end', winner: B.winner, timeout: a && b });
+      // Best of 3: first to 2 round wins. Round 3 only if 1-1.
+      var bo3 = B.meta && B.meta.bo3;
+      if (bo3 && !B.fled) {
+        bo3.wins[rw]++;
+        ev.push({ t: 'round', who: rw, score: [bo3.wins[0], bo3.wins[1]], n: bo3.round });
+        if (bo3.wins[0] >= 2 || bo3.wins[1] >= 2 || bo3.round >= 3) {
+          B.over = true;
+          B.winner = bo3.wins[0] > bo3.wins[1] ? 0 : (bo3.wins[1] > bo3.wins[0] ? 1 : rw);
+          ev.push({ t: 'end', winner: B.winner, bo3: bo3.wins.slice(), timeout: a && b });
+        } else {
+          bo3.round++;
+          resetRound(B);
+          // Next round card: ROUND 2! or FINAL ROUND!
+          ev.push({ t: 'roundStart', n: bo3.round, score: [bo3.wins[0], bo3.wins[1]] });
+        }
+      } else {
+        B.over = true;
+        B.winner = rw;
+        ev.push({ t: 'end', winner: B.winner, timeout: a && b });
+      }
     }
   }
 

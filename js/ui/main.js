@@ -70,9 +70,9 @@
     function offer(worker) {
       if (!worker || !navigator.serviceWorker.controller) return;   // first install: nothing to update
       var bar = document.getElementById('updateBar'); if (!bar) return;
-      if (localStorage.getItem('pp-updated') === '2.4.75') return;   // already updated to this version
+      if (localStorage.getItem('pp-updated') === '2.4.93') return;   // already updated to this version
       bar.hidden = false;
-      bar.onclick = function () { bar.hidden = true; localStorage.setItem('pp-updated', '2.4.75'); App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
+      bar.onclick = function () { bar.hidden = true; localStorage.setItem('pp-updated', '2.4.93'); App.updateRequested = true; worker.postMessage({ type: 'skipWaiting' }); };
     }
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (reloading || !App.updateRequested) return;
@@ -164,7 +164,7 @@
   function timeAt(ms) { return PP.Time.dateTime(ms, App.state.settings.clock, Date.now()); }
 
   /* ------------------------------------------------------------ events from the simulation */
-  var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give medicine', lights: 'is asleep and the lights are still on.' };
+  var CALL_TEXT = { hunger: 'is hungry!', happy: 'is sad - play with it!', sick: 'is sick! Give it medicine.', lights: 'is asleep but the lights are still on.' };
   App.handleEvents = function (evs, offline) {
     var p = G.active(App.state); if (!p || !evs.length) return;
     var info = { lines: [], minutes: 0 }, poops = 0, mistakes = [], lastGrow = null, died = null, rare = null, woke = null, napWoke = false;
@@ -285,7 +285,7 @@
    * NEW need appears, remind every few minutes while it stays, and (opt-in) show a
    * browser notification if the tab is in the background. */
   var lastNeeds = '', lastBeep = 0, REMIND_MS = 5 * 60 * 1000;
-  var NEED_TEXT = { sick: 'is sick!', hunger: 'is hungry!', happy: 'is sad and wants to play', lights: 'is asleep and the lights are still on', poop: 'made a mess - time to clean', tantrum: 'is throwing a tantrum' };
+  var NEED_TEXT = { sick: 'is sick!', hunger: 'is hungry!', happy: 'is sad and wants to play', lights: 'is asleep but the lights are still on', poop: 'made a mess - time to clean', tantrum: 'is throwing a tantrum' };
   function checkAttention() {
     var p = G.active(App.state);
     var needs = p && !p.fate ? PP.Care.attention(p) : [];
@@ -345,6 +345,7 @@
     // 2.3.21: the cheerful snack jingle only for a snack it enjoyed - an overfed snack (care mistake / tummy ache) sounds sad
     } else PP.Audio.play(!r.ok ? 'no' : action === 'snack' && r.anim === 'eat' ? 'snack' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
     refreshIcons(); checkAttention(); App.save();
+    if (r.ok && PP.Net) { clearTimeout(App.alertTimer); App.alertTimer = setTimeout(function () { PP.Net.scheduleAlert(App.state); }, 1500); }   // 2.4.92: re-plan the alerts at once (it waited for the app to be hidden)
   };
   /* Items from the Pal Store bag (Feed / Medicine menus and the Bag). */
   App.useItem = function (id) {
@@ -374,15 +375,19 @@
     App.scene = 'mini';
     PP.Mini.start(kind, p, function (success) {
       App.scene = 'home';
-      if (success !== null) PP.Hints.learn(App.state, kind === 'dummy' ? 'train' : kind);
+      // train + dummy pay as training; every play mini pays as a game (style still uses the mini id)
+      var pay = (kind === 'train' || kind === 'dummy') ? 'train' : 'game';
+      if (success !== null) PP.Hints.learn(App.state, pay);
       if (success === null) { App.toast('Quit - no energy used'); return; }
-      var r = G.exercise(App.state, kind === 'dummy' ? 'train' : kind, success, kind);
-      App.toast(r.msg);
+      var r = G.exercise(App.state, pay, success, kind);
       // 2.2.0 audit: it fell asleep during the game (bedtime came) - no victory dance for a sleeping pal
       if (r.asleep) { App.anim = { kind: 'stillAsleep', t0: performance.now(), dur: 2200, text: 'SHH... ASLEEP' }; PP.Audio.play('no'); App.save(); refreshIcons(); return; }
       App.anim = { kind: success && r.ok !== false ? 'dance' : 'sad', t0: performance.now(), dur: success ? 2100 : 1500 };
       if (/LEVEL UP/.test(r.msg)) PP.Audio.play('level');
       App.save(); refreshIcons();
+      // Same style of results card as Power Training / battles
+      if (UI.screens.trainResult) UI.open(UI.screens.trainResult(r, kind, success));
+      else App.toast(r.msg);
     });
   };
   function beginBattle(r, title) {
@@ -406,6 +411,10 @@
   App.startQuick = function (card, title) { beginBattle(G.startQuick(App.state, card, rndSeed()), title || 'SPAR'); };
   App.startWeekly = function () { beginBattle(G.startWeekly(App.state, rndSeed()), 'WEEKLY'); };
   App.startDaily = function () { beginBattle(G.startDaily(App.state, rndSeed()), 'DAILY'); };
+  App.startJuniorQuick = function () { beginBattle(G.startJuniorQuick(App.state, rndSeed()), 'SPAR'); };   // 2.4.92
+  App.startJuniorCup = function () { beginBattle(G.startJuniorCup(App.state, rndSeed()), D_JR().cupName.toUpperCase()); };
+  function D_JR() { return PP.DATA.JUNIOR; }
+  App.startDummy = function () { beginBattle(G.startDummy(App.state, rndSeed()), 'TRAINING'); };
 
   App.afterGuide = function () { if (!G.active(App.state)) setTimeout(firstEgg, 150); };
   App.firstEgg = function () { firstEgg(); };
@@ -611,7 +620,10 @@
       if (!act) return;
       var map = { clean: 'clean', meal: 'meal', snack: 'snack', lights: 'lights', medicine: 'medicine' };
       if (!map[act]) return;
-      setTimeout(function () { var r = G.act(App.state, map[act]); if (r && r.ok) { App.save(); refreshIcons(); App.toast(r.msg || 'Done'); } }, 400);
+      setTimeout(function () {
+        if (act === 'lights') { updateSim(true); var q = G.active(App.state); if (!q || !q.lights) return; }   // 2.4.92: "Lights off" never switches them ON (it was a toggle)
+        App.doAct(map[act]);
+      }, 400);
     }
     var qs = new URLSearchParams(root.location.search);
     if (qs.get('do')) { doAction(qs.get('do')); history.replaceState(null, '', root.location.pathname); }

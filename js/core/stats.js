@@ -59,7 +59,18 @@
     return c;
   }
   /* Final battle stats for a pet-like object {species, form, level, genes, skills} */
+  function isJunior(p) { return !!(p && D.JUNIOR && D.JUNIOR.stages.indexOf(p.stage) >= 0); }
+  /* 2.4.92: a child / teen fights with the Solid adult's level-1 stats scaled down by stage (no skills, no boosts) */
+  function juniorStats(p) {
+    var r = rawStats(p.species, 'good', 1, p.genes), k = D.JUNIOR.scale[p.stage];
+    return { hp: Math.max(1, Math.floor(r.hp * k)), atk: Math.max(1, Math.floor(r.atk * k)), def: Math.max(1, Math.floor(r.def * k)), spd: Math.max(1, Math.floor(r.spd * k)) };
+  }
   function battleStats(p, opts) {
+    if (isJunior(p)) {
+      var jr = juniorStats(p), jc = (opts && opts.noCondition) ? condition(null) : condition(p);
+      return { hp: Math.max(1, Math.round(jr.hp * jc.all * jc.hp)), atk: Math.max(1, Math.round(jr.atk * jc.all)), def: Math.max(1, Math.round(jr.def * jc.all)),
+        spd: Math.max(1, Math.round(jr.spd * jc.all * jc.spd)), passives: passives(p.species, []), notes: jc.notes };
+    }
     var r = rawStats(p.species, p.form, p.level, p.genes);
     var ps = passives(p.species, p.skills);
     var c = (opts && opts.noCondition) ? condition(null) : condition(p);
@@ -95,5 +106,5 @@
   function totalSpForLevel(level) { return 1 + (level - 1); }
 
   PP.Stats = { levelCap: levelCap, rawStats: rawStats, passives: passives, condition: condition,
-    battleStats: battleStats, bp: bp, scale: scale, addXp: addXp, totalSpForLevel: totalSpForLevel };
+    battleStats: battleStats, isJunior: isJunior, juniorStats: juniorStats, bp: bp, scale: scale, addXp: addXp, totalSpForLevel: totalSpForLevel };
 })(typeof window !== 'undefined' ? window : globalThis);

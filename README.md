@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.4.79**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.4.93**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -12,7 +12,7 @@ This is **version 2.4.79**. It's free, has no ads or accounts, and works offline
 2. **Look after your pal.** Feed it, play with it, clean up its poop, give it medicine when it's sick and turn the lights off at bedtime.
 3. **Answer its calls.** When a **!** flashes, your pal needs something. Ignoring it for too long is a *care mistake*.
 4. **Watch it grow:** egg, then baby, child, teen and adult (about 4 days). Good care gives the best adult form.
-5. **Battle and collect.** Adults fight in the arena, learn skills, battle friends and have eggs of their own.
+5. **Battle and collect.** Child and teen pals spar with pals of their own stage (quick battles, the Junior Cup, live rooms). Adults fight in the arena, learn skills, battle friends and have eggs of their own.
 
 There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 main adult forms: **Scrappy**, **Solid** and **Champion**. A Solid pal can also grow into a **Mighty**, **Swift** or **Sturdy** form, depending on the training games it played most as a teen. **Status, page 2** shows which way it's heading. Each animal also has one **secret form** that only appears for something special, like a perfect childhood, a long training streak or a Myth Cup win. The Paldex shows a dark silhouette and a hint until you find it.
 
@@ -62,6 +62,18 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 - **Hard mode:** for experts only. Pals can't be revived, but they earn more coins.
 - **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed. **Settings ▸ Care alerts** shows the next alert and lets you switch each kind (bedtime, hunger, medicine, clean-up, calls, wake-up) on or off.
 - **Live battles:** **Battle ▸ Live battle** opens a room with a 4-letter code. Your friend joins with the code and you both pick moves turn by turn. Battle codes still work offline.
+
+## New in 2.4.93
+
+- The name sign and "VS" at the start of a battle are now drawn on top of the pals, not behind them.
+- Child and teen pals look young in battle: drawn smaller, with CHILD / TEEN on the bars.
+
+## New in 2.4.92
+
+- Child and teen pals can battle pals of their own stage: Quick battle, the new Junior Cup and live rooms. Their XP is saved for when they grow up.
+- Putting your pal to bed at bedtime or later is always a proper night's sleep (moon icon) - no more "woke from its nap" pushes at night.
+- Mighty, Swift and Sturdy pals wear a coat pattern that follows the body in every pose (cape, stripes or spots).
+- The daily bonus streak resets after a missed day, and the Weekly Tournament resets on Sunday like its countdown says.
 
 ## New in 2.4.0
 

@@ -181,14 +181,14 @@
 
   function loginBonus(state, t) {
     var d = ensure(state), dk = dayOf(t);
-    if (d.loginDay === dk) return { ok: false, msg: 'Already claimed today' };
+    if (d.loginDay != null && dk <= d.loginDay) return { ok: false, msg: 'Already claimed today' };   // 2.4.92: setting the clock back no longer re-opens it
+    d.loginStreak = d.loginDay === dk - 1 ? (d.loginStreak || 0) + 1 : 1;   // 2.4.92: a missed day resets the streak (it never did: the check ran after the day was saved)
     d.loginDay = dk;
-    var coins = 10 + (d.loginStreak || 0) * 2;
-    d.loginStreak = d.loginDay === dk ? (d.loginStreak || 0) + 1 : 1;
+    var coins = 10 + Math.min(d.loginStreak - 1, 10) * 2;                 // 2.4.92: streak bonus capped at +20 (it grew without limit)
     PP.Shop.earn(state, coins, t, false);
     return { ok: true, coins: coins, streak: d.loginStreak };
   }
-  function weekOf(t) { return Math.floor(dayOf(t) / 7); }
+  function weekOf(t) { return Math.floor((dayOf(t) + 4) / 7); }   // 2.4.92: weeks start on Sunday, matching the 'Resets in' countdown (day 0 was a Thursday, so the week used to flip on Thursdays)
   function weeklyFoe(state) {
     var wk = weekOf(Date.now()), seed = U.hash(state.seed, 'weekly', wk);
     var sp = PP.DATA.SPECIES[seed % PP.DATA.SPECIES.length], form = ['good', 'power', 'swift'][seed % 3];

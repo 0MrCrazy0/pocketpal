@@ -15,13 +15,13 @@
   var U = PP.util;
 
   var TYPES = [
-    { id: 'lights', label: 'Bedtime', text: 'Bedtime. Your pal is asleep and the lights are still on.' },
+    { id: 'lights', label: 'Bedtime', text: 'Bedtime: your pal is asleep but the lights are still on. Turn them off.' },
     { id: 'hunger', label: 'Hungry', text: 'Your pal is hungry.' },
     { id: 'medicine', label: 'Medicine', text: 'Your pal is sick - medicine time.' },
     { id: 'poop', label: 'Clean-up', text: 'Time to clean up after your pal.' },
     { id: 'calls', label: 'Calls', text: 'Your pal is calling you.' },
     { id: 'wake', label: 'Wake-up', text: 'Your pal is waking up.' },
-    { id: 'rested', label: 'Rested', text: 'Your pal woke from its nap with full energy. Lights are on.' },
+    { id: 'rested', label: 'Rested', text: 'Your pal woke up from its nap, full of energy.' },
     { id: 'hatch', label: 'Hatch', text: 'Your egg is hatching soon. Open the game and watch.' }
   ];
   var CHECK = { id: 'check', label: 'Check-in', text: 'Your pal misses you - come and say hi.' };
@@ -108,7 +108,7 @@
     var best = null;
     (list || []).forEach(function (e) {
       var d = e.at - now;
-      if (d > 20 * 60e3 || d < -3 * 3600e3) return;
+      if (d > 20 * 60e3 || d < -30 * 60e3) return;   // 2.4.92: was -3 h - a later push (the worker's 2-hour re-arm) reused an old entry's words, e.g. "woke from its nap" in the night
       if (!best || Math.abs(d) < Math.abs(best.at - now)) best = e;
     });
     return best;

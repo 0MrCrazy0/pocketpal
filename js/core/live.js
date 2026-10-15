@@ -14,12 +14,15 @@
   function seedFor(seed, round) { return round ? U.hash(seed >>> 0, 'rematch', round) >>> 0 : seed >>> 0; }
   function create(hostCard, guestCard, seed, round) {
     var B = PP.Battle.create(hostCard, guestCard, seedFor(seed, round), { a: { noCondition: true }, b: { noCondition: true } });
-    B.meta = { kind: 'friend', live: true, round: round || 0 };
+    B.meta = { kind: 'friend', live: true, round: round || 0, bo3: { wins: [0, 0], round: 1 } };
     return B;
   }
   /* Everything that decides the next turn, hashed (32-bit). */
   function sum(B) {
-    return U.hash(JSON.stringify([B.turn, B.rng, !!B.over, B.winner, B.f.map(function (x) {
+    var bo3 = B.meta && B.meta.bo3;
+    return U.hash(JSON.stringify([B.turn, B.rng, !!B.over, B.winner,
+      bo3 ? [bo3.wins[0], bo3.wins[1], bo3.round, bo3.turn0 || 0] : null,
+      B.f.map(function (x) {
       return [x.hp, x.cds, x.used, x.buffs.map(function (b) { return [b.key, b.stat, b.mult, b.turns]; }), !!x.stunned, x.stunGuard, x.bleed, x.evade, x.evadeTurns, !!x.skip];
     })])) >>> 0;
   }
@@ -35,6 +38,8 @@
       var o = Object.assign({}, e);
       if (typeof o.who === 'number') o.who = 1 - o.who;
       if (typeof o.winner === 'number') o.winner = 1 - o.winner;
+      if (o.score) o.score = [o.score[1], o.score[0]];
+      if (o.bo3) o.bo3 = [o.bo3[1], o.bo3[0]];
       return o;
     });
   }

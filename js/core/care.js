@@ -159,11 +159,13 @@
       p.asleep = false; p.sleepKind = null; p.lights = true;
       ev.push({ t: 'wake', from: 'night', report: nightReport(p) });
     }
-    if (night && p.asleep && p.sleepKind === 'nap') { p.sleepKind = 'night'; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
+    if (night && p.asleep && p.sleepKind === 'nap') { p.sleepKind = 'night'; p.nightKey = p.clock; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
     if (!night && !p.asleep && !p.lights && p.energy < R.napEnergy) {
       p.asleep = true; p.sleepKind = 'nap'; p.fake = null; ev.push({ t: 'nap' });   // 2.3.21: a pal does not sulk in its sleep (every other way to fall asleep ends a tantrum too)
-    } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || p.energy >= 100)) {
-      if (night) { p.sleepKind = 'night'; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
+    } else if (p.asleep && p.sleepKind === 'nap' && (p.lights || (p.energy >= 100 && !PP.Sleep.windDown(mod, PP.Sleep.of(p))))) {
+      // 2.4.92: a nap that fills up in the last hour before bedtime dozes on into the night (it used to wake the pal, put
+      // the lights on and send "woke from its nap" just before bedtime - then the bedtime alert for the lights it turned on)
+      if (night) { p.sleepKind = 'night'; p.nightKey = p.clock; p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 }; ev.push({ t: 'sleep', from: 'nap' }); }
       else { p.asleep = false; p.sleepKind = null; p.lights = true; ev.push({ t: 'wake', from: 'nap' }); }
     }
     if (p.asleep && p.sleepKind === 'night' && p.night) { p.night.mins++; if (p.lights) p.night.lit++; else p.night.dark++; }
@@ -423,6 +425,7 @@
     if (!p.lights && p.need) p.need.lights = null;
     if (!p.lights) {
       if (inNight) {
+        if (!(p.asleep && p.sleepKind === 'night')) p.nightKey = p.clock;
         p.wokeAt = null; p.asleep = true; p.sleepKind = 'night'; p.fake = null;
         if (!p.night) p.night = { mins: 0, dark: 0, lit: 0, mist: p.totalMistakes || 0 };
         deed(p);
@@ -525,6 +528,17 @@
       if (success) p.happy = Math.min(R.maxHearts, p.happy + 2);
       else p.happy = Math.min(R.maxHearts, p.happy + (p.happy < 1 ? 1 : 0));
       msg = success ? 'You won! Happy +2' : 'Lost... but it had fun';
+      // Adults: Memory / Match also pay XP (half of Power Training) so every Training drill levels the pal
+      if (p.stage === 'adult') {
+        // 2.4.92 anti-farm (like Power Training): only the first trainDayFull games a pet-day pay the half XP, then 1 XP
+        var gday = Math.floor(p.clock / 1440);
+        if (!p.trainDay || p.trainDay.d !== gday) p.trainDay = { d: gday, n: 0 };
+        p.trainDay.g = (p.trainDay.g || 0) + 1;
+        var gfull = p.trainDay.g <= R.trainDayFull;
+        var gxp = success && gfull ? Math.max(2, Math.ceil(D.LEVEL.trainXp(p.level) / 2)) : 1;
+        var glv = PP.Stats.addXp(p, gxp);
+        msg += ' +' + gxp + ' XP' + (glv ? ' LEVEL UP!' : '');
+      }
     }
     return res(true, msg, success ? 'happy' : 'idle');
   }

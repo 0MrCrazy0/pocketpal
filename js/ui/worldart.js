@@ -68,11 +68,12 @@
   var HAT_SINK = 2;   // LCD px the brim overlaps the head
   var HAT_SCALE = { baby: 1.2, child: 1.4, teen: 1.6, adult: 2 };   // LCD px per art pixel: the hat grows with the head
   /* px, y = the pal's top-left on screen (96 px cell = 80 sheet px x 1.2). Hidden in poses without a head-top anchor. */
-  function drawHat(ctx, hatId, species, stageKey, pose, frame, px, y, flip, night) {
+  function drawHat(ctx, hatId, species, stageKey, pose, frame, px, y, flip, night, petScale) {
     if (!hatId || !ART[hatId] || stageKey === 'egg') return false;
     var a = anchor(species, stageKey, PP.Sprites.shownPose(pose), frame); if (!a) return false;
-    var k = PP.Render.PS / PP.ATLAS.frame, sz = size(hatId);
-    var s = HAT_SCALE[stageKey.split('_')[0]] || 2;
+    var r = petScale ? petScale / PP.Render.PET : 1;              // 2.4.93: a pal drawn smaller (young pal in battle) gets a smaller hat
+    var k = PP.Render.PS * r / PP.ATLAS.frame, sz = size(hatId);
+    var s = (HAT_SCALE[stageKey.split('_')[0]] || 2) * r;
     var ax = px + (flip ? PP.ATLAS.frame - a[0] : a[0]) * k, ay = y + a[1] * k + HAT_SINK;
     drawArt(ctx, hatId, ax - sz[0] * s / 2, ay - sz[1] * s, s, flip, night);
     return true;

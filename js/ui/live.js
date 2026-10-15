@@ -217,7 +217,8 @@
       '<ul class="away live-limits"><li>Both of you need to be online. Your worker passes the picks on; each game plays the same turn itself.</li>' +
       '<li>' + Math.round(75) + ' s per pick. Leaving or running out of time counts as a loss.</li>' +
       '<li>Turns can lag if you are far apart (the worker\'s storage takes up to a minute to sync between regions).</li>' +
-      '<li>No internet? Battle codes still work offline.</li></ul>' + (on ? '' : '<p class="tip">Live battles need your Cloudflare worker (see DEPLOY.md).</p>'),
+      '<li>Pals only meet pals of the same stage: adults with adults, a child with a child, a teen with a teen.</li>' +
+      '<li>No internet? Battle codes still work offline (adults).</li></ul>' + (on ? '' : '<p class="tip">Live battles need your Cloudflare worker (see DEPLOY.md).</p>'),
       items: [
         { label: 'Create a room', sub: 'Get a 4-letter code for your friend', disabled: !on || !!why, reason: !on ? 'No worker configured' : why, act: create },
         { label: 'Join a room', sub: 'Type your friend\'s 4-letter code', disabled: !on || !!why, reason: !on ? 'No worker configured' : why, act: function () { UI().push(joinScreen); } },

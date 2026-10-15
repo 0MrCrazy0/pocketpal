@@ -60,7 +60,7 @@
       if (!ref) return null;
       var a = albumFind(state, ref.id) || {};
       var parents = (ref.parents && ref.parents.length ? ref.parents : a.parents) || [];
-      return { id: ref.id, name: ref.name || a.name, form: ref.form || a.form, sex: ref.sex || a.sex, species: ref.species || a.species,
+      return { id: ref.id, name: ref.name || a.name, form: ref.form || a.form, stage: ref.stage || a.stage, sex: ref.sex || a.sex, species: ref.species || a.species,
         gen: ref.gen || a.gen, parents: depth < 2 ? parents.map(function (q) { return node(q, depth + 1); }) : [] };
     }
     return node(p, 0);
@@ -250,19 +250,50 @@
   /* ---------------------------------------------------------------- battles */
   function canBattle(p) {
     if (!p || p.fate) return 'No pal';
-    if (p.stage !== 'adult') return 'Only adults can battle';
+    if (p.stage === 'egg' || p.stage === 'baby') return 'Eggs and babies can\u2019t battle yet';   // 2.4.92: child / teen can (junior battles)
     if (p.asleep) return PP.Care.SLEEP_MSG;
     if (p.sick) return 'Too sick to battle';
     if (p.energy < R.costs.battle) return 'Too tired... (needs ' + R.costs.battle + ' energy)';
     return null;
   }
+  var JUNIOR = D.JUNIOR;
+  var JUNIOR_KINDS = ['quick', 'junior'];
+  /* 2.4.92: a stage-matched CPU foe for a child / teen (never an adult) */
+  function juniorFoe(state, p, key, idx) {
+    var h = U.hash(state.seed, p.id, 'jr', p.stage, key, idx | 0), sp = D.SPECIES[h % D.SPECIES.length], lean = (idx | 0) - 1;
+    var gene = function (k) { return U.clamp(((U.hash(h, k) % 3) - 1) + (lean > 0 ? 1 : 0), -3, 3); };
+    return { id: ('jr' + (h % 1e8).toString(36)).slice(0, 12), name: idx != null ? ['Scout', 'Rival', 'Cup boss'][idx | 0] : 'Wild pal', species: sp, sex: h % 2 ? 'M' : 'F',
+      form: 'good', level: 1, genes: { hp: gene('hp'), atk: gene('atk'), def: gene('def'), spd: gene('spd') }, skills: [], innate: [], gen: 1, stage: p.stage };
+  }
+  function startJuniorQuick(state, seed) {
+    var p = active(state);
+    if (!PP.Stats.isJunior(p)) return { ok: false, msg: 'Quick battles here are for child and teen pals' };
+    return startBattle(state, juniorFoe(state, p, 'quick:' + p.clock), { kind: 'quick', junior: true }, seed);
+  }
+  /* Junior Cup: 3 stage-matched foes in a row; a loss ends the run. Clearing it pays a bonus once per stage. */
+  function startJuniorCup(state, seed) {
+    var p = active(state);
+    if (!PP.Stats.isJunior(p)) return { ok: false, msg: 'The Junior Cup is for child and teen pals' };
+    var run = p.jcup && p.jcup.stage === p.stage ? p.jcup.foe | 0 : 0;
+    var r = startBattle(state, juniorFoe(state, p, 'cup', run), { kind: 'junior', foe: run, foes: JUNIOR.cupFoes }, seed);
+    if (r.ok) p.jcup = { stage: p.stage, foe: run, won: (p.jcup && p.jcup.won) || [] };
+    return r;
+  }
   function startBattle(state, oppCard, meta, seed) {
     var p = active(state);
     var why = canBattle(p);
     if (why) return { ok: false, msg: why };
+    var jr = PP.Stats.isJunior(p), kind = (meta && meta.kind) || 'quick';
+    if (jr && JUNIOR_KINDS.indexOf(kind) < 0) return { ok: false, msg: 'Adults only - young pals can try a Quick battle or the Junior Cup' };
+    if ((oppCard.stage || 'adult') !== p.stage) return { ok: false, msg: jr ? 'Young pals only battle pals of the same stage' : 'Adults only battle adults' };
     p.energy -= R.costs.battle;
     var B = PP.Battle.create(p, oppCard, seed >>> 0 || U.hash(state.seed, p.clock, oppCard.id), { b: { noCondition: true } });
     B.meta = meta || {};
+    // Best of 3 (first to 2) on every fight, including live rooms.
+    // Live keeps B.turn climbing across rounds so the worker's turn index stays monotonic.
+    if (!B.meta.bo3) {
+      B.meta.bo3 = { wins: [0, 0], round: 1 };
+    }
     B.opp = oppCard;
     return { ok: true, battle: B };
   }
@@ -316,7 +347,56 @@
     if (r.ok) PP.Daily.useVisitor(state, now(state));
     return r;
   }
+  /* Power Training: a real battle against a soft Training Dummy. Same move menu and
+   * attack animations as the arena; the dummy is tuned weak so every skill is easy to land.
+   * Costs train energy (not battle) and pays training rewards (Mighty style, discipline, XP). */
+  function canTrainDummy(p) {
+    if (!p || p.fate) return 'No pal';
+    if (p.stage === 'egg') return 'Still an egg';
+    if (p.asleep) return PP.Care.SLEEP_MSG;
+    if (p.sick) return 'Too sick to train';
+    if (p.energy < R.costs.train) return 'Too tired... (needs ' + R.costs.train + ' energy)';
+    return null;
+  }
+  function softDummy(B) {
+    var a = B.f[0], d = B.f[1];
+    d.name = 'Dummy';
+    d.form = 'good';
+    // One solid hit ends a round; match is best of 3 (first to 2)
+    var mid = 40, i, mv;
+    for (i = 0; i < a.moves.length; i++) {
+      mv = D.MOVES[a.moves[i]];
+      if (mv && mv.power > 0) { mid = mv.power; break; }
+    }
+    var one = Math.max(10, Math.floor(mid * 0.45 * (a.scale || 1) * a.atk / (a.atk + Math.max(4, a.def * 0.35))));
+    d.maxHp = one + 4;
+    d.hp = d.maxHp;
+    d.atk = 1;                              // almost no damage back - training bag
+    d.def = Math.max(1, Math.floor(a.def * 0.35));
+    d.spd = 1;
+    d.bp = PP.Stats.bp({ hp: d.maxHp, atk: d.atk, def: d.def, spd: d.spd });
+    d.moves = ['chomp'];                    // one weak poke only
+    d.cds = {}; d.used = {}; d.passives = {};
+  }
+  function startDummy(state, seed) {
+    var p = active(state);
+    var why = canTrainDummy(p);
+    if (why) return { ok: false, msg: why };
+    p.energy -= R.costs.train;
+    var card = {
+      id: 'train-dummy', name: 'Dummy', species: p.species, form: 'bad', level: 1,
+      genes: { hp: 0, atk: 0, def: 0, spd: 0 }, skills: [], sex: 'M'
+    };
+    var B = PP.Battle.create(p, card, seed >>> 0 || U.hash(state.seed, p.clock, 'dummy'), {
+      a: { noCondition: true }, b: { noCondition: true }
+    });
+    softDummy(B);
+    B.meta = { kind: 'dummy', bo3: { wins: [0, 0], round: 1 } };
+    B.opp = card;
+    return { ok: true, battle: B };
+  }
   function startFriend(state, card, seed) {
+
     var err = PP.Cards.validateCard(card);
     if (err) return { ok: false, msg: err };
     return startBattle(state, card, { kind: 'friend' }, seed);
@@ -328,10 +408,38 @@
     if (why) return { ok: false, msg: why };
     var errH = PP.Cards.validateCard(hostCard), errG = PP.Cards.validateCard(guestCard);
     if (errH || errG) return { ok: false, msg: 'Pal not valid: ' + (errH || errG) };
+    if ((hostCard.stage || 'adult') !== (guestCard.stage || 'adult')) return { ok: false, msg: 'Live battles need two pals of the same stage' };   // 2.4.92
     p.energy -= R.costs.battle;
     var B = PP.Live.create(hostCard, guestCard, seed, round), v = PP.Live.view(B, side);
     v.opp = side === 'g' ? hostCard : guestCard;
     return { ok: true, battle: B, view: v };
+  }
+  /* 2.4.92 junior battle result: gentle (no injury), XP is banked for adulthood (capped), small coins. */
+  function bankJunior(p, xp) {
+    var before = p.jxp || 0;
+    p.jxp = Math.min(JUNIOR.bankCap, before + Math.max(0, Math.round(xp)));
+    return p.jxp - before;
+  }
+  function finishJunior(state, p, B, won, out) {
+    out.junior = true;
+    if (won) { p.wins++; p.happy = Math.min(4, p.happy + 1); p.energy = Math.min(100, p.energy + 4); }
+    else { p.losses++; p.happy = Math.max(0, p.happy - 1); }
+    out.xp = bankJunior(p, won ? JUNIOR.xpWin[p.stage] : JUNIOR.xpLoss);
+    out.bank = p.jxp; out.bankCap = JUNIOR.bankCap;
+    var bonus = 0;
+    if (B.meta.kind === 'junior') {
+      var c = p.jcup && p.jcup.stage === p.stage ? p.jcup : (p.jcup = { stage: p.stage, foe: 0, won: [] });
+      out.cup = JUNIOR.cupName; out.foe = (B.meta.foe | 0) + 1; out.foes = JUNIOR.cupFoes;
+      if (!won) c.foe = 0;
+      else if ((B.meta.foe | 0) + 1 >= JUNIOR.cupFoes) {
+        c.foe = 0; out.cleared = true;
+        if (c.won.indexOf(p.stage) < 0) { c.won.push(p.stage); out.firstClear = true; bonus = JUNIOR.coins.cup; }
+      } else { c.foe = (B.meta.foe | 0) + 1; out.next = c.foe + 1; }
+    }
+    out.coins = PP.Shop.earn(state, won ? JUNIOR.coins.win : JUNIOR.coins.loss, now(state)) + (bonus ? PP.Shop.earn(state, bonus, now(state), false) : 0);
+    albumUpsert(state, p);
+    PP.Collection.markSeen(state, B.opp, now(state));
+    return out;
   }
   function finishBattle(state, B) {
     var p = active(state);
@@ -343,6 +451,43 @@
     if (arena) {
       state.arena.attempt++;
       out.cup = D.ARENA[rank].name; out.foe = (B.meta.foe | 0) + 1; out.foes = PP.Arena.foeCount(rank);
+    }
+    /* Power Training dummy: training rewards, no injury, no win/loss, no Paldex mark. */
+    if (B.meta.kind === 'dummy') {
+      if (B.fled) {
+        out.fled = B.fled; out.won = false;
+        p.energy = Math.min(100, p.energy + Math.floor(R.costs.train / 2));
+        return out;
+      }
+      p.weight = Math.max(Math.ceil(PP.Care.baseWeight(p) * 0.5), p.weight - 1);
+      PP.Evolution.noteStyle(p, 'dummy', won);
+      if (won) p.energy = Math.min(100, p.energy + 4);
+      if (!p.evo) p.evo = { trainings: 0, games: 0 };
+      p.evo.trainings = (p.evo.trainings || 0) + 1;
+      var day = Math.floor(p.clock / 1440);
+      if (!p.trainDay || p.trainDay.d !== day) p.trainDay = { d: day, n: 0 };
+      p.trainDay.n++;
+      PP.Evolution.noteTraining(p);
+      var full = p.trainDay.n <= R.trainDayFull;
+      var msg;
+      if (won && full) { p.happy = Math.min(4, p.happy + 1); p.discipline = Math.min(100, p.discipline + 5); }
+      msg = !full ? (won ? 'Good fight, but your pal is over-trained today' : 'Nice try!')
+                  : won ? 'Dummy down! Discipline +5%' : 'Nice try!';
+      if (PP.Stats.isJunior(p) && won && full) { out.xp = bankJunior(p, JUNIOR.xpTrain); if (out.xp) msg += ' +' + out.xp + ' XP saved for adulthood'; }   // 2.4.92
+      if (p.stage === 'adult') {
+        var xp = !full ? 1 : won ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3);
+        out.xp = xp;
+        out.levels = PP.Stats.addXp(p, xp);
+        msg += ' +' + xp + ' XP' + (out.levels ? ' LEVEL UP!' : '');
+      }
+      out.msg = msg;
+      out.coins = PP.Shop.earn(state, won ? D.ECONOMY.trainWin : D.ECONOMY.trainLoss, now(state));
+      if (out.coins) out.msg += ' +' + out.coins + 'c';
+      PP.Daily.record(state, 'train', now(state));
+      PP.Daily.observe(state, now(state));
+      PP.Hints.learn(state, 'train');
+      albumUpsert(state, p);
+      return out;
     }
     /* 1.8.4: running away - no XP, no coins, no injury; half the battle energy comes back.
      * Arena: the run is over and counts as a loss; friend battles: a forfeit (a loss). */
@@ -356,6 +501,7 @@
       return out;
     }
     p.weight = Math.max(Math.ceil(PP.Care.baseWeight(p) * 0.5), p.weight - 1);
+    if (PP.Stats.isJunior(p)) return finishJunior(state, p, B, won, out);   // 2.4.92
     if (won) {
       p.wins++; out.xp = D.LEVEL.winXp(p.level, oppLv);
       p.happy = Math.min(4, p.happy + 1);
@@ -402,6 +548,7 @@
   function addFriend(state, code, opts) {
     var r = PP.Cards.decode(code);
     if (!r.ok) return { ok: false, msg: r.error };
+    if (r.card.stage !== 'adult') return { ok: false, msg: 'Only adult pals can be added as friends' };   // 2.4.92: young cards are for live rooms only
     var mine = state.slots.some(function (s) { return s && s.id === r.card.id; });
     if (mine) return { ok: false, msg: "That's your own pal's code" };
     var existed = state.friends.some(function (f) { return f.id === r.card.id; });
@@ -477,6 +624,6 @@
   };
 
   PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, juniorFoe: juniorFoe, startJuniorQuick: startJuniorQuick, startJuniorCup: startJuniorCup, bankJunior: bankJunior, canTrainDummy: canTrainDummy, startDummy: startDummy, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);

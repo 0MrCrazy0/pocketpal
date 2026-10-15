@@ -209,7 +209,7 @@
       items.push({ label: '\u25c0 Previous animal', act: function () { replace(paldexScreen(si - 1)); } });
       items.push({ label: 'Back', act: pop });
       return { title: 'PALDEX \u00b7 ' + D.SPECIES_INFO[sp].label.toUpperCase() + ' ' + c.perSpecies[sp] + '/' + keys.length,
-        html: '<p class="tip">Egg \u2192 Baby \u2192 Child \u2192 Teen \u2192 Adult<br>Poor care: <b>Scrappy</b> \u00b7 Good care: <b>Solid</b><br>Solid + how you train: <b>Mighty</b> (power) \u00b7 <b>Swift</b> (quick games) \u00b7 <b>Sturdy</b> (Match)<br>Champion care + a secret: the rare form</p><div class="dex-sum"><span>Adults <b>' + c.adults + '/' + D.SPECIES.length * D.FORMS.length + '</b></span><span>All <b>' + c.total + '/' + D.SPECIES.length * keys.length + '</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
+        html: '<p class="tip">Egg \u2192 Baby \u2192 Child \u2192 Teen \u2192 Adult<br>Poor care: <b>Scrappy</b> \u00b7 Good care: <b>Solid</b><br>Solid + how you train: <b>Mighty</b> (Power Training / ATK) \u00b7 <b>Swift</b> (Memory / SPD) \u00b7 <b>Sturdy</b> (Match / DEF)<br>Champion care + a secret: the rare form</p><div class="dex-sum"><span>Adults <b>' + c.adults + '/' + D.SPECIES.length * D.FORMS.length + '</b></span><span>All <b>' + c.total + '/' + D.SPECIES.length * keys.length + '</b></span></div><p class="tip">' + esc(nextDexReward(s)) + '</p>',
         items: items, detail: function (i) {
           var k = keys[i]; if (!k) return i === keys.length ? 'Show the next animal' : i === keys.length + 1 ? 'Show the previous animal' : 'Back to the menu';
           var e = PP.Collection.get(s, sp, k) || {};
@@ -327,12 +327,12 @@
     { t: 'CARE ICONS 1/2', hl: ['.icons .icon:nth-child(1)', '.icons .icon:nth-child(2)', '.icons .icon:nth-child(3)', '.icons .icon:nth-child(4)'], h: function () {
       return '<ul class="glist"><li><span class="gicon" style="--i:0"></span><span><b>Status / menu:</b> hunger, happiness, care score, everything else.</span></li>' +
         '<li><span class="gicon" style="--i:' + myFood().icon + '"></span><span><b>Feed:</b> meals fill hunger, snacks add happiness (not too many!).</span></li>' +
-        '<li><span class="gicon" style="--i:2"></span><span><b>Train &amp; play:</b> mini-games for happiness, discipline and XP.</span></li>' +
+        '<li><span class="gicon" style="--i:2"></span><span><b>Training:</b> drills for happiness, discipline and XP.</span></li>' +
         '<li><span class="gicon" style="--i:3"></span><span><b>Clean:</b> flush the poop away.</span></li></ul>'; } },
     { t: 'CARE ICONS 2/2', hl: ['.icons .icon:nth-child(5)', '.icons .icon:nth-child(6)', '.icons .icon:nth-child(7)', '.icons .icon:nth-child(8)'], h: function () {
       return '<ul class="glist"><li><span class="gicon" style="--i:4"></span><span><b>Medicine:</b> when the skull shows, your pal is sick.</span></li>' +
-        '<li><span class="gicon" style="--i:5"></span><span><b>Lights:</b> switch off when it falls asleep. Droopy eyes, yawning, blinking energy pips and <b>Zz</b> in the strip = tired: lights off for a quick <b>nap</b> (+1 energy every 2 min), or feed it.</span></li>' +
-        '<li><span class="gicon" style="--i:6"></span><span><b>Battle:</b> arena and friend battles (adults).</span></li>' +
+        '<li><span class="gicon" style="--i:5"></span><span><b>Lights:</b> switch off when it falls asleep. Droopy eyes, yawning, blinking energy pips and <b>Zz</b> in the strip = tired: lights off for a quick <b>nap</b> (+2 energy a minute), or feed it.</span></li>' +
+        '<li><span class="gicon" style="--i:6"></span><span><b>Battle:</b> adults: arena, daily, weekly and friend battles. Child and teen pals: quick battles, the Junior Cup and live rooms with a pal of the same stage (their XP is saved and paid in when they grow up). Eggs and babies don\u2019t battle.</span></li>' +
         '<li><span class="gicon" style="--i:7"></span><span><b>Discipline:</b> Scold a tantrum, or Praise after training / a refused meal.</span></li></ul>'; } },
     { t: 'SCREEN ICONS', h: function () { return legendHtml() + '<p class="tip">See them again any time: MENU \u25b8 Screen icons.</p>'; } },
     { t: 'WHEN YOUR PAL CALLS', h: function () {
@@ -391,7 +391,7 @@
           (f ? '<tr><td>On track for</td><td><b>' + FORM_LABEL[f] + '</b> (' + esc(D.NAMES[p.species][f]) + ')</td></tr>' : '') +
           (p.stage !== 'egg' ? styleRow(p) : '') +
           '</table>' + (PP.Evolution.hint(p) ? '<p class="evo-hint">\u2728 ' + esc(PP.Evolution.hint(p)) + '</p>' : '') + '<p class="tip">Champion: \u2264' + D.EVO.perfect.maxMistakes + ' mistakes, score \u2265' + D.EVO.perfect.minScore + ', discipline \u2265' + D.EVO.perfect.minDiscipline +
-          '%. Solid: score \u2265' + D.EVO.good.minScore + ' - and HOW you train a Solid-care pal can make it Mighty (power training), Swift (quick games) or Sturdy (Match / great manners). A secret form needs Champion care plus something special - see the Paldex.</p>' +
+          '%. Solid: score \u2265' + D.EVO.good.minScore + ' - and HOW you train a Solid-care pal can make it Mighty (Power Training / ATK), Swift (Memory / SPD) or Sturdy (Match / DEF, or great manners). A secret form needs Champion care plus something special - see the Paldex.</p>' +
           recentMistakes(p);
       } else if (pg === 'battle') {
         var bs = PP.Stats.battleStats(p), cap = PP.Stats.levelCap(p.form), need = D.LEVEL.xpNeed(p.level);
@@ -499,17 +499,24 @@
   }
 
   function trainMenu() {
-    var p = pet(), R = D.RULES;
-    var a = p ? PP.Care.canExercise(p, 'train') : { ok: false, msg: 'No pal' }, b = p ? PP.Care.canExercise(p, 'game') : a;
-    return { title: 'TRAIN & PLAY', html: p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '</p>' : '', items: [
-      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Win: happy +1, discipline +5%, XP' + (p && p.stage !== 'adult' ? ' (feeds Mighty)' : ''), disabled: !a.ok, reason: a.msg,
-        act: function () { close(); App().startMini('train'); } },
-      { label: 'Left or Right?', sub: '-' + R.costs.game + ' energy. Watch the eyes. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('game'); } },
-      { label: 'Memory', sub: '-' + R.costs.game + ' energy. Repeat the looks. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('memory'); } },
-      { label: 'Match', sub: '-' + R.costs.game + ' energy. Find the 4 pairs. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Sturdy)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('match'); } },
-      { label: 'Keep the Rhythm', sub: '-' + R.costs.game + ' energy. Tap B on the line. Win: happy +2, XP' + (p && p.stage !== 'adult' ? ' (feeds Swift)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('rhythm'); } },
-      { label: 'Training dummy', sub: '-' + R.costs.train + ' energy. Practice attacks. Win: happy +1, discipline +5%, XP' + (p && p.stage !== 'adult' ? ' (feeds Mighty)' : ''), disabled: !a.ok, reason: a.msg,
-        act: function () { close(); App().startMini('dummy'); } }
+    var p = pet(), R = D.RULES, young = p && p.stage !== 'adult' && p.stage !== 'egg';
+    var whyT = p ? G.canTrainDummy(p) : 'No pal';
+    var a = { ok: !whyT, msg: whyT || '' }, b = p ? PP.Care.canExercise(p, 'game') : { ok: false, msg: 'No pal' };
+    var trainPay = p && p.stage === 'adult'
+      ? 'Win: happy +1, discipline +5%, XP, coins'
+      : 'Win: happy +1, discipline +5%';
+    var playPay = p && p.stage === 'adult'
+      ? 'Win: happy +2, XP, coins'
+      : 'Win: happy +2';
+    var tip = young
+      ? 'One drill for each battle lean. While young, the drill you run most shapes the adult: Mighty (ATK), Swift (SPD) or Sturdy (DEF).'
+      : 'Adult drills: Power Training builds discipline and full XP. Memory and Match keep the pal happy and pay half XP.';
+    return { title: 'TRAINING', html: (p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '</p>' : '') +
+      '<p class="tip">' + tip + '</p>', items: [
+      { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Easy dummy fight - use your moves like a real battle. ' + trainPay + (young ? ' · Mighty (ATK)' : ''), disabled: !a.ok, reason: a.msg,
+        act: function () { close(); App().startDummy(); } },
+      { label: 'Memory', sub: '-' + R.costs.game + ' energy. Repeat the look sequence. ' + playPay + (young ? ' · Swift (SPD)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('memory'); } },
+      { label: 'Match', sub: '-' + R.costs.game + ' energy. Find 4 pairs before 3 misses. ' + playPay + (young ? ' · Sturdy (DEF)' : ''), disabled: !b.ok, reason: b.msg, act: function () { close(); App().startMini('match'); } }
     ] };
   }
 
@@ -520,8 +527,21 @@
     ] };
   }
 
+  /* 2.4.92: child / teen pals get their own battle menu - stage-matched CPU foes and same-stage live rooms only */
+  function juniorBattleMenu(p, why) {
+    var J = D.JUNIOR, c = p.jcup && p.jcup.stage === p.stage ? p.jcup : null, run = c ? c.foe : 0, won = c && c.won.indexOf(p.stage) >= 0;
+    var bank = p.jxp || 0;
+    return { title: 'BATTLE', html: (why ? '<p class="tip">' + esc(why) + '</p>' : '') +
+      '<p class="tip">Young pals spar with pals of the same stage (' + esc(p.stage) + ') only. XP saved for adulthood: <b>' + bank + '/' + J.bankCap + '</b> (paid in when it grows up, at most up to level 4). Care still decides what it becomes.</p>', items: [
+      { label: 'Quick battle', sub: 'A wild ' + p.stage + ' pal. Best of 3. Win: happy +1, +' + J.xpWin[p.stage] + ' XP saved, +' + J.coins.win + 'c', disabled: !!why, reason: why, act: function () { close(); App().startJuniorQuick(); } },
+      { label: J.cupName, sub: J.cupFoes + ' ' + p.stage + ' foes in a row' + (run ? ' · run on: foe ' + (run + 1) + ' of ' + J.cupFoes : '') + (won ? ' · cleared' : ' · first clear: +' + J.coins.cup + 'c'), right: won ? '\u2605' : run ? (run + 1) + '/' + J.cupFoes : 'OPEN', disabled: !!why, reason: why, act: function () { close(); App().startJuniorCup(); } },
+      { label: 'Live battle', sub: 'Room code: a friend\u2019s ' + p.stage + ' pal only', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
+      { label: 'Arena, Daily, Weekly, Friends', sub: 'Unlock when your pal is an adult', disabled: true, reason: 'Adults only' }
+    ] };
+  }
   function battleMenu() {
     var p = pet(), why = G.canBattle(p);
+    if (p && PP.Stats.isJunior(p)) return juniorBattleMenu(p, why);
     var items = [
       { label: 'Daily Arena', sub: 'One special foe today. Win for +50 bonus coins. Resets in ' + resetText() + '.', right: dailyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || dailyDone(st()), reason: dailyDone(st()) ? 'Already beaten today' : why, act: function () { close(); App().startDaily(); } },
       { label: 'Weekly Tournament', sub: 'One tough foe this week. Win for +150 bonus coins. Resets in ' + weekResetText() + '.', right: weeklyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || weeklyDone(st()), reason: weeklyDone(st()) ? 'Already beaten this week' : why, act: function () { close(); App().startWeekly(); } },
@@ -539,7 +559,7 @@
   var ROLE = { challenger: 'Challenger', rival: 'Rival', boss: 'Cup boss' };
   function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); return Math.min.apply(null, l) + '-' + Math.max.apply(null, l); }
   function dailyDone(s) { var p = pet(); return p && p.arenaDay === PP.Shop.dayOf(Date.now()); }
-  function weeklyDone(s) { var p = pet(); return p && p.weekDone === PP.Daily.weekOf(Date.now()); }
+  function weeklyDone(s) { var p = pet(); return p && p.weekDone === PP.Daily.weekOf(PP.Game.now(s)); }   // 2.4.92: same clock as the game's check
   function resetText() { var ms = PP.Daily.arenaReset(Date.now()); return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm'; }
   function weekResetText() { var ms = PP.Daily.weekReset(Date.now()); return Math.floor(ms / 86400000) + 'd ' + Math.floor((ms % 86400000) / 3600000) + 'h'; }
   function arenaScreen() {
@@ -820,7 +840,7 @@
       var t = G.familyTree(s, e);
       function nodeHtml(n) {
         if (!n) return '<div class="tn unknown">?</div>';
-        var sk = n.form ? 'adult_' + n.form : 'baby';
+        var sk = ['egg', 'baby', 'child', 'teen'].indexOf(n.stage) >= 0 ? n.stage : n.form ? 'adult_' + n.form : 'baby';   // 2.4.93: a young pal is drawn at its own stage
         return '<div class="tn">' + (n.species ? thumb(n.species, sk, 'idle', 15) : '') + '<span>' + esc(n.name || '?') + (n.sex ? (n.sex === 'M' ? ' \u2642' : ' \u2640') : '') + '</span></div>';
       }
       var h = '<div class="tree">';
@@ -1099,7 +1119,7 @@
       '<p>Feed meals when hunger drops, play or snack for happiness, clean poop, give medicine when sick (teens/adults need 2 doses), and turn the lights off when your pal falls asleep.</p>' +
       '<p>A call you ignore for 30 min is a <b>care mistake</b>. So are overfed snacks, leaving poop 2h, sickness 3h, or lights on 1h after bedtime.</p>' +
       '<p>Tantrums: sometimes your pal calls for no reason. Scold during a tantrum for +25% discipline. Praise after training or a refused meal.</p>' +
-      '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed.</p>' +
+      '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed. Child and teen pals can spar with pals of their own stage; their battle and training XP is saved and paid in when they grow up (at most up to level 4), but care alone decides the adult form.</p>' +
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
       '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected.</p>' +
       '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +
@@ -1127,11 +1147,48 @@
       return { title: 'WHILE YOU WERE AWAY', html: '<p>You were gone ' + PP.Time.duration(info.minutes) + since + '.</p><ul class="away">' + lines + '</ul>', items: [{ label: 'OK', act: close }] };
     };
   }
+
+  function trainResult(r, kind, success) {
+    return function () {
+      var p = pet(), titles = { memory: 'MEMORY', match: 'MATCH', train: 'TRAINING', dummy: 'TRAINING', game: 'PLAY', rhythm: 'RHYTHM' };
+      var title = (titles[kind] || 'PLAY') + ' OVER';
+      var won = !!success;
+      var lean = { dummy: 'Mighty (ATK)', train: 'Mighty (ATK)', memory: 'Swift (SPD)', match: 'Sturdy (DEF)', game: 'Swift (SPD)', rhythm: 'Swift (SPD)' }[kind] || '';
+      var h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30) + '</div>' +
+        '<p><b>' + (won ? 'NICE WORK!' : 'KEEP TRYING...') + '</b></p><ul class="away">' +
+        (r && r.msg ? '<li>' + esc(r.msg) + '</li>' : '') +
+        (lean ? '<li>Style practice: ' + esc(lean) + '</li>' : '') +
+        '<li>Weight -1g</li></ul>';
+      return { title: title, html: h, items: [
+        r && /LEVEL UP/i.test(r.msg || '') && p && p.sp ? { label: 'Spend skill points', act: function () { replace(skillsScreen); } } : null,
+        { label: 'OK', act: close }
+      ].filter(Boolean) };
+    };
+  }
   function battleResult(out, B) {
     return function () {
       var p = pet(), won = out.won, A = PP.Arena, rank = B && B.meta ? B.meta.rank : 0, h, title = 'BATTLE OVER';
       var celebrate = out.fcleared ? 'FRIENDS CUP WON!' : out.firstClear ? (out.myth ? 'MYTH CUP CLEARED!' : out.cup.toUpperCase() + ' CLEARED!') : null;
-      if (out.fled) {   // 1.8.4 run / forfeit
+      if (out.junior && !out.fled) {   // 2.4.92 junior battle
+        celebrate = out.firstClear ? out.cup.toUpperCase() + ' CLEARED!' : null;
+        h = (celebrate ? '<div class="cupclear" role="status">\u2605 ' + esc(celebrate) + ' \u2605</div>' : '') +
+          '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30) + '</div><p><b>' + (won ? 'VICTORY!' : 'Defeat...') + '</b></p><ul class="away">' +
+          (out.cup ? '<li>' + esc(out.cup) + ': foe ' + out.foe + '/' + out.foes + (won ? (out.cleared ? ' - cup ' + (out.firstClear ? 'cleared!' : 'cleared again') : ' beaten') : ' - run over') + '</li>' : '') +
+          '<li>' + (out.xp ? '+' + out.xp + ' XP saved for adulthood' : 'XP savings are full') + ' (' + out.bank + '/' + out.bankCap + ')</li>' +
+          '<li>Happy ' + (won ? '+1' : '-1') + ', weight -1g. No injuries for young pals.</li>' +
+          (out.coins ? '<li>+' + out.coins + ' coins</li>' : '') + '</ul>';
+      } else if (out.kind === 'dummy') {
+        title = 'TRAINING OVER';
+        if (out.fled) {
+          h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'idle', 30) + '</div><ul class="away">' +
+            '<li>Left the dummy early.</li><li>No training XP. Half the train energy came back (+' + Math.floor(D.RULES.costs.train / 2) + ').</li></ul>';
+        } else {
+          h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30) + '</div><p><b>' + (won ? 'DUMMY DOWN!' : 'Keep training...') + '</b></p><ul class="away">' +
+            (out.msg ? '<li>' + esc(out.msg) + '</li>' : '') +
+            (out.xp ? '<li>+' + out.xp + ' XP' + (out.levels ? ' \u00b7 LEVEL UP \u2192 Lv ' + p.level : '') + '</li>' : '') +
+            '<li>Weight -1g. Mighty style practice.</li></ul>';
+        }
+      } else if (out.fled) {   // 1.8.4 run / forfeit
         title = out.fled === 'escaped' ? 'GOT AWAY' : 'FORFEIT';
         h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), out.fled === 'escaped' ? 'idle' : 'sad', 30) + '</div><ul class="away">' +
           (out.fled === 'escaped' ? '<li>' + esc(p.name) + ' ran away safely.</li>' : out.kind === 'arena' ? '<li>The ' + esc(out.cup) + ' run is over - it counts as a loss.</li><li>No injury.</li>' : '<li>You forfeited - it counts as a loss.</li>') +
@@ -1152,12 +1209,14 @@
           (out.injured ? '<li>Got hurt and is now sick! Give medicine.</li>' : '') + '</ul>';
       }
       var nextFoe = out.kind === 'arena' && won && !out.cleared && !out.fled;
+      var nextJr = out.junior && out.kind === 'junior' && won && !out.cleared && !out.fled;
       var nextFriend = out.fcup && won && !out.fcleared && !out.fled && out.next ? PP.World.fcupStatus(st()).foes[out.next - 1] : null;
       function ok() { close(); if (celebrate) App().celebrate(celebrate); }
       return { title: title, html: h, items: [
         out.levels && p.sp ? { label: 'Spend skill points', act: function () { replace(skillsScreen); if (celebrate) App().celebrate(celebrate); } } : null,
         nextFoe ? { label: 'Next foe (' + out.next + '/' + out.foes + ')', sub: A.foe(rank, out.next - 1).name + ' \u00b7 ' + ROLE[A.foe(rank, out.next - 1).role], disabled: !!G.canBattle(p), reason: G.canBattle(p),
           act: function () { close(); App().startArena(rank); } } : null,
+        nextJr ? { label: 'Next foe (' + out.next + '/' + out.foes + ')', disabled: !!G.canBattle(p), reason: G.canBattle(p), act: function () { close(); App().startJuniorCup(); } } : null,
         nextFriend ? { label: 'Next friend (' + out.next + '/' + out.foes + ')', sub: nextFriend.name + ' \u00b7 BP ' + PP.Battle.fighter(nextFriend).bp, disabled: !!G.canBattle(p), reason: G.canBattle(p),
           act: function () { close(); App().startFcup(); } } : null,
         { label: 'OK', act: ok }].filter(Boolean) };
@@ -1178,7 +1237,7 @@
     top: function () { return cur; },
     screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, alertsScreen: alertsScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, arenaScreen: arenaScreen, fcupScreen: fcupScreen,
       skillsScreen: skillsScreen, palBox: palBox, breedScreen: breedScreen, albumScreen: albumScreen, settingsScreen: settingsScreen, helpScreen: helpScreen,
-      speciesPicker: speciesPicker, awaySummary: awaySummary, reportCard: reportCard, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,
+      speciesPicker: speciesPicker, awaySummary: awaySummary, reportCard: reportCard, trainResult: trainResult, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,
       arenaPreview: arenaPreview, friendsScreen: friendsScreen, friendMenu: friendMenu, slotMenu: slotMenu, treeScreen: treeScreen,
       renameScreen: renameScreen, sleepScreen: sleepScreen, exportScreen: exportScreen, importScreen: importScreen,
       storeScreen: storeScreen, storeFood: storeList('care'), storeBoosts: storeList('boost'), storeShells: storeShells, bagScreen: bagScreen, medMenu: medMenu,

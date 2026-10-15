@@ -52,6 +52,12 @@
     var m = norm(minOfDay);
     return s.bed > s.wake ? (m >= s.bed || m < s.wake) : (m >= s.bed && m < s.wake);
   }
+  /* 2.4.92: the wind-down hour. Lights off in the last WIND_DOWN minutes before bedtime is "putting it to bed": a proper
+   * night's sleep (moon), not a nap that would wake it - lights on, a "woke from its nap" alert - just before bedtime.
+   * A night sleep that started in this hour is kept until the wake time. */
+  var WIND_DOWN = 60;
+  function windDown(minOfDay, s) { var d = norm(s.bed - minOfDay); return d > 0 && d <= WIND_DOWN; }
+  function isBedtime(minOfDay, s) { return isNight(minOfDay, s) || windDown(minOfDay, s); }
   /* Minutes from minOfDay until the next bedtime / wake time. */
   function until(minOfDay, target) { var d = norm(target - minOfDay); return d === 0 ? 1440 : d; }
 
@@ -76,5 +82,5 @@
   }
 
   PP.Sleep = { STEP: STEP, LIMITS: LIMITS, defaultFor: defaultFor, lengthMin: lengthMin, limits: limits, check: check, fit: fit,
-    of: of, isNight: isNight, until: until, set: set, clean: clean, same: same };
+    of: of, isNight: isNight, isBedtime: isBedtime, windDown: windDown, WIND_DOWN: WIND_DOWN, until: until, set: set, clean: clean, same: same };
 })(typeof window !== 'undefined' ? window : globalThis);

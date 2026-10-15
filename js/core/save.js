@@ -171,7 +171,13 @@
       if (Number.isFinite(p.need.lightsAt)) out.need.lightsAt = p.need.lightsAt;
     }
     out.unhappyMin = U.int(p.unhappyMin, 0, 0, 1e6);
-    if (p.trainDay && Number.isFinite(p.trainDay.d)) out.trainDay = { d: U.int(p.trainDay.d, 0, 0), n: U.int(p.trainDay.n, 0, 0, 999) }; else delete out.trainDay;
+    if (p.trainDay && Number.isFinite(p.trainDay.d)) { out.trainDay = { d: U.int(p.trainDay.d, 0, 0), n: U.int(p.trainDay.n, 0, 0, 999) }; if (p.trainDay.g != null) out.trainDay.g = U.int(p.trainDay.g, 0, 0, 999); } else delete out.trainDay;   // 2.4.92: g = games today (XP anti-farm)
+    // 2.4.92 junior battles: banked XP (capped), Junior Cup run, XP carried into the adult
+    if (Number.isFinite(p.jxp) && p.jxp > 0) out.jxp = U.int(p.jxp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.jxp;
+    if (Number.isFinite(p.carriedXp)) out.carriedXp = U.int(p.carriedXp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.carriedXp;
+    if (p.jcup && typeof p.jcup === 'object' && PP.DATA.JUNIOR.stages.indexOf(p.jcup.stage) >= 0)
+      out.jcup = { stage: p.jcup.stage, foe: U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.cupFoes - 1), won: Array.isArray(p.jcup.won) ? p.jcup.won.filter(function (x) { return PP.DATA.JUNIOR.stages.indexOf(x) >= 0; }).slice(0, 2) : [] };
+    else delete out.jcup;
     if (p.praiseReady) out.praiseReady = true; else delete out.praiseReady;
     ['praiseAt', 'refuseAt', 'spoilAt'].forEach(function (k) { if (Number.isFinite(p[k])) out[k] = Math.round(p[k]); else delete out[k]; });
     out.snacks = Array.isArray(p.snacks) ? p.snacks.filter(Number.isFinite).slice(-10) : [];

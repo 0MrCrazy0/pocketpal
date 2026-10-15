@@ -16,7 +16,7 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v2.4.79';
+var CACHE = 'pocketpal-v2.4.93';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
@@ -127,7 +127,7 @@ function pickEntry(list, now) {        /* same rule as PP.Reminders.pick */
   var best = null;
   (list || []).forEach(function (e) {
     var d = e.at - now;
-    if (d > 20 * 60e3 || d < -3 * 3600e3) return;
+    if (d > 20 * 60e3 || d < -30 * 60e3) return;   // 2.4.92: was -3 h - a later push (the worker's 2-hour re-arm) reused an old entry's words, e.g. "woke from its nap" in the night
     if (!best || Math.abs(d) < Math.abs(best.at - now)) best = e;
   });
   return best;

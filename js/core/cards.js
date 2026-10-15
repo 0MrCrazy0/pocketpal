@@ -13,7 +13,7 @@
   var U = PP.util, D = PP.DATA;
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   var MAX_LEN = 700;
-  var CARD_V = 3;            // newest card version this client understands
+  var CARD_V = 4;            // newest card version this client understands (2.4.92: v4 = a child / teen card for same-stage live battles)
 
   function b64enc(str) {
     var out = '', i;
@@ -44,6 +44,11 @@
   }
   /* extra.mb (2.4.0): your gift mailbox id, so friends can send you gifts. Older games ignore the field. */
   function encode(p, extra) {
+    if (p && PP.Stats.isJunior(p)) {   // 2.4.92: a young pal's card - no level, skills or boosts; v4 so older games refuse it
+      var jp = { v: 4, i: p.id, n: p.name, s: D.SPECIES.indexOf(p.species), x: p.sex, st: p.stage, g: [p.genes.hp, p.genes.atk, p.genes.def, p.genes.spd], gen: p.gen || 1 };
+      var jj = JSON.stringify(jp);
+      return 'PP2-' + b64enc(jj) + '-' + checksum(jj);
+    }
     if (!p || p.stage !== 'adult') return null;
     var c = cardFromPet(p), tree = PP.Skills.tree(c.species).map(function (s) { return s.id; });
     var payload = { v: c.form === 'secret' ? 2 : D.STYLE_FORMS.indexOf(c.form) >= 0 ? 3 : 1, i: c.id, n: c.name, s: D.SPECIES.indexOf(c.species), x: c.sex, f: D.FORMS.indexOf(c.form), l: c.level,
@@ -87,9 +92,17 @@
     var p;
     try { p = JSON.parse(json); } catch (e) { return fail('Code is damaged'); }
     if (p && typeof p.v === 'number' && p.v > CARD_V) return fail('This code is from a newer PocketPal - update the game to use it');
-    if (!p || (p.v !== 1 && p.v !== 2 && p.v !== 3)) return fail('Unsupported code version');
+    if (!p || (p.v !== 1 && p.v !== 2 && p.v !== 3 && p.v !== 4)) return fail('Unsupported code version');
     var species = D.SPECIES[p.s];
     if (!species) return fail('Unknown species');
+    if (p.v === 4) {   // 2.4.92 young pal (live battles with a pal of the same stage only)
+      if (!D.JUNIOR || D.JUNIOR.stages.indexOf(p.st) < 0) return fail('Unknown stage');
+      var jc = { id: String(p.i || ''), name: PP.Pet.cleanName(p.n) || 'Friend', species: species, sex: p.x, form: 'good', level: 1,
+        genes: { hp: Array.isArray(p.g) ? p.g[0] : null, atk: Array.isArray(p.g) ? p.g[1] : null, def: Array.isArray(p.g) ? p.g[2] : null, spd: Array.isArray(p.g) ? p.g[3] : null },
+        skills: [], innate: [], gen: p.gen, stage: p.st };
+      var je = validateCard(jc);
+      return je ? fail(je) : { ok: true, card: jc };
+    }
     var tree = PP.Skills.tree(species).map(function (s) { return s.id; });
     function ids(a) { return Array.isArray(a) ? a.map(function (i) { return tree[i]; }) : null; }
     var card = { id: String(p.i || ''), name: PP.Pet.cleanName(p.n) || 'Friend', species: species, sex: p.x, form: D.FORMS[p.f], level: p.l,

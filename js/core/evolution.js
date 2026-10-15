@@ -58,8 +58,8 @@
     var f = forecast(p), st = style(p), lab = function (k) { return D.FORM_INFO[k].label; };
     if (f === 'bad') return 'Care is slipping: fewer mistakes and more love lead to a stronger adult.';
     if (f === 'perfect') return 'Champion care! Keep mistakes at 2 or fewer and discipline at 50%+.';
-    if (D.STYLE_FORMS.indexOf(f) >= 0) return 'Good care + ' + (f === 'power' ? 'lots of power training' : f === 'swift' ? 'lots of quick games' : st.calm ? 'great manners' : 'lots of Match') + ' = leaning ' + lab(f) + '.';
-    if (!st.total) return 'Good care. How you train it (power, quick games or Match) can shape its adult form.';
+    if (D.STYLE_FORMS.indexOf(f) >= 0) return 'Good care + ' + (f === 'power' ? 'lots of Power Training' : f === 'swift' ? 'lots of Memory' : st.calm ? 'great manners' : 'lots of Match') + ' = leaning ' + lab(f) + '.';
+    if (!st.total) return 'Good care. Power Training, Memory or Match can shape its adult form.';
     return 'Good care, balanced training = ' + lab('good') + '. Train one way more to lean ' + lab(st.top) + '.';
   }
   /* What the pal is currently on track for (shown as a hint in Status). */
@@ -92,6 +92,10 @@
       if (sk && sk.tier <= 3 && p.innate.length < 2 && p.skills.indexOf(id) < 0) { p.skills.push(id); p.innate.push(id); }
     });
     p.adultAt = p.clock;
+    // 2.4.92: XP banked from junior battles / training is paid in now (capped: at most a level-4 adult)
+    var bank = Math.min(p.jxp || 0, (D.JUNIOR && D.JUNIOR.bankCap) || 0);
+    p.jxp = 0;
+    if (bank > 0) { p.carriedXp = bank; PP.Stats.addXp(p, bank); }
   }
   /* Test mode helper: jump straight to a stage/form. */
   function forceStage(p, stage, form) {

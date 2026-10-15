@@ -8,20 +8,40 @@
   var C = { ink: '#0f380f', dark: '#306230', mid: '#8bac0f', bg: '#9bbc0f', lite: 'rgb(206,224,110)' };
   var g = null;
   var now = function () { return performance.now(); };   // swappable clock for the Node tests
+  /* Cosmetics: same head-top hat as idle / battles (owned hat only when World.shown is available). */
+  function hatOf(p) {
+    if (!p || !p.hat) return null;
+    if (PP.App && PP.App.state && PP.World && PP.World.shown) return PP.World.shown(PP.App.state, p).hat;
+    return p.hat;
+  }
+  function drawPal(ctx, p, sk, pose, frame, x, y, scale, flip) {
+    S.draw(ctx, p.species, sk, pose, frame, x, y, scale, flip);
+    var hat = hatOf(p);
+    if (hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, hat, p.species, sk, pose, frame, x, y, !!flip, false);
+  }
 
-  function moveNames(p) {
-    if (!p || p.stage !== 'adult') return ['Play Tumble'];
-    return PP.Skills.moveList(p.species, p.skills).map(function (id) {
-      return (D.MOVES[id] && D.MOVES[id].name) || id;
+
+  /* Battle-like Power Training: the player picks an unlocked move, then lands the timing hit on the dummy. */
+  function moveKit(p) {
+    var ids = [];
+    if (p && PP.Skills && PP.Skills.moveList) ids = PP.Skills.moveList(p.species, p.skills || []);
+    if (!ids.length && p && D.SPECIES_INFO[p.species] && D.SPECIES_INFO[p.species].moves) ids = D.SPECIES_INFO[p.species].moves.slice();
+    if (!ids.length) return [{ id: 'play', name: 'Play Tumble', power: 40 }];
+    return ids.map(function (id) {
+      var m = D.MOVES[id] || {};
+      return { id: id, name: m.name || id, power: Number.isFinite(m.power) ? m.power : 40 };
     });
   }
   function start(kind, pet, onDone) {
     var speedByStage = { baby: 0.55, child: 0.75, teen: 0.95, adult: 1.15 };
-    var moves = moveNames(pet);
+    var kit = moveKit(pet);
     g = { kind: kind, pet: pet, onDone: onDone, round: 0, score: 0, phase: 'play', t0: now(),
       pos: 0, dir: 1, speed0: speedByStage[pet.stage] || 0.9, zone: null, last: 0, answer: 0, pick: 0,
-      moves: moves, moveI: 0, combo: 0, best: 0, points: 0, hits: [], hitT: -1e9 };
+      moves: kit, moveI: 0, combo: 0, best: 0, points: 0, hits: [], hitT: -1e9, locked: kit[0] };
     g.speed = sliderSpeed(kind, g.speed0, 0); g.zone = newZone();
+    if (kind === 'dummy') {
+      g.phase = g.moves.length > 1 ? 'pick' : 'play';
+    }
     if (kind === 'memory') seqStart(now());
     if (kind === 'match') { memDeal(g); g.phase = 'preview'; g.t0 = now(); }
     if (kind === 'game') armTimer(now());
@@ -91,14 +111,39 @@
     return st.pos >= st.seq.length ? 'round' : 'ok';
   }
   function active() { return !!g; }
-  function curMove() { return g.moves[g.moveI % g.moves.length]; }
+  function curMove() {
+    if (!g) return 'Move';
+    if (g.locked && g.locked.name) return g.locked.name;
+    var m = g.moves[g.moveI % g.moves.length];
+    return (m && m.name) ? m.name : (m || 'Move');
+  }
+  function curPower() {
+    if (g && g.locked && Number.isFinite(g.locked.power)) return g.locked.power;
+    var m = g && g.moves[g.moveI % g.moves.length];
+    return (m && Number.isFinite(m.power)) ? m.power : 40;
+  }
 
   function input(btn) {
     if (!g) return;
     // 1.9.9: C also quits while a result shows (after a flip / a hit): it used to be swallowed there for ~1 s
-    if (btn === 'C' && (g.phase === 'play' || g.phase === 'show' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview'))) { var cb = g.onDone; g = null; cb(null); return; }
-    if (g.phase !== 'play') return;
+    if (btn === 'C' && (g.phase === 'play' || g.phase === 'show' || g.phase === 'pick' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview'))) { var cb = g.onDone; g = null; cb(null); return; }
     var t = now();
+    // Power Training: pick an unlocked skill, then land the timing hit
+    if (g.kind === 'dummy' && g.phase === 'pick') {
+      if (btn === 'A' || btn === 'PREV' || btn === 'LEFT') {
+        g.moveI = (g.moveI + g.moves.length - 1) % g.moves.length; PP.Audio.play('move'); return;
+      }
+      if (btn === 'RIGHT') {
+        g.moveI = (g.moveI + 1) % g.moves.length; PP.Audio.play('move'); return;
+      }
+      if (btn === 'B') {
+        g.locked = g.moves[g.moveI];
+        g.phase = 'play'; g.pos = 0; g.dir = 1; g.zone = newZone(); g.speed = sliderSpeed('dummy', g.speed0, g.round);
+        g.last = 0; g.perfect = false; g.t0 = t; PP.Audio.play('ok'); return;
+      }
+      return;
+    }
+    if (g.phase !== 'play') return;
     if (g.kind === 'memory') { if (btn === 'A' || btn === 'PREV' || btn === 'LEFT') seqInput(-1); else if (btn === 'B' || btn === 'RIGHT') seqInput(1); return; }
     if (g.kind === 'rhythm') {
       if (btn !== 'B' && btn !== 'A') return;
@@ -137,7 +182,10 @@
       g.perfect = g.last > 0 && Math.abs(g.pos - (g.zone[0] + g.zone[1]) / 2) <= DUMMY.perfect;
       if (g.last > 0) {
         g.combo++; g.best = Math.max(g.best, g.combo); g.hitT = t;
-        g.points += (g.perfect ? DUMMY.perfectPts : DUMMY.pts) + DUMMY.comboPts * (g.combo - 1);
+        // stronger unlocked moves score a little more (still win/lose on hit count)
+        var scale = 0.75 + Math.min(1.25, curPower() / 80);
+        var base = (g.perfect ? DUMMY.perfectPts : DUMMY.pts) + DUMMY.comboPts * (g.combo - 1);
+        g.points += Math.round(base * scale);
         g.hits.push([Math.random(), Math.random()]);          // a stitched patch where it was hit
       } else g.combo = 0;
     }
@@ -193,7 +241,7 @@
     if (dir) { pose = 'look'; fr = 1; }
     if (g.phase === 'show' && t - g.echoT >= 450) { pose = g.last > 0 ? 'happy' : 'sad'; fr = Math.floor(t / 300); }
     if (done) { pose = good ? 'happy' : 'sad'; fr = Math.floor(t / 300); }
-    S.draw(ctx, p.species, sk, pose, fr, (W - PS) / 2, 21, BIG, dir < 0);
+    drawPal(ctx, p, sk, pose, fr, (W - PS) / 2, 21, BIG, dir < 0);
     // arrow cue on the side the pal looks (filled = now), and the two answer buttons
     var lOn = dir < 0, rOn = dir > 0;
     F.draw(ctx, '\u25c0', 22, 66, lOn ? C.ink : C.mid, lOn ? 4 : 2, 'center');
@@ -237,9 +285,14 @@
         g.round++; over = g.round >= rounds();
         if (g.kind === 'dummy') over = over || g.score >= DUMMY.hp || g.score + (DUMMY.swings - g.round) < DUMMY.hp;   // down, or it can no longer be won
       }
-      if (g.kind === 'dummy') g.moveI++;
       if (over) { g.phase = 'done'; g.t0 = t; PP.Audio.play(g.score >= need() ? 'happy' : 'sad'); }
-      else {
+      else if (g.kind === 'dummy') {
+        // next turn: pick another skill (or the same one), then swing again
+        g.phase = g.moves.length > 1 ? 'pick' : 'play';
+        g.zone = newZone(); g.last = 0; g.pos = 0; g.dir = 1; g.pick = 0; g.playT0 = t; g.perfect = false;
+        g.speed = sliderSpeed(g.kind, g.speed0, g.round);
+        if (g.phase === 'play') g.locked = g.moves[g.moveI % g.moves.length];
+      } else {
         g.phase = 'play'; g.zone = newZone(); g.last = 0; g.pos = 0; g.dir = 1; g.answer = 0; g.pick = 0; g.playT0 = t; g.perfect = false;
         g.speed = sliderSpeed(g.kind, g.speed0, g.round);
         if (g.kind === 'game') armTimer(t);
@@ -372,33 +425,36 @@
     step(t); if (!g) return;
     var p = g.pet, sk = S.stageKeyOf(p);
     ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, 160);
-    var title = g.kind === 'train' ? 'POWER TRAINING' : g.kind === 'dummy' ? 'TRAINING DUMMY' : g.kind === 'memory' ? 'MEMORY' : g.kind === 'match' ? 'MATCH' : g.kind === 'rhythm' ? 'KEEP THE RHYTHM' : 'LEFT OR RIGHT?';
+    var title = g.kind === 'train' || g.kind === 'dummy' ? 'POWER TRAINING' : g.kind === 'memory' ? 'MEMORY' : g.kind === 'match' ? 'MATCH' : g.kind === 'rhythm' ? 'KEEP THE RHYTHM' : 'LEFT OR RIGHT?';
     F.draw(ctx, title, W / 2, 3, C.ink, 1, 'center');
     if (g.kind === 'memory') F.draw(ctx, 'ROUND ' + Math.min(SEQ.rounds, g.score + 1) + '/' + SEQ.rounds + '   LENGTH ' + (g.seq ? g.seq.length : SEQ.start), W / 2, 13, C.dark, 1, 'center');
     else if (g.kind === 'match') F.draw(ctx, 'PAIRS ' + g.score + '/' + MEM_PAIRS + '   MISSES ' + (g.misses || 0) + '/' + MEM_MISSES, W / 2, 13, C.dark, 1, 'center');
-    else if (g.kind === 'dummy') F.draw(ctx, 'SWING ' + Math.min(rounds(), g.round + 1) + '/' + rounds() + '   PTS ' + g.points, W / 2, 13, C.dark, 1, 'center');
+    else if (g.kind === 'dummy') F.draw(ctx, (g.phase === 'pick' ? 'PICK MOVE' : 'SWING') + ' ' + Math.min(rounds(), g.round + 1) + '/' + rounds() + '  PTS ' + g.points, W / 2, 13, C.dark, 1, 'center');
     else if (g.kind === 'rhythm') F.draw(ctx, 'HITS ' + g.hitN + '/' + g.beats, W / 2, 13, C.dark, 1, 'center');
     else F.draw(ctx, 'ROUND ' + Math.min(rounds(), g.round + 1) + '/' + rounds() + '   SCORE ' + g.score, W / 2, 13, C.dark, 1, 'center');
     var done = g.phase === 'done', good = g.score >= need();
     if (g.kind === 'train') {
       var pose = g.phase === 'show' ? (g.last > 0 ? 'attack' : 'sad') : done ? (good ? 'happy' : 'sad') : 'idle';
-      S.draw(ctx, p.species, sk, pose, Math.floor(t / 250), (W - PS) / 2, 21, BIG);
+      drawPal(ctx, p, sk, pose, Math.floor(t / 250), (W - PS) / 2, 21, BIG);
       meter(ctx);
       F.draw(ctx, done ? (good ? 'GREAT TRAINING!' : 'KEEP PRACTISING') : g.phase === 'show' ? (g.last > 0 ? 'POW! HIT!' : 'MISSED') : 'PRESS B IN THE ZONE',
         W / 2, 146, C.ink, 1, 'center');
     } else if (g.kind === 'dummy') {
       var hit = g.phase === 'show' && g.last > 0, hel = t - g.hitT;
-      var dpose = g.phase === 'show' ? (hit ? 'attack' : 'sad') : done ? (good ? 'happy' : 'sad') : 'idle';
-      var lunge = hit && hel < 260 ? Math.round(6 * Math.sin(Math.PI * hel / 260)) : 0;   // 2.3.1: the pal lunges into the hit
-      S.draw(ctx, p.species, sk, dpose, Math.floor(t / 180), 4 + lunge, 19, BIG);
+      var poseD = g.phase === 'show' ? (hit ? 'attack' : 'sad') : (done ? (good ? 'happy' : 'sad') : (g.phase === 'pick' ? 'idle' : 'attack'));
+      drawPal(ctx, p, sk, poseD, Math.floor(t / 200), 8, 28, BIG);
       dummySack(ctx, 148, 48, t);
       if (hit && hel < 700) S.drawFx(ctx, g.perfect ? 'spark2' : 'spark', g.perfect ? 152 : 158, g.perfect ? 34 : 40, 2);
       dummyHp(ctx, 156, 23);
       F.draw(ctx, curMove().toUpperCase(), 160, 92, C.ink, g.perfect && hit && hel < 400 ? 2 : 1, 'center');
+      if (g.phase === 'pick') F.draw(ctx, 'PWR ' + curPower(), 160, 104, C.dark, 1, 'center');
       if (g.perfect && hit && hel < 400) F.draw(ctx, 'PERFECT!', 160, 104, C.ink, 1, 'center');
-      if (g.combo > 1 && !done) F.draw(ctx, 'COMBO X' + g.combo, 160, 109, C.dark, 1, 'center');
-      meter(ctx);
-      F.draw(ctx, done ? (good ? 'DUMMY DOWN! ' + g.points + ' PTS' : 'TRY THOSE MOVES AGAIN') : g.phase === 'show' ? (hit ? (g.perfect ? 'PERFECT! ' : 'HIT! ') + curMove().toUpperCase() : 'WHIFF') : 'MIDDLE = PERFECT!',
+      if (g.combo > 1 && !done && g.phase !== 'pick') F.draw(ctx, 'COMBO X' + g.combo, 160, 109, C.dark, 1, 'center');
+      if (g.phase === 'play' || g.phase === 'show') meter(ctx);
+      F.draw(ctx, done ? (good ? 'DUMMY DOWN! ' + g.points + ' PTS' : 'TRY THOSE MOVES AGAIN')
+        : g.phase === 'pick' ? 'A: PREV  B: USE MOVE'
+        : g.phase === 'show' ? (hit ? (g.perfect ? 'PERFECT! ' : 'HIT! ') + curMove().toUpperCase() : 'WHIFF')
+        : 'MIDDLE = PERFECT!',
         W / 2, 146, C.ink, 1, 'center');
     } else if (g.kind === 'memory') {
       drawSeq(ctx, t, p, sk, done, good);
@@ -420,7 +476,7 @@
       }
       if (g.beat >= g.beats && alive === 0 && !g.ended) { g.ended = true; g.phase = 'done'; g.t0 = t; g.score = g.hitN; PP.Audio.play(g.hitN >= g.win ? 'happy' : 'sad'); }
       if (g.phase === 'done' && t - g.t0 > 1200 && !g.finished) { g.finished = true; var cb = g.onDone, ok = g.score >= need(); g = null; cb(ok); return; }
-      S.draw(ctx, p.species, sk, 'idle', Math.floor(t / 200), 16, 16, BIG);
+      drawPal(ctx, p, sk, 'idle', Math.floor(t / 200), 16, 16, BIG);
       ctx.fillStyle = C.ink;
       ctx.fillRect(70, g.line, W - 90, 2);
       for (ni = 0; ni < g.notes.length; ni++) {
@@ -435,14 +491,14 @@
       if (g.phase === 'play' && !g.answer) g.answer = Math.random() < 0.5 ? -1 : 1;
       var glance = g.phase === 'play' ? g.answer : (g.phase === 'show' ? g.answer : 1);
       var pose2 = g.phase === 'play' ? 'look' : g.phase === 'show' ? (g.last > 0 ? 'happy' : 'sad') : (good ? 'happy' : 'sad');
-      S.draw(ctx, p.species, sk, pose2, g.phase === 'play' ? 1 : Math.floor(t / 300), (W - PS) / 2, 22, BIG, g.phase === 'play' && glance < 0);   // 1.9.4: side profile only - the pal turns its whole body to face the way
+      drawPal(ctx, p, sk, pose2, g.phase === 'play' ? 1 : Math.floor(t / 300), (W - PS) / 2, 22, BIG, g.phase === 'play' && glance < 0);   // 1.9.4: side profile only - the pal turns its whole body to face the way
       F.draw(ctx, '\u25c0 A', 10, 80, g.phase === 'show' && g.pick < 0 ? C.ink : C.dark, 2);
       F.draw(ctx, 'B \u25b6', W - 10, 80, g.phase === 'show' && g.pick > 0 ? C.ink : C.dark, 2, 'right');
       F.draw(ctx, done ? (good ? 'YOU WIN!' : 'BETTER LUCK NEXT TIME') : g.phase === 'show' ? (g.last > 0 ? 'CORRECT!' : g.timedOut ? 'TOO SLOW!' : 'WRONG WAY') : 'WATCH THE EYES',
         W / 2, 140, C.ink, 1, 'center');
       drawTimer(ctx, t, 127);
     }
-    if (g.phase === 'play' || g.phase === 'show' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview')) F.draw(ctx, 'C: QUIT', W - 3, 152, C.dark, 1, 'right');
+    if (g.phase === 'play' || g.phase === 'show' || g.phase === 'pick' || (g.kind === 'memory' && g.phase === 'watch') || (g.kind === 'match' && g.phase === 'preview')) F.draw(ctx, 'C: QUIT', W - 3, 152, C.dark, 1, 'right');
     if (g.phase === 'play' && g.kind === 'match') F.draw(ctx, 'A: MOVE  B: FLIP', 3, 152, C.dark, 1);
     if (g.phase === 'play' && g.kind === 'memory') F.draw(ctx, 'A: \u25c0  B: \u25b6', 3, 152, C.dark, 1);
   }

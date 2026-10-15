@@ -100,19 +100,19 @@
   };
 
   /* 2.4.0 style forms. While a pal is a child or teen every training / mini-game adds style points (Care.exercise):
-   * power = Power Training + the training dummy (sparring wins count double: battle practice), swift = Left or Right +
-   * Memory, guard = Match. A very well-behaved youth (discipline >= guardDisc, <= guardMistakes care mistakes) adds
+   * power = Power Training (the dummy), swift = Memory, guard = Match.
+   * A very well-behaved youth (discipline >= guardDisc, <= guardMistakes care mistakes) adds
    * guardCare x the total to guard. At the teen -> adult moment a GOOD-care pal (not Champion) whose leading style has
    * at least minPts points, share >= minShare of all points and a lead >= minLead over the next one takes that style
    * form; a balanced or barely-trained pal stays the classic Solid form. Bad care is still Scrappy; Champion / secret
    * rules are unchanged. tilt = base stat points moved (sum 0) so a style form is never stronger than Solid. */
   var STYLE = {
     minPts: 8, minShare: 0.45, minLead: 3, guardDisc: 80, guardMistakes: 1, guardCare: 0.3,
-    pts: { train: [2, 1, 'power'], dummy: [3, 1, 'power'], game: [2, 1, 'swift'], memory: [2, 1, 'swift'], match: [2, 1, 'guard'] },   // [win, try, style]
+    pts: { train: [2, 1, 'power'], dummy: [3, 1, 'power'], memory: [3, 1, 'swift'], match: [3, 1, 'guard'], game: [2, 1, 'swift'], rhythm: [2, 1, 'swift'] },   // [win, try, style]
     tilt: { power: { atk: 2, def: -1, spd: -1 }, swift: { spd: 2, atk: -1, def: -1 }, guard: { def: 2, atk: -1, spd: -1 } },
-    hint: { power: 'Mostly Power Training and sparring with the dummy while young (with good care).',
-      swift: 'Mostly Left or Right and Memory games while young (with good care).',
-      guard: 'Mostly Match games, or a very well-behaved youth (discipline 80%+, 0-1 mistakes), with good care.' }
+    hint: { power: 'Mostly Power Training while young (with good care). Leans ATK.',
+      swift: 'Mostly Memory while young (with good care). Leans SPD.',
+      guard: 'Mostly Match, or a very well-behaved youth (discipline 80%+, 0-1 mistakes), with good care. Leans DEF.' }
   };
 
   var LEVEL = {
@@ -336,6 +336,19 @@
   };
   var BOOST = { pct: 2, perStat: 2, total: 4 };
   /* Pal Box: start with 4 slots, buy one more at a time up to 12. */
+  /* 2.4.93 junior battles: child and teen pals can spar (quick battle, Junior Cup, live rooms with a pal of the SAME
+   * stage) against stage-matched foes only. Their stats are the Solid adult's level-1 stats scaled down by stage, with
+   * no skills or boosts. Battle and training XP is banked and paid into the adult on evolving, capped at bankCap
+   * (= the XP from level 1 to level 4), so care still decides the adult form and grinding can't go past the normal
+   * range of a fresh adult. Eggs and babies never battle. */
+  var JUNIOR = {
+    stages: ['child', 'teen'],
+    scale: { child: 0.5, teen: 0.7 },
+    xpWin: { child: 6, teen: 9 }, xpLoss: 2, xpTrain: 3,
+    bankCap: 150,                      // LEVEL.xpNeed(1) + xpNeed(2) + xpNeed(3): at most an adult at level 4
+    coins: { win: 3, loss: 1, cup: 15 },
+    cupFoes: 3, cupName: 'Junior Cup'
+  };
   var BOX = { start: 4, max: 12, prices: [100, 150, 200, 275, 350, 450, 575, 700] };  // price of slot 5, 6, ... 12
 
   var NAME_BITS = {
@@ -354,11 +367,11 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.4.79',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.4.93',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,
-    ECONOMY: ECONOMY, ITEMS: ITEMS, BOOST: BOOST, BOX: BOX
+    ECONOMY: ECONOMY, ITEMS: ITEMS, BOOST: BOOST, BOX: BOX, JUNIOR: JUNIOR
   };
   /* 1.9.9: the food a species eats (an unknown species gets meat, as before). */
   PP.DATA.foodOf = function (species) { var D = PP.DATA; return D.FOODS[D.DIET[species]] || D.FOODS.meat; };
