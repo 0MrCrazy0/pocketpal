@@ -22,7 +22,7 @@
   function enabled() { return !!base() && typeof fetch === 'function'; }
   function api(path, body) {
     return fetch(base() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(function (r) {
-      if (r.status === 404 && !/^\/lobby\/(ask|answer)$/.test(path)) throw new Error('the online server needs its 2.4.97 update (DEPLOY.md)');
+      if (r.status === 404 && !/^\/lobby\/(ask|answer)$/.test(path)) throw new Error('the online server needs its 2.4.97-or-newer update (DEPLOY.md)');
       return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.status = r.status; throw e; } return j; });
     });
   }
@@ -60,7 +60,7 @@
     if (!s.settings.lobby) { K().push(parentGate()); return; }
     var a = auth();
     s.settings.lobby = false; s.lobby = null; App().save();
-    if (a && enabled()) api('/lobby/leave', a).catch(function () {});
+    if (a && enabled()) api('/lobby/leave', a).catch(function () { toast('Lobby off, but the server could not be reached: your card leaves the board on Monday'); });   // 2.4.98: say so
     toast('Weekly lobby is off'); K().refresh();
   }
   function settingsItem() {

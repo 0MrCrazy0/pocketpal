@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.4.97**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.4.98**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -123,7 +123,7 @@ Your game is saved in your browser. Before switching phones or clearing your bro
 
 ## Privacy
 
-There are no ads, tracking or accounts. Your pal stays on your device unless you use care alerts, cloud save, live battles or gifts. Care alerts send only the alert times, cloud saves are scrambled so nobody else can read them, live battles send your pal's battle code to the room, and a gift carries only the gift, your pal's name and its animal.
+There are no ads, tracking or accounts. Your pal stays on your device unless you use care alerts, cloud save, live battles, gifts or the weekly lobby. Care alerts send only the alert times and your pal's sleep hours, cloud saves are scrambled so nobody else can read them, live battles send your pal's battle code to the room, and a gift carries only the gift, your pal's name and its animal. The weekly lobby is off until a grown-up switches it on. It then shows only your pal's name, animal, stage and level with a random handle, and your battle code goes only to a player whose request you accept (or who accepts yours). Everything is cleared every Monday, and switching the lobby off removes you.
 
 ---
 

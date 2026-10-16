@@ -1033,7 +1033,7 @@
   }
   function aboutScreen() {
     var saving = App().storageMode === 'local' ? 'Saved in this browser only' : 'OFF - storage is blocked here, progress ends with this tab';
-    var online = 'Battle codes work offline on this device. Live battles, cloud save and care alerts use your own worker, only when you use them.';
+    var online = 'Battle codes work offline on this device. Live battles, gifts, cloud save, care alerts and the weekly lobby (off unless a grown-up switches it on) use your own worker, only when you use them.';   // 2.4.98: + gifts, lobby
     return { title: 'ABOUT', html: '<p><b>PocketPal</b> v' + esc(D.VERSION) + '</p>' +
       '<ul class="away"><li>Saving: ' + esc(saving) + '</li><li>Online: ' + esc(online) + '</li><li>No accounts, ads, tracking or cookies</li>' +
       '<li>Works offline once loaded over http(s)</li></ul><p class="tip">Move your pals to another device with Settings \u25b8 Save transfer.</p>',
