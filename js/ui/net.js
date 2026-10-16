@@ -41,7 +41,9 @@
   }
   function storeLocal(list, local) {
     if (!root.caches) return Promise.resolve();
-    var body = JSON.stringify({ list: list, at: Date.now(), local: !!local, shown: Date.now() });
+    // 2.4.95: quiet hours = the active pal's sleep hours (local clock), so the service worker can keep a re-arm ping silent
+    var st = PP.App && PP.App.state, p = st && PP.Game.active(st), q = p && !p.fate && p.stage !== 'egg' ? PP.Sleep.of(p) : null;
+    var body = JSON.stringify({ list: list, at: Date.now(), local: !!local, shown: Date.now(), quiet: q ? { bed: q.bed, wake: q.wake } : null });
     return root.caches.open(SCHED_CACHE).then(function (c) { return c.put(SCHED_KEY, new Response(body, { headers: { 'Content-Type': 'application/json' } })); }).catch(function () {});
   }
   function localFallback(list, m) {
@@ -89,7 +91,7 @@
         return sub || fresh();
       }).then(function (sub) {
         /* times = the 1.9.7 schedule; at = its first time, for a worker that is still on 1.9.4 */
-        return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null });
+        return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null, quiet: PP.Reminders.quietSpans(state, Date.now()) });   // 2.4.96 quiet
       }).then(function (j) {
         if (announce && PP.App && PP.App.toast && j) PP.App.toast(j.scheduled ? 'Next alert: ' + nextText(list) : (list.length ? 'Next alert: ' + nextText(list) : 'No alert types are on'));
       });

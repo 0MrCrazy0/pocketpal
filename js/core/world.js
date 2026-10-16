@@ -274,7 +274,8 @@
     if (p.fake) return 'Not during a tantrum';
     if (!p.lights) return 'Turn the lights on first';
     var T = trips(state), day = tripDay(ms);
-    if (T.day === day && T.n >= TRIP.perDay) return 'That was ' + TRIP.perDay + ' trips today. More tomorrow!';
+    // 2.4.96: a clock set back to an earlier day no longer opens a fresh set of trips (day <= T.day)
+    if (!U.newDay(T.day, day) && T.n >= TRIP.perDay) return 'That was ' + TRIP.perDay + ' trips today. More tomorrow!';
     var wait = nextTripIn(state, ms);
     if (wait > 0) return 'Resting after the last trip (' + Math.ceil(wait / 60e3) + ' min)';
     if (p.energy < P.energy) return 'Too tired... (needs ' + P.energy + ' energy)';
@@ -290,7 +291,7 @@
     var k = (T.count || 0) + 1, roll = function (tag) { return U.roll(state.seed, 'trip', k, where, tag); };
     p.energy = Math.max(0, p.energy - P.energy);
     p.happy = Math.min(D.RULES.maxHearts, p.happy + 1);
-    if (T.day !== day) { T.day = day; T.n = 0; }
+    if (U.newDay(T.day, day)) { T.day = day; T.n = 0; }   // 2.4.96: only a later day resets the count
     T.n++; T.count = k; T.last = Math.round(ms);
     T.visits[where] = (T.visits[where] || 0) + 1;
     var out = { ok: true, where: where, happy: 1, energy: P.energy, coins: 0, found: null, met: null };
@@ -345,7 +346,7 @@
     var g = GIFTS[giftId]; if (!g) return 'Unknown gift';
     if (!friend || !MBX.test(friend.mb || '')) return 'This friend has no gift mailbox (ask for a new battle code from PocketPal 2.4.0+)';
     if (!MBX.test(mail(state).box || '')) return 'Set up your own mailbox first (Gifts > Mailbox)';
-    var M = mail(state), day = tripDay(ms), s = M.sent.day === day ? M.sent : { n: 0, free: 0 };
+    var M = mail(state), day = tripDay(ms), s = !U.newDay(M.sent.day, day) ? M.sent : { n: 0, free: 0 };   // 2.4.96: a clock set back keeps today's count
     if (s.n >= GIFT.sendPerDay) return 'That is ' + GIFT.sendPerDay + ' gifts today - more tomorrow';
     if (g.free && s.free >= GIFT.freePerDay) return GIFT.freePerDay + ' free treats a day - send a cake or a feast, or wait until tomorrow';
     if (g.item && PP.Shop.count(state, g.item) < 1) return 'You have no ' + g.name + ' in your Bag';
@@ -354,7 +355,7 @@
   /* call after the worker accepted the gift: takes the item from the bag and counts it */
   function noteSent(state, giftId, friend, ms) {
     var M = mail(state), g = GIFTS[giftId], day = tripDay(ms);
-    if (M.sent.day !== day) M.sent = { day: day, n: 0, free: 0 };
+    if (U.newDay(M.sent.day, day)) M.sent = { day: day, n: 0, free: 0 };
     M.sent.n++; if (g.free) M.sent.free++;
     if (g.item) { state.inv[g.item] = Math.max(0, (state.inv[g.item] || 0) - 1); if (!state.inv[g.item]) delete state.inv[g.item]; }   // moved out of the bag (not used on your pal)
     logMail(M, { dir: 'out', g: giftId, who: PP.Pet.cleanName(friend.name) || 'Friend', at: Math.round(ms) });
@@ -364,7 +365,7 @@
   /* a gift that came from the worker: { g, n (sender name), s (species index), at } -> applied (or kept as a note) */
   function receive(state, list, ms) {
     var M = mail(state), day = tripDay(ms), out = [];
-    if (M.used.day !== day) M.used = { day: day, n: 0 };
+    if (U.newDay(M.used.day, day)) M.used = { day: day, n: 0 };
     (Array.isArray(list) ? list : []).slice(0, 10).forEach(function (raw) {
       if (!raw || typeof raw !== 'object' || !GIFTS[raw.g]) return;
       var g = GIFTS[raw.g], who = PP.Pet.cleanName(raw.n) || 'A friend', p = PP.Game.active(state), used = false;
@@ -390,11 +391,11 @@
     var p = PP.Game.active(state), why = canVisit(state, p, friend);
     if (why) return { ok: false, msg: why };
     var V = visits(state), day = tripDay(ms), key = String(friend.id || friend.name).slice(0, 20);
-    if (V.day !== day) { V.day = day; V.n = 0; }
-    var already = V.met[key] === day, bonus = !already && V.n < VISIT.perDay;
+    if (U.newDay(V.day, day)) { V.day = day; V.n = 0; }   // 2.4.96: only a later day resets (not a clock set back)
+    var already = V.met[key] != null && !U.newDay(V.met[key], day), bonus = !already && V.n < VISIT.perDay;
     if (bonus) { V.n++; p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); }
     var firstEver = V.met[key] == null;
-    V.met[key] = day;
+    V.met[key] = U.newDay(V.met[key], day) ? day : V.met[key];
     var keys = Object.keys(V.met); if (keys.length > 30) keys.sort(function (a, b) { return V.met[a] - V.met[b]; }).slice(0, keys.length - 30).forEach(function (k) { delete V.met[k]; });
     if (firstEver || bonus) remember(p, 'visit', (firstEver ? 'Met ' : 'Played with ') + (friend.name || 'a friend') + ' the ' + D.NAMES[friend.species][friend.form || 'good'], ms);
     return { ok: true, bonus: bonus, msg: bonus ? 'They had a great time! Happy +1' : already ? 'Fun visit (the happy bonus is once a day per friend)' : 'Fun visit (' + VISIT.perDay + ' happy bonuses a day)' };
@@ -445,18 +446,20 @@
     var why = canFcup(state); if (why) return { ok: false, msg: why };
     var S = fcupStatus(state), i = S.next, c = S.foes[i];
     var r = PP.Game.startBattle(state, c, { kind: 'friend', fcup: true, foe: i, foes: S.foes.length }, seed);
-    if (r.ok) fcup(state).run = { ids: S.foes.map(function (x) { return x.id; }).join(','), foe: i, pal: PP.Game.active(state).id };
+    if (r.ok) fcup(state).run = { ids: S.foes.map(function (x) { return x.id; }).join(','), foe: i, pal: PP.Game.active(state).id, live: 1 };   // 2.4.96: live = a fight is on
     return r;
   }
   /* called by Game.finishBattle for a Friends Cup fight (out = the battle result, extended here) */
   function fcupResult(state, B, out, ms) {
     var F = fcup(state), m = B.meta || {}, p = PP.Game.active(state), n = m.foes | 0, i = m.foe | 0;
     out.fcup = true; out.foe = i + 1; out.foes = n;
+    if (F.run) delete F.run.live;
     if (!out.won || out.fled || !F.run) { F.run = null; return out; }
     if (i + 1 < n) { F.run.foe = i + 1; out.next = i + 2; return out; }
     F.run = null; out.fcleared = true; F.wins = (F.wins || 0) + 1;
     var day = PP.Shop.dayOf(ms);
-    if (F.day !== day) { F.day = day; out.fbonus = PP.Shop.earn(state, FCUP.bonus, ms, false); out.coins = (out.coins || 0) + out.fbonus; }
+    if (U.newDay(F.day, day)) { F.day = day;   // 2.4.96: once a day, and a clock set back does not pay it again
+      out.fbonus = PP.Shop.earn(state, FCUP.bonus, ms, false); out.coins = (out.coins || 0) + out.fbonus; }
     if (p) remember(p, 'cup', 'Won the Friends Cup' + (F.wins > 1 ? ' (' + F.wins + ' times)' : '') + '!', ms);
     return out;
   }
@@ -466,7 +469,8 @@
     o.wins = U.int(f.wins, 0, 0, 1e6);
     if (Number.isFinite(f.day)) o.day = Math.round(f.day);
     var r = f.run;
-    if (r && typeof r === 'object' && typeof r.ids === 'string' && typeof r.pal === 'string') o.run = { ids: r.ids.slice(0, 200), foe: U.int(r.foe, 0, 0, FCUP.size - 1), pal: r.pal.slice(0, 40) };
+    // 2.4.96: a run saved mid-fight (live) = the app was closed during a fight: the run starts again
+    if (r && typeof r === 'object' && !r.live && typeof r.ids === 'string' && typeof r.pal === 'string') o.run = { ids: r.ids.slice(0, 200), foe: U.int(r.foe, 0, 0, FCUP.size - 1), pal: r.pal.slice(0, 40) };
     return o;
   }
 

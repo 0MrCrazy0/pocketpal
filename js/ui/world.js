@@ -23,7 +23,7 @@
 
   /* ---------------------------------------------------------------- trips */
   function tripsScreen() {
-    var s = st(), p = pet(), t = now(), T = s.trips, n = T.day === PP.Shop.dayOf(t) ? T.n : 0, wait = W.nextTripIn(s, t);
+    var s = st(), p = pet(), t = now(), T = s.trips, n = !PP.util.newDay(T.day, PP.Shop.dayOf(t)) ? T.n : 0, wait = W.nextTripIn(s, t);
     var items = Object.keys(W.PLACES).map(function (k) {
       var P = W.PLACES[k], why = W.canTrip(s, p, k, t);
       var finds = Object.keys(W.THINGS).filter(function (id) { return W.THINGS[id].src === 'trip' && W.THINGS[id].place === k; });

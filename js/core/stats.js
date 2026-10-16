@@ -76,7 +76,7 @@
     var c = (opts && opts.noCondition) ? condition(null) : condition(p);
     var b = PP.Shop ? PP.Shop.boostPct(p) : { hp: 0, atk: 0, def: 0, spd: 0 };   // Pal Store boosts: max +4%/stat, 4 items total
     return {
-      hp: Math.max(1, Math.round(r.hp * (1 + (ps.hpPct + b.hp) / 100) * c.all * c.hp)),
+      hp: Math.max(1, Math.round(r.hp * (1 + (ps.hpPct + b.hp + (PP.Traits ? PP.Traits.hpPct(p) : 0)) / 100) * c.all * c.hp)),   // 2.4.97: + Battle-Hardened
       atk: Math.max(1, Math.round(r.atk * (1 + (ps.atkPct + b.atk) / 100) * c.all)),
       def: Math.max(1, Math.round(r.def * (1 + (ps.defPct + b.def) / 100) * c.all)),
       spd: Math.max(1, Math.round(r.spd * (1 + (ps.spdPct + b.spd) / 100) * c.all * c.spd)),

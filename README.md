@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.4.94**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.4.97**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -62,6 +62,27 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 - **Hard mode:** for experts only. Pals can't be revived, but they earn more coins.
 - **Care alerts:** tap the 🔔 bell to get a ping when your pal needs you, even with the game closed. **Settings ▸ Care alerts** shows the next alert and lets you switch each kind (bedtime, hunger, medicine, clean-up, calls, wake-up) on or off.
 - **Live battles:** **Battle ▸ Live battle** opens a room with a 4-letter code. Your friend joins with the code and you both pick moves turn by turn. Battle codes still work offline.
+
+## New in 2.4.97
+
+- **Find friends (weekly lobby).** **Battle ▸ Find friends** puts your pal on a public board for the week, so other players can send a friend request or a live-battle challenge. Nobody sees more than your pal's name, animal and level and a random handle like "SunnyOtter42". There is no chat, and nothing is shared until you accept. A grown-up has to switch it on first (**Settings ▸ Weekly lobby**, off by default). The board is cleared every Monday.
+- **Friend QR codes.** **My battle code** now shows a QR code. **Add friend code ▸ Scan a QR code** uses the camera where the browser can scan (Chrome on Android, for example). Anywhere else you paste or type the code as before.
+- **Leaning meter.** Child and teen pals have a new Status page, "Leaning: Swift", with bars for care and each training style. It is worked out with the real growing-up rules and has a hint for every form. The secret form shows as ???.
+- **Battle traits.** Adult pals earn up to 3 small traits in real battles: **Battle-Hardened** (10 wins: +3% HP), **Comeback Kid** (win with 25% HP or less: +5% dodge when nearly knocked out), **Rival Spirit** (beat the same friend's pal 3 times: +3% damage against that pal) and **Humble** (lose 5 in a row: +5% training XP). They show on the Status battle page and travel in battle codes. Their eggs are born with them, marked "inherited". Live rooms need both players on 2.4.97.
+
+## New in 2.4.96
+
+- **Fairer rules.** Things that could be bent are fixed: re-rolling a Quick battle foe, closing the app to escape a lost cup fight, running from a Junior Cup fight, and setting the phone's clock back to get trips, visit bonuses and battle bonuses again.
+- **Quieter nights.** The server's 2-hourly check-in ping now waits until your pal wakes.
+- Hard mode: a neglected pal runs away after 4 mistakes in 24 hours (was 6), because the 2.4.95 care fixes removed the unfair night mistakes.
+
+## New in 2.4.95
+
+- **Fair care mistakes.** Nothing counts against you while your pal sleeps. The poop and sickness clocks used to keep running at night, which cost perfect players mistakes by morning.
+- **A status line under the screen:** "Awake: play time", "Bedtime soon", "Bedtime: put your pal to bed", "Sleeping until 08:00", and a countdown such as "Hungry! Feed it · 24 min left".
+- **"Wake it?"** Before you wake a sleeping pal at night, the game says what that costs: it is grumpy, but it is not a care mistake.
+- **New push alerts:** Tantrum, Bedtime soon (15 min before) and Evolving. Every call that can become a mistake now gets a push in time. Quiet hours follow your pal's sleep.
+- The full list of what counts as a care mistake is in [CARE.md](CARE.md) and in the in-game help.
 
 ## New in 2.4.94
 

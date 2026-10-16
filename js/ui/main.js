@@ -279,6 +279,44 @@
     });
   }
   App.refreshIcons = refreshIcons;
+  /* 2.4.95: the schedule / care-call line under the screen - 'Awake: play time', 'Bedtime soon', 'Bedtime: put your pal
+   * to bed', 'Sleeping until 07:00', or a countdown 'Hungry! Feed it · 24 min left' before a call counts as a mistake. */
+  var statusEl = null, lastStatus = '', soonToastAt = null;
+  function careStatusUpdate() {
+    statusEl = statusEl || document.getElementById('careStatus');
+    if (!statusEl) return;
+    var p = G.active(App.state), show = App.scene === 'home' && !App.cut && p && !p.fate && p.stage !== 'egg';
+    var nowG = G.now(App.state, Date.now()), mod = PP.Care.defaultMinuteOf(nowG);
+    var st = show ? PP.Care.careStatus(p, mod, function (m) { return PP.Time.hm(m, App.state.settings.clock); }) : null;
+    var txt = st ? st.text : '';
+    if (txt !== lastStatus) {
+      lastStatus = txt; statusEl.textContent = txt;
+      statusEl.className = 'care-status' + (st ? ' cs-' + st.kind + (st.left != null && st.kind !== 'bedsoon' ? ' cs-count' : '') : '');
+    }
+    // the bedtime heads-up, once per evening
+    if (st && st.kind === 'bedsoon' && !UI.isOpen()) {
+      var key = Math.floor((p.clock + 60) / 1440);
+      if (soonToastAt !== key) { soonToastAt = key; App.toast('Bedtime in ' + st.left + ' min - switch the lights off when ' + p.name + ' gets sleepy.'); }
+    }
+  }
+  App.careStatusUpdate = careStatusUpdate;
+  /* 2.4.95: lights ON while the pal is in its night sleep wakes it - say exactly what that costs first. A nap has no
+   * penalty, so no question there. */
+  function lightsPressed() {
+    var p = G.active(App.state);
+    var nowG = G.now(App.state, Date.now()), mod = PP.Care.defaultMinuteOf(nowG), sch = p && PP.Sleep.of(p);
+    if (p && !p.fate && p.stage !== 'egg' && p.asleep && p.sleepKind === 'night' && !p.lights && PP.Sleep.isNight(mod, sch)) {
+      var grumpy = !(p.night && p.night.woke > 0);
+      UI.open(UI.kit.confirm('WAKE ' + p.name.toUpperCase() + '?',
+        'It is bedtime: ' + p.name + ' sleeps until ' + PP.Time.hm(sch.wake, App.state.settings.clock) + '. Waking it now is not a care mistake, but ' +
+        (grumpy ? 'it wakes up grumpy (Happy -1) ' : 'it gets up again ') + 'and dozes off again within ' + D.RULES.wokenAwakeMin + ' min. ' +
+        'If the lights are still on when it dozes off, that counts as a care mistake 1 h later.',
+        function () { UI.close(); App.doAct('lights'); }));
+      return;
+    }
+    App.doAct('lights');
+  }
+  App.lightsPressed = lightsPressed;
 
   /* ------------------------------------------------------------ attention calls
    * The ! on the LCD is drawn by render.js from Care.attention(). Here: beep when a
@@ -397,7 +435,7 @@
     PP.BattleView.start(r.battle, { title: title, onEnd: function (B) {
       var out = G.finishBattle(App.state, B);
       App.scene = 'home'; App.save(); refreshIcons();
-      if (out && (out.levels || out.firstClear || (out.shells && out.shells.length))) PP.Audio.play('level');
+      if (out && (out.levels || out.firstClear || out.trait || (out.shells && out.shells.length))) PP.Audio.play('level');
       if (out) UI.open(UI.screens.battleResult(out, B));
     } });
     App.save();
@@ -444,7 +482,7 @@
       case 'train': UI.open(UI.screens.trainMenu); break;
       case 'clean': App.doAct('clean'); break;
       case 'med': if (PP.Shop.owned(App.state, ['med']).length) UI.open(UI.screens.medMenu); else App.doAct('medicine'); break;
-      case 'lights': App.doAct('lights'); break;
+      case 'lights': lightsPressed(); break;
       case 'battle': UI.open(UI.screens.battleMenu); break;
       case 'disc': UI.open(UI.screens.discMenu); break;
     }
@@ -505,7 +543,7 @@
     if (tNow - lastLive > 1000) {
       lastLive = tNow;
       var top = UI.top(); if (UI.isOpen() && top && top.live && !document.activeElement.matches('input,textarea')) UI.refresh();
-      PP.TestPanel.update(); refreshIcons();
+      PP.TestPanel.update(); refreshIcons(); careStatusUpdate();
       if (Date.now() - App.lastSaveReal > 10000) { App.save(); if (PP.CloudSync && !App.passive) PP.CloudSync.auto(App.state); }
       pumpDaily(); updateHint(); favicon(); if (PP.WorldUI) PP.WorldUI.tick();   // 2.4.0: event hello, gift mailbox
       if (App.scene === 'home' && !App.cut && !UI.isOpen() && !App.awayInfo && !App.pendingFate && backupDue()) { App.state.backup.snoozeUntil = Date.now() + 3 * 864e5; UI.open(UI.screens.backupReminder); }

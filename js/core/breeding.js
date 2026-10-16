@@ -84,6 +84,7 @@
       parents: [a, b].map(parentRef),
       inheritedSkills: inh, now: now
     });
+    if (PP.Traits) egg.traits = PP.Traits.inherit(a, b);   // 2.4.97: born with its parents' traits, marked inherited
     [a, b].forEach(function (p) { if (p.clock != null) { p.lastBredClock = p.clock; if (Number.isFinite(now)) p.lastBredAt = now; } });
     return { ok: true, egg: egg, msg: 'An egg! Gen ' + egg.gen };
   }

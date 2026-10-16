@@ -184,6 +184,37 @@
   /* ------------------------------------------------------------ Paldex */
   var DEX_TAG = { baby: 'Baby', child: 'Child', teen: 'Teen', bad: 'Scrappy', good: 'Solid', perfect: 'Champion', secret: 'Secret', power: 'Mighty', swift: 'Swift', guard: 'Sturdy' };
   /* 2.4.0: the young pal's training style, as three small bars (Status > report) */
+  /* 2.4.97 leaning meter (child / teen): what the pal would grow into NOW, from the real evolution rules
+   * (PP.Evolution.forecast / careScore / style). A secret form is never named: it shows as ??? */
+  var LEAN_HINT = {
+    perfect: 'At most ' + D.EVO.perfect.maxMistakes + ' care mistakes, care score ' + D.EVO.perfect.minScore + '+ and discipline ' + D.EVO.perfect.minDiscipline + '%+.',
+    power: D.STYLE.hint.power, swift: D.STYLE.hint.swift, guard: D.STYLE.hint.guard,
+    good: 'Good care (score ' + D.EVO.good.minScore + '+) with balanced or little training.',
+    bad: 'Care score under ' + D.EVO.good.minScore + ': too many mistakes, hunger or sadness. Feed, play and clean up in time to climb out.',
+    secret: 'A secret: Champion care plus something special. Keep exploring!'
+  };
+  function leaningHtml(p) {
+    var f = PP.Evolution.forecast(p), score = PP.Evolution.careScore(p), v = PP.Evolution.style(p), S = D.STYLE;
+    var care = f === 'bad' ? 'bad' : f === 'perfect' ? 'perfect' : 'good';
+    var mx = Math.max(S.minPts, v.power, v.swift, v.guard);
+    var one = function (k) { return '<tr' + (f === k ? ' class="lean-on"' : '') + '><td>' + FORM_LABEL[k] + '</td><td>' + bar(v[k], mx, FORM_LABEL[k]) + ' ' + v[k] + '</td></tr>'; };
+    var row = function (k, lab) { return '<li' + (f === k ? ' class="lean-on"' : '') + '><b>' + (f === k ? '\u25b8 ' : '') + esc(lab) + '</b>: ' + esc(LEAN_HINT[k]) + '</li>'; };
+    return '<p class="lean-now">Leaning: <b>' + esc(FORM_LABEL[f] || 'Solid') + '</b></p>' +
+      '<table class="kv lean">' +
+      '<tr><td>Care</td><td>' + bar(Math.max(0, score), 100, 'Care score') + ' ' + Math.round(score) + ' \u00b7 ' + (care === 'perfect' ? 'Champion care' : care === 'good' ? 'Solid care' : 'Scrappy care') + '</td></tr>' +
+      one('power') + one('swift') + one('guard') +
+      '</table>' +
+      '<p class="tip">Style needs ' + S.minPts + '+ points, ' + Math.round(S.minShare * 100) + '% of all and ' + S.minLead + ' ahead of the next. ' + (v.lead ? 'Ahead now: ' + FORM_LABEL[v.lead] + '.' : 'No style is ahead yet.') + (v.calm ? ' Great manners add to Sturdy.' : '') + '</p>' +
+      '<ul class="lean-forms">' + row('perfect', 'Champion') + row('power', 'Mighty') + row('swift', 'Swift') + row('guard', 'Sturdy') + row('good', 'Solid') + row('bad', 'Scrappy') +
+      '<li><b>???</b>: ' + esc(LEAN_HINT.secret) + '</li></ul>';
+  }
+  /* 2.4.97 battle traits on the profile */
+  function traitsHtml(p) {
+    var T = PP.Traits, L = T.list(p);
+    var have = L.map(function (t) { var d = T.DEFS[t.id]; return '<li><b>' + esc(T.label(t)) + '</b>' + (t.inh ? ' <span class="inh">inherited</span>' : '') + ': ' + esc(d.short) + '</li>'; }).join('');
+    var next = T.ORDER.filter(function (id) { return !L.some(function (t) { return t.id === id; }); }).map(function (id) { return '<li class="dim">' + esc(T.DEFS[id].name) + ': ' + esc(T.DEFS[id].how) + ' (' + esc(T.DEFS[id].short) + ')</li>'; }).join('');
+    return '<p class="tr-h">Traits ' + L.length + '/' + T.MAX + '</p><ul class="traits">' + (have || '<li class="dim">None yet.</li>') + (L.length < T.MAX ? next : '') + '</ul>';
+  }
   function styleRow(p) {
     var v = PP.Evolution.style(p), mx = Math.max(8, v.power, v.swift, v.guard);
     var one = function (k, lab) { return lab + ' ' + bar(v[k], mx, lab); };
@@ -366,7 +397,7 @@
     return function () {
       var p = pet();
       if (!p) return { title: 'STATUS', html: '<p>No pal yet.</p>', items: [{ label: 'Back', act: pop }] };
-      var pages = p.stage === 'adult' ? ['care', 'battle', 'genes'] : ['care', 'report', 'genes'];
+      var pages = p.stage === 'adult' ? ['care', 'battle', 'genes'] : p.stage === 'child' || p.stage === 'teen' ? ['care', 'leaning', 'report', 'genes'] : ['care', 'report', 'genes'];   // 2.4.97 leaning meter
       var pg = pages[page % pages.length], h = '';
       var top = '<div class="st-top">' + thumb(p.species, S.stageKeyOf(p), PP.Care.moodPose(p), 26) + '<div><b>' + esc(p.name) + '</b> ' + (p.sex === 'M' ? '\u2642' : '\u2640') +
         '<br>' + esc(PP.Pet.formName(p)) + ' \u00b7 ' + esc(p.stage === 'adult' ? FORM_LABEL[p.form] + ' adult' : p.stage) + '<br>Gen ' + p.gen + ' \u00b7 Age ' + PP.Pet.ageDays(p) + 'd</div></div>';
@@ -383,6 +414,8 @@
           (p.stage !== 'egg' ? '<tr><td>Sleeps</td><td>' + schedText(PP.Sleep.of(p)) + (p.sched ? '' : ' (default)') + '</td></tr>' : '') +
           '<tr><td>Status</td><td>' + (p.fate ? esc(p.fateCause || p.fate) : p.asleep ? (p.sleepKind === 'nap' ? 'Napping' : 'Asleep') + (p.lights ? ' (lights ON!)' : '') : p.fake ? 'Tantrum!' : 'Awake') + '</td></tr>' +
           '</table>';
+      } else if (pg === 'leaning') {
+        h = top + leaningHtml(p);
       } else if (pg === 'report') {
         var f = PP.Evolution.forecast(p), score = PP.Evolution.careScore(p);
         h = '<table class="kv"><tr><td>Care mistakes</td><td>' + p.mistakes + '</td></tr>' +
@@ -402,7 +435,7 @@
           '<tr><td>Battle Power</td><td><b>' + PP.Stats.bp(bs) + '</b></td></tr>' +
           '<tr><td>Skill points</td><td>' + p.sp + '</td></tr>' +
           '<tr><td>Wins / losses</td><td>' + p.wins + ' / ' + p.losses + '</td></tr>' +
-          '<tr><td>Care mistakes</td><td>' + p.totalMistakes + ' (life)</td></tr></table>' +
+          '<tr><td>Care mistakes</td><td>' + p.totalMistakes + ' (life)</td></tr></table>' + traitsHtml(p) +
           (bs.notes.length ? '<p class="tip">Condition: ' + esc(bs.notes.join(', ')) + '</p>' : '');
       } else {
         var g = p.genes, word = function (v) { return v >= 2 ? 'great' : v === 1 ? 'good' : v === 0 ? 'normal' : v === -1 ? 'weak' : 'poor'; };
@@ -413,6 +446,7 @@
           '<tr><td>Constitution</td><td>' + (g.hardy > 0.66 ? 'hardy' : g.hardy < 0.33 ? 'delicate' : 'normal') + '</td></tr>' +
           '<tr><td>Temper</td><td>' + (g.temper > 0.66 ? 'fiery' : g.temper < 0.33 ? 'calm' : 'normal') + '</td></tr>' +
           '<tr><td>Parents</td><td>' + (p.parents && p.parents.length ? esc(p.parents.map(function (q) { return q.name; }).join(' + ')) : 'wild egg') + '</td></tr>' +
+          (p.stage !== 'adult' && PP.Traits.list(p).length ? '<tr><td>Traits</td><td>' + esc(PP.Traits.list(p).map(PP.Traits.label).join(', ')) + ' (inherited, active once grown up)</td></tr>' : '') +
           (p.inheritedSkills && p.inheritedSkills.length ? '<tr><td>Inherited</td><td>' + esc(p.inheritedSkills.map(function (id) { return PP.Skills.find(p.species, id).name; }).join(', ')) + '</td></tr>' : '') +
           '</table>';
       }
@@ -432,7 +466,13 @@
     var p = pet();
     var items = [
       { label: 'Meal: ' + D.foodOf(p && p.species).name, sub: 'Hunger +1, weight +1g (free)', act: function () { App().doAct('meal'); } },   // 1.9.9: per diet
-      { label: 'Snack', sub: 'Happy +1, weight +2g. More than 3 in 3h = care mistake', act: function () { App().doAct('snack'); } }
+      (function () {   // 2.4.95: say how many snacks are left before the overfeeding mistake
+        var R = D.RULES, used = p ? (p.snacks || []).filter(function (c) { return p.clock - c < R.snackWindowMin; }).length : 0;
+        var over = used >= R.snackLimit;
+        return { label: over ? 'Snack (care mistake!)' : 'Snack', cls: over ? 'warn' : '',
+          sub: over ? 'Already ' + used + ' snacks in 3h - another one now counts as a care mistake' : 'Happy +1, weight +2g. ' + used + ' of ' + R.snackLimit + ' snacks used (3h)',
+          act: function () { App().doAct('snack'); } };
+      })()
     ].concat(PP.Shop.owned(st(), ['food', 'energy']).map(function (id) { return itemRow(id); }));
     return { title: 'FEED', html: p ? '<p>Hunger ' + hearts(p.hunger) + ' \u00b7 Happy ' + hearts(p.happy) + ' \u00b7 Energy ' + Math.round(p.energy) + '%</p>' : '', live: true, items: items };
   }
@@ -536,6 +576,7 @@
       { label: 'Quick battle', sub: 'A wild ' + p.stage + ' pal. Best of 3. Win: happy +1, +' + J.xpWin[p.stage] + ' XP saved, +' + J.coins.win + 'c', disabled: !!why, reason: why, act: function () { close(); App().startJuniorQuick(); } },
       { label: J.cupName + ': ' + L.name, sub: L.foes.length + ' ' + p.stage + ' foes, each a bit tougher' + (run ? ' · run on: foe ' + (run + 1) + '/' + L.foes.length : '') + ' · clear: +' + J.coins.clear + 'c once a day', right: run ? (run + 1) + '/' + L.foes.length : tro ? '★' + tro : 'OPEN', disabled: !!why, reason: why, act: function () { push(juniorLadderScreen); } },
       { label: 'Live battle', sub: 'Room code: a friend’s ' + p.stage + ' pal only', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
+      { label: 'Find friends', sub: 'Weekly lobby: challenge a ' + p.stage + ' pal', right: st().settings.lobby ? '' : 'OFF', act: function () { push(PP.LobbyUI.lobbyScreen); } },   // 2.4.97
       { label: 'Arena, Daily, Weekly, Friends', sub: 'Unlock when your pal is an adult', disabled: true, reason: 'Adults only' }
     ] };
   }
@@ -552,7 +593,7 @@
         '<span><b>' + esc(cf.name) + '</b>' + (j === next ? ' \u25c2 next' : '') + '<br>' + esc(D.NAMES[cf.species][p.stage]) + ' \u00b7 BP ' + PP.Battle.fighter(cf).bp + '</span></li>';
     }).join('') + '</ul>';
     var gap = mine.bp - of.bp, match = gap >= of.bp * 0.15 ? 'You should win this.' : gap >= -of.bp * 0.05 ? 'An even fight.' : 'A tough fight - train first?';
-    var paid = js.paid[p.stage] === day, capLeft = Math.max(0, J.dailyCoins - (js.day === day ? js.coins : 0));
+    var paid = !PP.util.newDay(js.paid[p.stage], day), capLeft = Math.max(0, J.dailyCoins - (!PP.util.newDay(js.day, day) ? js.coins : 0));   // 2.4.96: >= matches the clock-back rule
     return { title: L.name.toUpperCase() + (tro ? ' \u2605' : ''), html:
       '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), 'idle', 30) + '<b>VS</b><span class="flip">' + thumb(opp.species, p.stage, 'angry', 30) + '</span></div>' +
       '<p><b>' + esc(opp.name) + '</b> the ' + esc(D.NAMES[opp.species][p.stage]) + ' \u00b7 foe ' + (next + 1) + '/' + L.foes.length + '<br>BP ' + of.bp + ' (you: ' + mine.bp + ')<br>' + match + '</p>' + pips + list +
@@ -574,8 +615,9 @@
       { label: 'Friend battle', sub: 'Fight a pal from a battle code', disabled: !!why, reason: why, act: function () { push(friendsScreen); } },
       { label: 'Friends Cup', sub: 'Beat your friends\u2019 pals in a row (' + PP.World.FCUP.size + ' at most)', right: (st().fcup && st().fcup.wins) ? '\u2605' + st().fcup.wins : '', disabled: !!why, reason: why, act: function () { push(fcupScreen); } },
       { label: 'Live battle', sub: 'Room code: pick moves with a friend in real time', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
-      { label: 'My battle code', sub: 'Share your pal', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
-      { label: 'Add friend code', sub: 'Paste a code (battle or breed)', act: function () { push(addCodeScreen); } }
+      { label: 'My battle code', sub: 'Share your pal (code or QR)', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
+      { label: 'Add friend code', sub: 'Paste, type or scan a code (battle or breed)', act: function () { push(addCodeScreen); } },
+      { label: 'Find friends', sub: 'Weekly lobby: friend requests and challenges', right: st().settings.lobby ? '' : 'OFF', act: function () { push(PP.LobbyUI.lobbyScreen); } }   // 2.4.97
     ];
     if (PP.Daily.visitorReady(st(), G.now(st()))) items.unshift({ label: 'Visitor!', sub: 'A wild pal came by: one try today, +' + PP.Daily.VISITOR_BONUS + ' coins for a win', right: 'NEW', disabled: !!why, reason: why, act: function () { close(); App().startVisitor(); } });
     return { title: 'BATTLE', html: why ? '<p class="tip">' + esc(why) + '</p>' : '', items: items };
@@ -583,12 +625,13 @@
   /* 1.8.4: per-cup progress. A star only for a cup really won (state.arena.cups[i].won). */
   var ROLE = { challenger: 'Challenger', rival: 'Rival', boss: 'Cup boss' };
   function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); return Math.min.apply(null, l) + '-' + Math.max.apply(null, l); }
-  function dailyDone(s) { var p = pet(); return p && p.arenaDay === PP.Shop.dayOf(Date.now()); }
-  function weeklyDone(s) { var p = pet(); return p && p.weekDone === PP.Daily.weekOf(PP.Game.now(s)); }   // 2.4.92: same clock as the game's check
+  // 2.4.96: >= (a clock set back keeps it done) and the game's own clock for both (daily used Date.now())
+  function dailyDone(s) { var p = pet(); return !!p && p.arenaDay != null && !PP.util.newDay(p.arenaDay, PP.Shop.dayOf(PP.Game.now(s))); }
+  function weeklyDone(s) { var p = pet(); return !!p && p.weekDone != null && !PP.util.newDay(p.weekDone, PP.Daily.weekOf(PP.Game.now(s)), 2); }   // 2.4.92: same clock as the game's check
   function resetText() { var ms = PP.Daily.arenaReset(Date.now()); return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm'; }
   function weekResetText() { var ms = PP.Daily.weekReset(Date.now()); return Math.floor(ms / 86400000) + 'd ' + Math.floor((ms % 86400000) / 3600000) + 'h'; }
   function arenaScreen() {
-    var s = st(), p = pet(), A = PP.Arena, note = s.arena.note === 'reset';
+    var s = st(), p = pet(), A = PP.Arena, note = s.arena.note === 'reset', cut = s.arena.note === 'interrupted';
     var items = D.ARENA.map(function (cup, i) {
       var status = A.status(s, i), rec = s.arena.cups[i] || A.blankRecord(i), n = cup.foes.length;
       var cur = A.runOf(s), run = cur && cur.cup === i ? cur.foe : 0, prog;
@@ -602,10 +645,11 @@
         disabled: status === 'locked', reason: cup.post ? 'Win all ' + D.ARENA_MAIN + ' main cups first' : 'Win the ' + (D.ARENA[i - 1] || {}).name + ' first',
         act: function () { push(arenaPreview(i)); } };
     });
-    if (note) { s.arena.note = null; App().save(); }   // the migration note shows once
+    if (note || cut) { s.arena.note = null; App().save(); }   // the migration / interrupted note shows once
     return { title: 'ARENA' + (s.arena.champion ? ' \u2605 CHAMPION' : ''), html: (p ? '<p>Your BP: <b>' + PP.Stats.bp(PP.Stats.battleStats(p)) + '</b> \u00b7 cups won <b>' + A.mainWon(s) + '/' + D.ARENA_MAIN + '</b></p>' : '') +
       '<p class="tip">Each cup: beat its foes in a row (a loss or a forfeit ends the run). \u2605 = cup won.</p>' +
-      (note ? '<p class="tip">Your old save had no per-cup record, so cup stars start fresh. Your open cups stay open - win a cup to earn its star.</p>' : ''), items: items };
+      (note ? '<p class="tip">Your old save had no per-cup record, so cup stars start fresh. Your open cups stay open - win a cup to earn its star.</p>' : '') +
+      (cut ? '<p class="tip">The app closed during a cup fight, so that cup run starts again (not counted as a loss).</p>' : ''), items: items };
   }
   /* The cup screen: its foes (beaten ones ticked) and the next fight. */
   function arenaPreview(rank) {
@@ -641,7 +685,7 @@
       return '<li class="' + (j === S.next ? 'nextfoe' : '') + '">' + mark + thumb(c.species, 'adult_' + c.form, 'idle', 12) +
         '<span><b>' + esc(c.name) + '</b>' + (j === S.next ? ' \u25c2 next' : '') + '<br>' + esc(cardLabel(c)) + ' \u00b7 BP ' + PP.Battle.fighter(c).bp + '</span></li>';
     }).join('') + '</ul>' : '';
-    var F = s.fcup || {}, bonusToday = F.day === PP.Shop.dayOf(G.now(s));
+    var F = s.fcup || {}, bonusToday = F.day != null && F.day >= PP.Shop.dayOf(G.now(s));
     return { title: 'FRIENDS CUP' + (F.wins ? ' \u2605' + F.wins : ''), html:
       (S.ready ? '<p class="pips">Run: ' + S.foes.map(function (c, j) { return j < S.next ? '\u25cf' : j === S.next ? '\u25c9' : '\u25cb'; }).join(' ') + (mine ? ' \u00b7 your BP ' + mine.bp : '') + '</p>' : '') + list +
       '<p class="tip">' + (S.ready ? 'Your newest ' + S.foes.length + ' friend pals, weakest first. A loss ends the run. Win the cup: +' + W.FCUP.bonus + ' coins' + (bonusToday ? ' (already won today - XP and battle coins still count)' : ' (once a day)') + '.'
@@ -671,8 +715,9 @@
   }
   function myCodeScreen() {
     var p = pet(), code = PP.Cards.encode(p, { mb: st().mail && st().mail.box });   // 2.4.0: + your gift mailbox, if set up
-    return { title: 'MY BATTLE CODE', html: '<p>Send this to a friend. It works offline: the whole battle card is inside the code, with a checksum.</p><textarea class="code" readonly rows="4" aria-label="Your battle code">' + esc(code) + '</textarea>',
+    return { title: 'MY BATTLE CODE', html: '<p>Send this to a friend, or let them scan the QR. It works offline: the whole battle card is inside the code, with a checksum.</p>' + PP.LobbyUI.qrHtml(code) + '<textarea class="code" readonly rows="4" aria-label="Your battle code">' + esc(code) + '</textarea>',
       items: [
+        { label: 'Show the QR big', sub: 'Full screen, for your friend’s camera', act: function () { PP.LobbyUI.showBig(code); } },   // 2.4.97
         { label: 'Copy code', act: function () { copyText(code); } },
         { label: 'Back', act: pop }
       ].concat(navigator.share ? [{ label: 'Share\u2026', act: function () { navigator.share({ title: 'PocketPal battle code', text: code }).catch(function () {}); } }] : []) };
@@ -690,6 +735,7 @@
   function addCodeScreen() {
     return { title: 'ADD FRIEND CODE', html: '<p>Paste a PocketPal battle code:</p><textarea id="codeIn" class="code" rows="4" placeholder="Battle code" aria-label="Friend code"></textarea>',
       items: [
+        PP.LobbyUI.scanItem(),   // 2.4.97
         { label: 'Add', act: function () {
           var v = (document.getElementById('codeIn') || {}).value || '';
           var r = G.addFriend(st(), v);
@@ -796,7 +842,7 @@
   }
   /* 1.9.0 hard mode: confirm with a clear warning before switching it on (new eggs only). */
   var HARD_TEXT = 'Hard mode is for experts. A hard-mode pal: dies after 12 awake hours starving or 24 hours sick, ' +
-    'runs away after 6 care mistakes in 24 hours, gets no first-day grace, and can NEVER be revived. ' +
+    'runs away after 4 care mistakes in 24 hours, gets no first-day grace, and can NEVER be revived. ' +
     'Its memory stays in your Album. In return it earns 25% more coins from play and +5 on daily goals. Only NEW eggs are affected.';
   function hardWarning() {
     return { title: 'HARD MODE?', html: '<p class="warn"><b>\u26a0 Warning</b></p><p>' + esc(HARD_TEXT) + '</p>', items: [
@@ -941,6 +987,7 @@
       { label: 'Tips', right: s.settings.hints !== false ? 'ON' : 'OFF', sub: 'Short hints for young pals', act: function () { s.settings.hints = s.settings.hints === false; App().save(); refresh(); } },
       { label: 'Show tips again', sub: 'Bring back every beginner tip', act: function () { PP.Hints.reset(s); s.settings.hints = true; App().save(); App().toast('Tips will show again'); refresh(); } },
       { label: 'Hard mode', right: s.settings.hardNext ? 'ON' : 'OFF', sub: 'For new eggs only. Harsh rules, no revives', act: toggleHard },
+      PP.LobbyUI.settingsItem(),   // 2.4.97 parent switch
       { label: 'Cloud save', right: s.settings.cloud ? 'ON' : 'OFF', sub: 'Encrypted copy on your worker (optional)', act: function () { push(cloudScreen); } },
       { label: 'Backup', sub: s.backup && s.backup.lastExport ? 'Last backup ' + tDate(s.backup.lastExport) : 'No backup yet: download one', act: function () { push(backupReminder); } },
       { label: 'Clock', right: s.settings.clock === '24' ? '24-hour' : '12-hour', sub: 'Show times as ' + (s.settings.clock === '24' ? '21:30' : '9:30 pm'),
@@ -973,6 +1020,7 @@
     var how = { push: 'Push from your worker', trigger: 'On this device (scheduled)', sync: 'On this device (background sync, coarse)', open: 'Only while the game is open', none: 'Not available here' }[m];
     var html = '<p class="next-alert" id="nextAlert"><b>Next alert:</b> ' + esc(nextAlertText()) + '</p>' +
       '<p class="tip">Delivery: ' + esc(how) + '</p>' +
+      '<p class="tip">Quiet hours: your pal\'s sleep hours. Nothing counts as a care mistake while it sleeps, so only Bedtime (lights) and Wake-up ring then.</p>' +
       '<ul class="away alert-limits">' + (PP.Net && PP.Net.limits ? PP.Net.limits() : []).map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
     var items = [{ label: 'Alerts', right: s.settings.alerts ? 'ON' : 'OFF', sub: 'Same as the bell on the shell',
       act: function () { if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(!s.settings.alerts); else App().toggleNotify(); refresh(); } }];
@@ -1142,7 +1190,10 @@
     return { title: 'HOW TO PLAY', html:
       '<p><b>A</b> picks an icon / next item, <b>B</b> chooses, <b>C</b> goes back. You can also tap the icons and menu items. Keys: A S D (or arrows, Enter, Esc).</p>' +
       '<p>Feed meals when hunger drops, play or snack for happiness, clean poop, give medicine when sick (teens/adults need 2 doses), and turn the lights off when your pal falls asleep.</p>' +
-      '<p>A call you ignore for 30 min is a <b>care mistake</b>. So are overfed snacks, leaving poop 2h, sickness 3h, or lights on 1h after bedtime.</p>' +
+      '<p><b>Care mistakes</b> (each one lowers the care score; Champion allows 2): a hungry or sad call left 30 min, poop left 2h, sickness left 3h, ' +
+      'lights on 1h after it falls asleep at bedtime, or a 4th snack within 3h. Each one that is still not answered counts again every 3h. On the first day every time is doubled.</p>' +
+      '<p><b>Never while it sleeps:</b> hunger and happiness do not drop, and the poop and sickness clocks stand still until it wakes. Waking it at night is not a mistake (it is grumpy, Happy -1), and naps have no penalty.</p>' +
+      '<p>The line under the screen shows the time left before a call counts, "Bedtime soon", "Bedtime: put your pal to bed" and "Sleeping until...". Tantrums are not mistakes, but ignoring one costs 8% discipline.</p>' +
       '<p>Tantrums: sometimes your pal calls for no reason. Scold during a tantrum for +25% discipline. Praise after training or a refused meal.</p>' +
       '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed. Child and teen pals can spar with pals of their own stage; their battle and training XP is saved and paid in when they grow up (at most up to level 4), but care alone decides the adult form.</p>' +
       '<p><b>Battles</b> are best of 3: first to 2 round wins. If both pals fall on the same turn the round is a draw; a level match ends with a SUDDEN DEATH round (both pals at 40% HP). Adults: arena cups, Quick battle (practice - no stakes, a little XP) and friends. Child and teen pals: Quick battle and the Junior Cup ladders (3 child or 4 teen foes in a row, a trophy for each clear).</p>' +
@@ -1222,7 +1273,7 @@
       } else if (out.fled) {   // 1.8.4 run / forfeit
         title = out.fled === 'escaped' ? 'GOT AWAY' : 'FORFEIT';
         h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), out.fled === 'escaped' ? 'idle' : 'sad', 30) + '</div><ul class="away">' +
-          (out.fled === 'escaped' ? '<li>' + esc(p.name) + ' ran away safely.</li>' : out.kind === 'arena' ? '<li>The ' + esc(out.cup) + ' run is over - it counts as a loss.</li><li>No injury.</li>' : '<li>You forfeited - it counts as a loss.</li>') +
+          (out.fled === 'escaped' ? '<li>' + esc(p.name) + ' ran away safely.</li>' + (out.cupReset ? '<li>The Junior Cup run starts again.</li>' : '') : out.kind === 'arena' ? '<li>The ' + esc(out.cup) + ' run is over - it counts as a loss.</li><li>No injury.</li>' : '<li>You forfeited - it counts as a loss.</li>') +
           '<li>No XP or coins. Half the battle energy came back (+' + Math.floor(D.RULES.costs.battle / 2) + ').</li></ul>';
       } else {
         h = (celebrate ? '<div class="cupclear" role="status">\u2605 ' + esc(celebrate) + ' \u2605</div>' : '') +
@@ -1235,6 +1286,7 @@
           '<li>Happy ' + (won ? '+1' : '-1') + ', weight -1g</li>' +
           (out.unlocked ? '<li>Unlocked: <b>' + esc(out.unlocked) + '</b></li>' : '') +
           (out.shells && out.shells.length ? '<li>New shell colour: <b>' + esc(out.shells.join(', ')) + '</b>!</li>' : '') +
+          (out.trait ? '<li class="new-trait">New trait: <b>' + esc(out.trait.name) + '</b> (' + esc(out.trait.short) + ')</li>' : '') +   // 2.4.97
           (out.coins ? '<li>+' + out.coins + ' coins' + (out.capped ? ' (daily battle coin cap reached)' : '') + '</li>' : out.capped ? '<li>Daily coin cap reached - more tomorrow</li>' : '') +
           (out.visitor ? '<li>You beat the visitor! +' + PP.Daily.VISITOR_BONUS + ' bonus coins</li>' : '') +
           (out.injured ? '<li>Got hurt and is now sick! Give medicine.</li>' : '') + '</ul>';

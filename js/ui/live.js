@@ -36,7 +36,7 @@
   function secs(ms) { return Math.max(0, Math.ceil(ms / 1000)); }
 
   /* ------------------------------------------------------------ rooms */
-  function create() {
+  function create(onRoom) {   // 2.4.97: onRoom(code) - the weekly lobby sends the new room to the player it accepted
     var p = G.active(st()), why = G.canBattle(p);
     if (why) { App().toast(why); return; }
     var code = PP.Cards.encode(p);
@@ -45,6 +45,7 @@
       L = { room: j.room, side: 'h', token: j.token, seed: j.seed, hostCode: code, guestCode: null, round: 0, state: 'lobby', at: Date.now() };
       UI().push(lobbyScreen);
       lobbyTick();
+      if (typeof onRoom === 'function') onRoom(j.room);
     }).catch(function (e) { App().toast('Live battle: ' + e.message); });
   }
   function join(room) {
@@ -220,7 +221,7 @@
       '<li>Pals only meet pals of the same stage: adults with adults, a child with a child, a teen with a teen.</li>' +
       '<li>No internet? Battle codes still work offline (adults).</li></ul>' + (on ? '' : '<p class="tip">Live battles need your Cloudflare worker (see DEPLOY.md).</p>'),
       items: [
-        { label: 'Create a room', sub: 'Get a 4-letter code for your friend', disabled: !on || !!why, reason: !on ? 'No worker configured' : why, act: create },
+        { label: 'Create a room', sub: 'Get a 4-letter code for your friend', disabled: !on || !!why, reason: !on ? 'No worker configured' : why, act: function () { create(); } },
         { label: 'Join a room', sub: 'Type your friend\'s 4-letter code', disabled: !on || !!why, reason: !on ? 'No worker configured' : why, act: function () { UI().push(joinScreen); } },
         { label: 'Back', act: function () { UI().pop(); } }
       ] };
@@ -252,7 +253,7 @@
       else {
         var how = { left: (s && s.oppName) + ' left', timeout: (s && s.oppName) + ' ran out of time', 'lost-time': 'You ran out of time', forfeit: 'You forfeited' }[B.ended] || '';
         h = '<p><b>' + (view.winner === 0 ? 'VICTORY!' : 'Defeat...') + '</b>' + (how ? ' \u00b7 ' + esc(how) : '') + '</p>' +
-          (out ? '<ul class="away"><li>' + (out.fled ? 'No XP or coins' : '+' + out.xp + ' XP' + (out.levels ? ' \u00b7 LEVEL UP' : '')) + '</li>' + (out.coins ? '<li>+' + out.coins + ' coins</li>' : '') + '</ul>' : '');
+          (out ? '<ul class="away"><li>' + (out.fled ? 'No XP or coins' : '+' + out.xp + ' XP' + (out.levels ? ' \u00b7 LEVEL UP' : '')) + '</li>' + (out.trait ? '<li>New trait: <b>' + esc(out.trait.name) + '</b></li>' : '') + (out.coins ? '<li>+' + out.coins + ' coins</li>' : '') + '</ul>' : '');
       }
       var waiting = L && L.state === 'rematch';
       var canRematch = L && !L.forfeited && B.ended !== 'left' && B.ended !== 'timeout' && B.ended !== 'lost-time';

@@ -16,16 +16,16 @@
  *    answer a navigation).
  *  - Install fetches with cache:'reload' (no stale HTTP-cached bytes), the code files must all
  *    arrive, the icons are best-effort so one changed/missing icon can't block an update. */
-var CACHE = 'pocketpal-v2.4.94';
+var CACHE = 'pocketpal-v2.4.97';
 var FILES = [
   './', 'index.html', 'manifest.json', 'css/style.css', 'fonts/pp-lcd.woff',
   'sprites/croc.png', 'sprites/lion.png', 'sprites/eagle.png', 'sprites/elephant.png', 'sprites/bear.png', 'sprites/wolf.png', 'sprites/fx.png', 'sprites/icons.png',
   'js/config.js', 'js/data/atlas.js', 'js/data/glyphs.js',
-  'js/core/util.js', 'js/core/data.js', 'js/core/time.js', 'js/core/sleep.js', 'js/core/pet.js', 'js/core/care.js', 'js/core/evolution.js', 'js/core/stats.js', 'js/core/skills.js',
+  'js/core/util.js', 'js/core/data.js', 'js/core/traits.js', 'js/core/qr.js', 'js/core/time.js', 'js/core/sleep.js', 'js/core/pet.js', 'js/core/care.js', 'js/core/evolution.js', 'js/core/stats.js', 'js/core/skills.js',
   'js/core/battle.js', 'js/core/breeding.js', 'js/core/cards.js', 'js/core/arena.js', 'js/core/collection.js', 'js/core/shop.js', 'js/core/daily.js', 'js/core/hints.js', 'js/core/behaviour.js', 'js/core/world.js',
   'js/core/save.js', 'js/core/game.js', 'js/core/cloud.js', 'js/core/reminders.js', 'js/core/live.js',
   'js/ui/font.js', 'js/ui/sprites.js', 'js/ui/audio.js', 'js/ui/shells.js', 'js/ui/worldart.js', 'js/ui/render.js', 'js/ui/battleview.js', 'js/ui/minigames.js', 'js/ui/menus.js', 'js/ui/world.js',
-  'js/ui/input.js', 'js/ui/testpanel.js', 'js/ui/admin.js', 'js/ui/net.js', 'js/ui/live.js', 'js/ui/cloudsync.js', 'js/ui/favicon.js', 'js/ui/main.js'
+  'js/ui/input.js', 'js/ui/testpanel.js', 'js/ui/admin.js', 'js/ui/net.js', 'js/ui/live.js', 'js/ui/lobby.js', 'js/ui/cloudsync.js', 'js/ui/favicon.js', 'js/ui/main.js'
 ];
 var ICONS = ['icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'badge-96.png'];
 var SLOW_MS = 4000;   // a hanging network (lie-fi) falls back to the cache after this long
@@ -132,17 +132,26 @@ function pickEntry(list, now) {        /* same rule as PP.Reminders.pick */
   });
   return best;
 }
-function notify(body, type) {
+function inQuiet(q, ms) {           /* 2.4.95: the pal's sleep hours (same rule as PP.Sleep.isNight) */
+  if (!q || !isFinite(q.bed) || !isFinite(q.wake)) return false;
+  var d = new Date(ms), m = d.getHours() * 60 + d.getMinutes();
+  return q.bed > q.wake ? (m >= q.bed || m < q.wake) : (m >= q.bed && m < q.wake);
+}
+var QUIET_TEXT = 'Your pal is asleep. Nothing counts against you while it sleeps - check in when you are up.';
+function notify(body, type, quiet) {
   var actions = [{ action: 'dismiss', title: 'Dismiss' }];
   if (type === 'poop') actions.unshift({ action: 'clean', title: 'Clean' });
   else if (type === 'hunger') actions.unshift({ action: 'meal', title: 'Feed' }, { action: 'snack', title: 'Snack' });
   else if (type === 'lights') actions.unshift({ action: 'lights', title: 'Lights off' });
   else if (type === 'medicine') actions.unshift({ action: 'medicine', title: 'Medicine' });
+  if (quiet) return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', silent: true, renotify: false });
   return self.registration.showNotification('PocketPal', { body: body, icon: 'icon-192.png', badge: 'badge-96.png', tag: 'pp-care', renotify: true, actions: actions, vibrate: [100, 50, 100] });
 }
 self.addEventListener('push', function (e) {
   e.waitUntil(readSched().then(function (s) {
     var hit = s && pickEntry(s.list, Date.now());
+    // 2.4.95: a push that matches no planned alert (the worker's 2-hour re-arm) in the pal's sleep hours: silent, honest words
+    if (!hit && s && inQuiet(s.quiet, Date.now())) return notify(QUIET_TEXT, null, true);
     return notify(hit && hit.text ? hit.text : GENERIC, hit && hit.type);
   }));
 });

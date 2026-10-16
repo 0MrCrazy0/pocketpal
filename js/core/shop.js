@@ -20,7 +20,7 @@
   function earn(state, n, t, capped) {
     var w = wallet(state), day = dayOf(t);
     // 1.9.1: a new cap only when the day goes UP (flipping the date back and forth reset it every time)
-    if (w.day == null || day > w.day) { w.day = day; w.earned = 0; }
+    if (U.newDay(w.day, day)) { w.day = day; w.earned = 0; }   // 2.4.96: (a clock once far ahead no longer locks the cap)
     var give = Math.max(0, Math.round(n));
     if (capped !== false) {
       // 1.9.0: a lucky coin day doubles play coins (and the cap); hard-mode pals earn +25 %
@@ -45,7 +45,7 @@
   /* Once per game day: login bonus (+streak) and a care bonus if no new mistakes. */
   function claimDaily(state, t) {
     var w = wallet(state), day = dayOf(t);
-    if (w.lastDaily != null && day <= w.lastDaily) return null;   // 1.9.0: setting the clock back never pays twice
+    if (w.lastDaily != null && !U.newDay(w.lastDaily, day)) return null;   // 1.9.0: setting the clock back never pays twice
     w.streak = w.lastDaily === day - 1 ? w.streak + 1 : 1;
     var p = PP.Game.active(state), mist = p ? p.totalMistakes || 0 : null, care = 0;
     if (p && !p.fate && p.stage !== 'egg' && w.mistakesAt && w.mistakesAt.id === p.id && w.mistakesAt.n === mist) care = E.careBonus;

@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 8;
+  var SCHEMA = 9;   // 2.4.97: battle traits, lobby seat, lobby parent switch
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -64,6 +64,13 @@
     7: function (st) {
       st = st || {};
       return PP.World.migrate(st);
+    },
+    /* 8 -> 9 (2.4.97): battle traits (none yet, the counters start now), no lobby seat, the lobby parent switch OFF. */
+    8: function (st) {
+      st = st || {};
+      (Array.isArray(st.slots) ? st.slots : []).forEach(function (p) { if (p && typeof p === 'object') { if (!Array.isArray(p.traits)) p.traits = []; if (!p.tstat || typeof p.tstat !== 'object') p.tstat = { lr: 0, rv: {} }; } });
+      st.lobby = null; st.settings = st.settings || {}; st.settings.lobby = false;
+      return st;
     },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
     3: function (st) {
@@ -142,7 +149,9 @@
     if (typeof p.id !== 'string' || !p.id) return null;
     var base = PP.Pet.createEgg({ species: p.species, seed: p.seed, now: U.num(p.createdAt, Date.now()) });
     var out = Object.assign(base, p);
-    delete out.cpu; delete out.jpow;   // 2.4.94: only computer ladder foes are stronger per rung - never a saved pal
+    delete out.cpu; delete out.jpow;
+    if (!(p.qpin && (p.qpin.k === 'adult' || p.qpin.k === 'junior') && Number.isFinite(p.qpin.c) && typeof p.qpin.st === 'string')) delete out.qpin;   // 2.4.96 quick-foe pin   // 2.4.94: only computer ladder foes are stronger per rung - never a saved pal
+    var tc = PP.Traits.cleanPal(p); out.traits = tc.traits; out.tstat = tc.tstat;   // 2.4.97 battle traits
     out.seed = (U.int(p.seed, base.seed) >>> 0) || 1;
     out.name = PP.Pet.cleanName(p.name) || base.name;
     out.sex = p.sex === 'F' ? 'F' : 'M';
@@ -170,6 +179,7 @@
         var n = p.need[k]; if (n && Number.isFinite(n.since) && Number.isFinite(n.next)) out.need[k] = { since: n.since, next: n.next };
       });
       if (Number.isFinite(p.need.lightsAt)) out.need.lightsAt = p.need.lightsAt;
+      if (p.need.missAt && typeof p.need.missAt === 'object') { out.need.missAt = {}; ['hunger', 'happy', 'poop', 'sick'].forEach(function (k) { if (Number.isFinite(p.need.missAt[k])) out.need.missAt[k] = p.need.missAt[k]; }); }   // 2.4.95
     }
     out.unhappyMin = U.int(p.unhappyMin, 0, 0, 1e6);
     if (p.trainDay && Number.isFinite(p.trainDay.d)) { out.trainDay = { d: U.int(p.trainDay.d, 0, 0), n: U.int(p.trainDay.n, 0, 0, 999) }; if (p.trainDay.q != null) out.trainDay.q = U.int(p.trainDay.q, 0, 0, 999); if (p.trainDay.g != null) out.trainDay.g = U.int(p.trainDay.g, 0, 0, 999); } else delete out.trainDay;   // 2.4.92: g = games today (XP anti-farm)
@@ -177,7 +187,7 @@
     if (Number.isFinite(p.jxp) && p.jxp > 0) out.jxp = U.int(p.jxp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.jxp;
     if (Number.isFinite(p.carriedXp)) out.carriedXp = U.int(p.carriedXp, 0, 0, PP.DATA.JUNIOR.bankCap); else delete out.carriedXp;
     if (p.jcup && typeof p.jcup === 'object' && PP.DATA.JUNIOR.stages.indexOf(p.jcup.stage) >= 0)   // 2.4.94: { stage, foe } = the ladder run
-      out.jcup = { stage: p.jcup.stage, foe: U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.ladders[p.jcup.stage].foes.length - 1) };
+      out.jcup = { stage: p.jcup.stage, foe: p.jcup.live ? 0 : U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.ladders[p.jcup.stage].foes.length - 1) };   // 2.4.96: closed mid-fight = the run starts again
     else delete out.jcup;
     if (p.praiseReady) out.praiseReady = true; else delete out.praiseReady;
     ['praiseAt', 'refuseAt', 'spoilAt'].forEach(function (k) { if (Number.isFinite(p[k])) out[k] = Math.round(p[k]); else delete out[k]; });
@@ -260,6 +270,7 @@
       notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
       hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
       alertTypes: PP.Reminders.clean(st.alertTypes),   // 1.9.7: per-type alert switches
+      lobby: st.lobby === true,   // 2.4.97: the weekly lobby's parent switch (off unless a grown-up turned it on)
       eventForce: ['off', 'halloween', 'christmas', 'easter'].indexOf(st.eventForce) >= 0 ? st.eventForce : null };   // 2.4.0 admin: test a seasonal event
     out.daily = PP.Daily.clean(s.daily);
     out.junior = cleanJunior(s.junior);   // 2.4.94: Junior ladder trophies + the daily junior coin cap
@@ -269,6 +280,9 @@
     out.backup = { lastExport: fin(bk.lastExport), since: fin(bk.since) || out.createdAt || null, snoozeUntil: fin(bk.snoozeUntil) };
     out.timeOffset = U.num(s.timeOffset, 0);
     out.lastSeenAt = U.num(s.lastSeenAt, now || Date.now());
+    var lb = s.lobby;   // 2.4.97: this week's lobby seat { id, token, handle, week } (the token is only ever sent to your worker)
+    out.lobby = lb && typeof lb === 'object' && /^[0-9a-f]{16}$/.test(lb.id) && /^[0-9a-f]{32}$/.test(lb.token) && typeof lb.handle === 'string' && Number.isInteger(lb.week)
+      ? { id: lb.id, token: lb.token, handle: lb.handle.replace(/[^A-Za-z0-9]/g, '').slice(0, 24), week: lb.week } : null;
     PP.World.cleanState(out, s);                      // 2.4.0: things, trips, mail, visits, events, family line
     return out;
   }

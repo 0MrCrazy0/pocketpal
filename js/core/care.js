@@ -224,10 +224,18 @@
     var grace = { hunger: R.callGraceMin * gm, happy: R.callGraceMin * gm, poop: R.poopGraceMin * gm, sick: R.sickGraceMin * gm, lights: R.lightsGraceMin * gm };
     var labels = { hunger: 'Left hungry', happy: 'Left unhappy', poop: 'Poop not cleaned', sick: 'Sickness untreated', lights: 'Lights left on at bedtime' };
     p.need = p.need || {};
+    var missAt = p.need.missAt || (p.need.missAt = {});
     for (var k in needs) {
+      // 2.4.95 fairness: while the pal sleeps (night or nap) the poop and sickness timers stand still and no new call
+      // starts - medicine needs it awake and nobody should have to get up at night to clean. They carry on when it wakes.
+      if (needs[k] && p.asleep && (k === 'poop' || k === 'sick')) { if (p.need[k]) p.need[k].next++; continue; }
       if (needs[k]) {
         if (!p.need[k]) {
-          p.need[k] = { since: p.clock, next: p.clock + grace[k] };
+          var nx = p.clock + grace[k];
+          // 2.4.95: a hunger / unhappy call that a nap interrupted does not restart at a fresh 30 min right after a
+          // miss (that counted the same neglect twice within the hour) - the next miss keeps the 3 h repeat gap
+          if (missAt[k] != null && p.clock - missAt[k] < R.neglectRepeatMin) nx = Math.max(nx, missAt[k] + R.neglectRepeatMin);
+          p.need[k] = { since: p.clock, next: nx };
           if (k !== 'poop') ev.push({ t: 'call', need: k });
         }
         if (p.clock >= p.need[k].next) {
@@ -237,11 +245,12 @@
             p.need[k].next = 1e15;
           } else {
             addMistake(p, labels[k], ctx, ev);
-            p.need[k].next = p.clock + R.neglectRepeatMin;
+            p.need[k].next = p.clock + R.neglectRepeatMin; missAt[k] = p.clock;
           }
         }
-      } else if (p.need[k]) {
-        p.need[k] = null;
+      } else {
+        if (p.need[k]) p.need[k] = null;
+        if (!p.asleep && missAt[k] != null) delete missAt[k];   // answered (not just asleep): a later call starts fresh
       }
     }
 
@@ -294,7 +303,7 @@
   /* 1.9.0 first-day grace: need windows are doubled for the first 24 h after hatching. */
   function firstDay(p) { return !p.hard && p.stage !== 'egg' && (p.ageMin || 0) < (R.firstDayGraceMin || 0); }
   /* 1.9.0 hard mode (opt-in, per pal). Losses are permanent. Returns true if the pal is lost. */
-  var HARD = { starveMin: 12 * 60, sickMin: 24 * 60, mistakes: 6 };
+  var HARD = { starveMin: 12 * 60, sickMin: 24 * 60, mistakes: 4 };   // 2.4.96: 6 -> 4 (misses are fair since 2.4.95: neglect peaks at 4-5 a day, 2-hourly care at 3)
   function hardRules(p, tMs, ev) {
     if (p.hunger <= 0 && !p.asleep) p.hardHungry = (p.hardHungry || 0) + 1; else if (p.hunger > 0) p.hardHungry = 0;
     if (p.sick) p.hardSick = (p.hardSick || 0) + 1; else p.hardSick = 0;
@@ -520,7 +529,7 @@
       if (success && full) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.discipline = Math.min(100, p.discipline + 5); deed(p); }
       msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +5%' : 'Nice try!';
       if (p.stage === 'adult') {
-        var xp = !full ? 1 : success ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3);
+        var xp = PP.Traits.trainXp(p, !full ? 1 : success ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3));   // 2.4.97 Humble
         var lv = PP.Stats.addXp(p, xp);
         msg += ' +' + xp + ' XP' + (lv ? ' LEVEL UP!' : '');
       }
@@ -535,7 +544,7 @@
         if (!p.trainDay || p.trainDay.d !== gday) p.trainDay = { d: gday, n: 0 };
         p.trainDay.g = (p.trainDay.g || 0) + 1;
         var gfull = p.trainDay.g <= R.trainDayFull;
-        var gxp = success && gfull ? Math.max(2, Math.ceil(D.LEVEL.trainXp(p.level) / 2)) : 1;
+        var gxp = PP.Traits.trainXp(p, success && gfull ? Math.max(2, Math.ceil(D.LEVEL.trainXp(p.level) / 2)) : 1);   // 2.4.97 Humble
         var glv = PP.Stats.addXp(p, gxp);
         msg += ' +' + gxp + ' XP' + (glv ? ' LEVEL UP!' : '');
       }
@@ -575,8 +584,35 @@
     return null;
   }
 
+
+  /* 2.4.95: the schedule / care-call status line under the screen. Pure. Returns { kind, text, left } or null.
+   * left = minutes before the call counts as a care mistake (the countdown). minOfDay = local minute of the day.
+   * fmt(minOfDay) formats a clock time (default 24 h HH:MM). */
+  var STATUS_TEXT = { hunger: 'Hungry! Feed it', happy: 'Sad! Play with it', sick: 'Sick! Give medicine', poop: 'Clean up the mess',
+    lights: 'Bedtime: lights off' };
+  function minText(m) { m = Math.max(1, Math.ceil(m)); return m < 60 ? m + ' min' : Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm'; }
+  function careStatus(p, minOfDay, fmt) {
+    if (!p || p.fate || p.stage === 'egg') return null;
+    fmt = fmt || function (m) { return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); };
+    var sch = PP.Sleep.of(p), best = null, n = realNeeds(p);
+    ['sick', 'hunger', 'happy', 'lights', 'poop'].forEach(function (k) {
+      var nd = p.need && p.need[k];
+      if (!n[k] || !nd || !(nd.next < 1e14)) return;
+      var left = nd.next - p.clock;
+      if (left > 0 && (!best || left < best.left)) best = { kind: k, left: left };
+    });
+    if (best) return { kind: best.kind, left: best.left, text: STATUS_TEXT[best.kind] + ' \u00b7 ' + minText(best.left) + ' left' };
+    if (p.fake && !p.asleep) { var tl = p.fake.until - p.clock; return { kind: 'tantrum', left: tl, text: 'Tantrum! Scold it \u00b7 ' + minText(tl) + ' left' }; }
+    if (p.asleep && p.sleepKind === 'night') return { kind: 'sleeping', text: 'Sleeping until ' + fmt(sch.wake) };
+    if (p.asleep) return { kind: 'nap', text: 'Napping \u00b7 lights on wakes it' };
+    if (minOfDay != null && PP.Sleep.isNight(minOfDay, sch)) return { kind: 'bedtime', text: 'Bedtime: put your pal to bed' };
+    if (minOfDay != null && PP.Sleep.until(minOfDay, sch.bed) <= BEDTIME_SOON_MIN) return { kind: 'bedsoon', left: PP.Sleep.until(minOfDay, sch.bed), text: 'Bedtime soon \u00b7 ' + fmt(sch.bed) };
+    return { kind: 'awake', text: 'Awake: play time' };
+  }
+  var BEDTIME_SOON_MIN = 15;
+
   PP.Care = { SLEEP_MSG: SLEEP_MSG, nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
-    tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
+    careStatus: careStatus, minText: minText, BEDTIME_SOON_MIN: BEDTIME_SOON_MIN, tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
     feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights, nightReport: nightReport, outOfBox: outOfBox,
     scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, moodPose: moodPose, isTired: isTired,
     baseWeight: baseWeight, isOverweight: isOverweight, isUnderweight: isUnderweight, canAct: canAct,

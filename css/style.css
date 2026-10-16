@@ -36,6 +36,12 @@ button { font: inherit; }
 .screen-side, .control-side { width: 100%; }
 .lcd-bezel { width: 100%; padding: 7px; border-radius: 12px; background: #1a1a1a; box-shadow: inset 0 0 0 2px #333, inset 0 0 12px #000; }
 .lcd { position: relative; width: 100%; aspect-ratio: 216 / 160; border-radius: 5px; background: var(--lcd); overflow: hidden; }
+/* 2.4.95: the schedule / care-call status line under the LCD (always one line, the same height when empty) */
+.care-status { height: 15px; margin-top: 5px; line-height: 15px; font: 11px/15px 'PocketPal LCD', 'Courier New', ui-monospace, monospace; font-synthesis: none;
+  color: var(--lcd); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .02em; }
+.care-status.cs-count { color: #ffd166; }
+.care-status.cs-sleeping, .care-status.cs-nap { color: #8fb3ff; }
+.care-status.cs-bedtime, .care-status.cs-bedsoon { color: #c9b6ff; }
 .lcd::after { /* faint LCD pixel grid */
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
   background: repeating-linear-gradient(0deg, rgba(15,56,15,.045) 0 1px, transparent 1px 2px), repeating-linear-gradient(90deg, rgba(15,56,15,.045) 0 1px, transparent 1px 2px);   /* 1.9.4: finer grid for the 80 px art */
@@ -343,3 +349,18 @@ body.finish-gilded .device { background:
 .mem li .mk { flex: none; width: calc(var(--u) * 6); color: #f0d060; }
 .mem li small { color: var(--lcd-lite); margin-left: auto; }
 .fam-h { font-size: 1em; margin: calc(var(--u) * 2) 0 calc(var(--u) * 1); color: #f0d060; }
+/* 2.4.97 friend QR + scanner */
+.qr-box { display: flex; justify-content: center; margin: 6px 0; }
+.qr-box .qr { background: #fff; padding: 2px; border-radius: 4px; width: 112px; height: 112px; }
+.qr-full { position: fixed; inset: 0; z-index: 9999; background: #fff; color: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; cursor: pointer; }
+.qr-full .qr { width: min(92vw, 78vh); height: min(92vw, 78vh); }
+.qr-full p { font: 15px/1.4 system-ui, sans-serif; text-align: center; max-width: 30em; margin: 12px 0 0; }
+.qr-video { display: block; width: 100%; max-height: 40vh; background: #000; border-radius: 6px; object-fit: cover; }
+/* 2.4.97 leaning meter + traits */
+.lean-now { font-size: 1.15em; margin: 4px 0; }
+.lean tr.lean-on td:first-child, .lean-forms li.lean-on { font-weight: bold; }
+.lean-forms, .traits { margin: 4px 0; padding-left: 1.1em; font-size: .92em; }
+.lean-forms li, .traits li { margin: 2px 0; }
+.traits li.dim, .lean-forms li.dim { opacity: .65; }
+.traits .inh { font-size: .85em; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; }
+.tr-h { margin: 6px 0 0; font-weight: bold; }

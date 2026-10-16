@@ -77,13 +77,17 @@
    * per-cup record says so - an old rank number alone never awards a star. */
   function clean(a, proven) {
     a = a && typeof a === 'object' ? a : {};
-    var out = { rank: U.int(a.rank, 0, 0, D.ARENA_MAIN - 1), attempt: U.int(a.attempt, 0, 0), champion: false, cups: [], run: null, note: a.note === 'reset' ? 'reset' : null };
+    var out = { rank: U.int(a.rank, 0, 0, D.ARENA_MAIN - 1), attempt: U.int(a.attempt, 0, 0), champion: false, cups: [], run: null, note: a.note === 'reset' || a.note === 'interrupted' ? a.note : null };
     for (var i = 0; i < D.ARENA.length; i++) out.cups.push(cleanRecord(Array.isArray(a.cups) ? a.cups[i] : (proven && proven[i] ? { won: true, beat: cup(i).foes.map(function () { return true; }) } : null), i));
     // a won cup always opens the next one
     for (var j = 0; j < D.ARENA_MAIN; j++) if (out.cups[j].won) out.rank = Math.max(out.rank, Math.min(j + 1, D.ARENA_MAIN - 1));
     out.champion = mainWon({ arena: out }) === D.ARENA_MAIN;
     if (a.run && typeof a.run === 'object') {
       var rc = U.int(a.run.cup, -1, -1, D.ARENA.length - 1), rf = U.int(a.run.foe, 0, 0);
+      // 2.4.96: a run saved with a fight still on (live) means the app was closed mid-fight. Before,
+      // the run carried on, so closing the app when losing gave a free retry. Now it ends the run
+      // like giving up, but it is not counted as a loss (the app may have been closed by the phone).
+      if (a.run.live) { out.note = out.note || 'interrupted'; rf = 0; }
       if (rc >= 0 && rf > 0 && rf < foeCount(rc) && status({ arena: out }, rc) !== 'locked') out.run = { cup: rc, foe: rf, pal: typeof a.run.pal === 'string' ? a.run.pal.slice(0, 40) : null };
     }
     return out;

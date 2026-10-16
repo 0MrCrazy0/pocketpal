@@ -62,6 +62,7 @@
       asleep: false, sleepKind: null, lights: true,
       sched: null, schedAt: null, dayMin: null, holdTo: null, stepAt: null, night: null,                 // own sleep schedule {bed, wake} (minutes after midnight); null = stage default
       acc: { hunger: 0, happy: 0, poop: 0 },
+      traits: [], tstat: { lr: 0, rv: {} },   // 2.4.97 battle traits
       need: {}, fake: null, snacks: [],
       mistakes: 0, totalMistakes: 0, mistakeLog: [], mistakeAt: [],
       evo: { moodSum: 0, moodN: 0, trainings: 0, streak: 0, best: 0 },   // 1.9.7: + training streak (secret forms)

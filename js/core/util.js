@@ -61,6 +61,11 @@
 
   var MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
-  PP.util = { clamp: clamp, num: num, int: int, hash: hash, makeRng: makeRng, roll: roll, uid: uid, deepCopy: deepCopy, MIN: MIN, HOUR: HOUR, DAY: DAY };
+  /* 2.4.96: daily (or weekly) limits. A stored day/week counts as "still today" when it is today or a little ahead: a clock
+   * set back must not reopen today's limit, but a clock that was once far in the future (a wrong date, then corrected)
+   * must not lock the limit for years either. newDay = true when the count should start again. */
+  var AHEAD_MAX = 14;
+  function newDay(stored, day, max) { return stored == null || !isFinite(stored) || day > stored || stored - day > (max == null ? AHEAD_MAX : max); }
+  PP.util = { newDay: newDay, AHEAD_MAX: AHEAD_MAX, clamp: clamp, num: num, int: int, hash: hash, makeRng: makeRng, roll: roll, uid: uid, deepCopy: deepCopy, MIN: MIN, HOUR: HOUR, DAY: DAY };
   if (typeof module !== 'undefined' && module.exports) module.exports = PP;
 })(typeof window !== 'undefined' ? window : globalThis);

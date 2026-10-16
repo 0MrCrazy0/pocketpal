@@ -29,13 +29,19 @@
       name: card.name || 'Pal', species: card.species, form: card.form || 'good', level: card.level || 1, sex: card.sex || 'M', stage: card.stage || 'adult',
       maxHp: s.hp, hp: s.hp, atk: s.atk, def: s.def, spd: s.spd, bp: PP.Stats.bp(s), scale: PP.Stats.isJunior(card) ? D_JS(card) : PP.Stats.scale(card.form, card.level),
       moves: PP.Skills.moveList(card.species, PP.Stats.isJunior(card) ? [] : card.skills), cds: {}, used: {}, passives: s.passives,
-      buffs: [], stunned: false, stunGuard: 0, bleed: 0, evade: 0, evadeTurns: 0, skip: false
+      buffs: [], stunned: false, stunGuard: 0, bleed: 0, evade: 0, evadeTurns: 0, skip: false,
+      // 2.4.97 battle traits (adults; from the pal or its battle code, so both games of a live room agree)
+      lowHpDodge: !PP.Stats.isJunior(card) && PP.Traits ? PP.Traits.lowHpDodge(card) : 0, rivalVs: !PP.Stats.isJunior(card) && PP.Traits ? PP.Traits.rivalVs(card) : null, rivalDmg: 0
     };
   }
   function create(cardA, cardB, seed, opts) {
+    var f = [fighter(cardA, opts && opts.a), fighter(cardB, opts && opts.b)];
+    // 2.4.97 Rival Spirit: extra damage only against the one pal it was earned against
+    if (f[0].rivalVs && cardB && f[0].rivalVs === cardB.id) f[0].rivalDmg = PP.Traits.DEFS.rival.rivalDmg;
+    if (f[1].rivalVs && cardA && f[1].rivalVs === cardA.id) f[1].rivalDmg = PP.Traits.DEFS.rival.rivalDmg;
     return {
       seed: seed >>> 0, rng: (seed >>> 0) || 1, turn: 0, over: false, winner: null,
-      f: [fighter(cardA, opts && opts.a), fighter(cardB, opts && opts.b)]
+      f: f
     };
   }
   /* Stat multiplier from active buffs / debuffs (1.8.0: ATK and DEF changes act directly on
@@ -80,7 +86,7 @@
       var su = eff(u, 'spd'), st = eff(t, 'spd');
       var spdDodge = st > su ? Math.min(SPD_DODGE_CAP, (st - su) / st * SPD_DODGE) : 0;
       var spdCrit = su > st ? Math.min(SPD_CRIT_CAP, (su - st) / su * SPD_CRIT) : 0;
-      var acc = m.acc + (u.passives.accAdd || 0) - ((t.evadeTurns > 0 ? t.evade : 0) * 100 + (t.passives.dodgeAdd || 0) + spdDodge);
+      var acc = m.acc + (u.passives.accAdd || 0) - ((t.evadeTurns > 0 ? t.evade : 0) * 100 + (t.passives.dodgeAdd || 0) + spdDodge + (t.lowHpDodge && t.hp < t.maxHp * 0.25 ? t.lowHpDodge : 0));   // 2.4.97 Comeback Kid
       if (rng() * 100 >= acc) { ev.push({ t: 'miss', who: ui }); return; }
       var hits = m.hits ? m.hits[0] + Math.floor(rng() * (m.hits[1] - m.hits[0] + 1)) : 1;
       for (var h = 0; h < hits && t.hp > 0; h++) {
@@ -88,6 +94,7 @@
         var crit = m.crit ? true : rng() * 100 < BASE_CRIT + (u.passives.critAdd || 0) + spdCrit;
         var dmg = m.power * DMG_K * u.scale * A / (A + Df) * dmgMult(u, t) * (0.9 + 0.1 * rng()) * (crit ? 1.5 : 1);
         if (u.passives.fasterDmg && eff(u, 'spd') > eff(t, 'spd')) dmg *= 1 + u.passives.fasterDmg / 100;
+        if (u.rivalDmg) dmg *= 1 + u.rivalDmg / 100;   // 2.4.97 Rival Spirit
         if (t.passives.dmgRed) dmg *= 1 - t.passives.dmgRed / 100;
         if (t.passives.lowHpGuard && t.hp < t.maxHp * 0.5) dmg *= 1 - t.passives.lowHpGuard / 100;
         dmg = Math.max(1, Math.round(dmg));

@@ -40,7 +40,7 @@
     return { id: p.id, name: p.name, species: p.species, sex: p.sex, form: p.form, level: p.level,
       genes: { hp: p.genes.hp, atk: p.genes.atk, def: p.genes.def, spd: p.genes.spd },
       skills: (p.skills || []).slice(), innate: (p.innate || []).slice(), gen: p.gen || 1, stage: 'adult',
-      boost: PP.Shop ? PP.Shop.boosts(p) : undefined };
+      boost: PP.Shop ? PP.Shop.boosts(p) : undefined, traits: PP.Traits ? PP.Traits.ids(p) : [] };
   }
   /* extra.mb (2.4.0): your gift mailbox id, so friends can send you gifts. Older games ignore the field. */
   function encode(p, extra) {
@@ -55,6 +55,7 @@
       g: [c.genes.hp, c.genes.atk, c.genes.def, c.genes.spd],
       k: c.skills.map(function (id) { return tree.indexOf(id); }), in: c.innate.map(function (id) { return tree.indexOf(id); }), gen: c.gen };
     if (c.boost && PP.Shop.boostTotal(c)) payload.b = [c.boost.hp, c.boost.atk, c.boost.def, c.boost.spd];   // Pal Store boosts (optional, capped)
+    if (c.traits && c.traits.length) payload.t = c.traits.slice(0, PP.Traits.MAX);   // 2.4.97 battle traits (optional; older games ignore it)
     if (extra && typeof extra.mb === 'string' && /^[0-9a-f]{16}$/.test(extra.mb)) payload.mb = extra.mb;
     var json = JSON.stringify(payload);
     return 'PP2-' + b64enc(json) + '-' + checksum(json);
@@ -72,6 +73,7 @@
     if (!PP.Skills.validSet(c.species, c.level, c.skills, c.innate)) return 'Impossible skill set';
     if (!(Number.isInteger(c.gen) && c.gen >= 1 && c.gen <= 999)) return 'Bad generation';
     if (typeof c.id !== 'string' || !/^[a-z0-9]{4,16}$/.test(c.id)) return 'Bad id';
+    if (c.traits != null && (!PP.Traits || !PP.Traits.cleanIds(c.traits))) return 'Impossible traits';   // 2.4.97
     if (c.boost != null) {
       var b = c.boost, cb = PP.Shop.cleanBoost(b);
       for (var j = 0; j < gk.length; j++) if (b[gk[j]] !== cb[gk[j]]) return 'Boosts over the Pal Store cap';
@@ -112,6 +114,7 @@
       if (!Array.isArray(p.b) || p.b.length !== 4) return fail('Bad boosts');
       card.boost = { hp: p.b[0], atk: p.b[1], def: p.b[2], spd: p.b[3] };
     }
+    if (p.t != null) { var tr = PP.Traits.cleanIds(p.t); if (!tr) return fail('Impossible traits'); if (tr.length) card.traits = tr; }   // 2.4.97
     if (card.skills && card.skills.some(function (s) { return !s; })) return fail('Impossible skill set');
     if (card.innate.some(function (s) { return !s; })) return fail('Impossible skill set');
     var err = validateCard(card);
