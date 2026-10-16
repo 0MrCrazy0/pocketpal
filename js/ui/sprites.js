@@ -71,5 +71,6 @@
     if (!p) return 'egg';
     return p.stage === 'adult' ? 'adult_' + (p.form || 'good') : p.stage;
   }
-  PP.Sprites = { shownPose: shownPose, frameIndex: frameIndex, load: load, ready: ready, draw: draw, drawFx: drawFx, cssU: cssU, drawIcon: drawIcon, loadIcons: loadIcons, stageKeyOf: stageKeyOf };
+  PP.Sprites = { shownPose: shownPose, frameIndex: frameIndex, load: load, ready: ready, draw: draw, drawFx: drawFx, cssU: cssU, drawIcon: drawIcon, loadIcons: loadIcons, stageKeyOf: stageKeyOf,
+    hatCss: function (species, key, pose, hat, n) { return PP.WorldArt ? PP.WorldArt.hatCss(species, key, pose, hat, n) : ''; } };   // 2.5.0
 })(typeof window !== 'undefined' ? window : globalThis);

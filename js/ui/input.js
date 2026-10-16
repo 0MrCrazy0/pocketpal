@@ -34,6 +34,10 @@
       var r = cv.getBoundingClientRect();
       if (PP.App) PP.App.lcdTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
     });
+    cv.addEventListener('pointermove', function (e) {   // 2.5.0: the dotted frame follows your finger while placing a thing
+      if (!PP.App || !PP.App.placing) return;
+      var r = cv.getBoundingClientRect(); PP.App.lcdMove((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+    });
     var KEYS = { a: 'A', ArrowRight: 'A', ArrowDown: 'A', s: 'B', Enter: 'B', ' ': 'B', d: 'C', Escape: 'C', Backspace: 'C', ArrowLeft: 'PREV', ArrowUp: 'PREV' };
     document.addEventListener('keydown', function (e) {
       var t = e.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');

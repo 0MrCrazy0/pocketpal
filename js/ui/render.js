@@ -161,10 +161,17 @@
     if (w.tx > maxX) w.tx = maxX;
     if (Math.abs(w.x - w.tx) < 0.5) {
       // arrived: do something (stand, look around, sit, yawn, scratch, mope, dance), then maybe another thing
-      if (!w.arrived) { w.arrived = true; w.act = PP.Behave.pickIdle(p, Math.random(), Math.random()); w.act.t0 = t; w.until = t + w.act.dur; }
+      if (!w.arrived) {
+        w.arrived = true;
+        if (w.goal && app.arriveGoal && app.arriveGoal(w, p, t)) { w.goal = null; return false; }   // 2.5.0: a toy to play with, the bench, the swing
+        w.goal = null; w.act = PP.Behave.pickIdle(p, Math.random(), Math.random()); w.act.t0 = t; w.until = t + w.act.dur;
+      }
       if (t > w.until) {
         if (Math.random() < 0.35) { w.act = PP.Behave.pickIdle(p, Math.random(), Math.random()); w.act.t0 = t; w.until = t + w.act.dur; }
-        else { w.tx = 4 + Math.random() * Math.max(1, maxX - 4); w.arrived = false; w.act = null; }
+        else {
+          var goal = app.gardenGoal ? app.gardenGoal(p, t, maxX) : null;   // 2.5.0: now and then, a placed toy / the bench / the swing
+          w.tx = goal ? goal.tx : 4 + Math.random() * Math.max(1, maxX - 4); w.goal = goal; w.arrived = false; w.act = null;
+        }
       }
       return false;
     }
@@ -191,7 +198,7 @@
       // scolded: flinch, then droop with a tear
       if (a.kind === 'scold') return el < 320 ? ['surprised', 1] : ['sad', 1 + Math.floor((el - 320) / 380) % 3];
       if (a.kind === 'sad') return el < 260 ? ['hurt', 1] : ['sad', Math.floor(el / 380)];
-      if (a.kind === 'happy') return ['happy', Math.floor(el / 250)];
+      if (a.kind === 'happy' || a.kind === 'toyplay') return ['happy', Math.floor(el / 250)];
       if (a.kind === 'sick') return ['sick', Math.floor(el / 300)];
       // 1.9.1 good morning: still sleepy, a big yawn, then a happy stretch
       // 2.0.0: ... and finally turns to say hello (front view, smiling)
@@ -411,8 +418,12 @@
     floorStrip(ctx, info.phase === 'night');
     // 2.4.0: the seasonal touches (event on) and the room's toy + decoration, behind the pal, poop and weather
     if (PP.WorldArt && PP.World) {
-      PP.WorldArt.drawEvent(ctx, PP.World.eventNow(st, PP.Game.now(st)), info.phase, tt, still);
-      PP.WorldArt.drawRoom(ctx, PP.World.shown(st, PP.Game.active(st)), info.phase === 'night', tt);
+      PP.WorldArt.drawEvent(ctx, PP.World.garden(st, PP.Game.now(st)), info.phase, tt, still);   // 2.5.0: the event, else the season
+      var A2 = PP.App, an = A2 && A2.anim, wob = an && an.kind === 'toyplay' ? {} : null;
+      if (wob) wob[an.id] = Math.min(1, (performance.now() - an.t0) / an.dur);
+      var gh = A2 && A2.placing ? { id: A2.placing.id, x: PP.World.snapX(st, A2.placing.id, A2.placing.x) } : null;
+      if (gh && gh.x == null) gh.x = A2.placing.x;
+      PP.WorldArt.drawRoom(ctx, PP.World.shown(st, PP.Game.active(st)), info.phase === 'night', tt, wob, gh);   // 2.5.0: every placed thing + the one being placed
     }
     if (w === 'wind' && !still) {
       ctx.fillStyle = C.dark;
@@ -547,10 +558,15 @@
     else if (react === 'hop') { y -= Math.round(5 * Math.abs(Math.sin((t % 1200) / 1200 * Math.PI * 2))); pose = 'happy'; frame = Math.floor(t / 250); }
     app.reaction = react;
     if (app.anim && app.anim.kind === 'eat') flip = eatFacing(p.species, S.stageKeyOf(p), px, flip, p.poop);   // 2.3.21: room for the food
+    // 2.5.0: playing with a toy (hops beside it, a note pops up); sitting on the bench / swinging on the swing
+    var toyK = app.anim && app.anim.kind === 'toyplay' ? Math.min(1, (t - app.anim.t0) / app.anim.dur) : null;
+    if (toyK != null && !reducedMotion()) y -= Math.round(5 * Math.abs(Math.sin(toyK * Math.PI * 4)));
+    if (!moving && w.act && w.act.seat) { y -= 5; if (w.act.seat === 'swing' && !reducedMotion()) px += Math.round(Math.sin((t - w.act.t0) / 320) * 3); }
     S.draw(ctx, p.species, S.stageKeyOf(p), pose, frame, px, y, PET, flip);
-    // 2.4.0: the pal's hat, on the head-top anchor of this very frame (off while it sleeps)
+    // 2.4.0: the pal's hat, on the head-top anchor of this very frame (2.5.0: every pose, sleep included)
     if (p.hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
+    if (toyK != null && toyK > 0.15 && toyK < 0.9) S.drawFx(ctx, 'note', px + (flip ? 4 : PS - 20), y + 6 - Math.round(toyK * 14), 1);
 
     // poop pile (bottom right)
     for (var i = 0; i < p.poop; i++) {
@@ -687,6 +703,7 @@
   }
 
   /* ------------------------------------------------------------ cut-scenes */
+  function cutHat(ctx, c, key, pose, frame, x, y) { if (c.hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, c.hat, c.species, key, pose, frame, x, y, false, false); }
   function drawCut(ctx, app, t) {
     var c = app.cut, k = t - c.t0, cx = (W - PS) / 2, y = GROUND - PS - 6;
     clear(ctx);
@@ -695,6 +712,7 @@
       if (k < swapAt) {
         var period = Math.max(50, 420 - k * 0.14), showNew = Math.floor(k / period) % 2 === 1;
         S.draw(ctx, c.species, showNew ? c.toKey : c.fromKey, 'idle', 0, cx, y, PET);
+        cutHat(ctx, c, showNew ? c.toKey : c.fromKey, 'idle', 0, cx, y);   // 2.5.0: the hat stays on (cut-scenes too)
         F.draw(ctx, c.secret && k > 1400 ? '?!?!' : 'WHAT?!', W / 2, 16, C.ink, 2, 'center');
         if (c.secret && k > 1400) {                         // 1.9.7 secret form: the screen pulses dark before the reveal
           ctx.save(); ctx.globalAlpha = 0.18 + 0.12 * Math.sin(k / 90); ctx.fillStyle = C.dark; ctx.fillRect(0, 0, W, H); ctx.restore();
@@ -716,6 +734,7 @@
         }
         var kk = k - swapAt;   // reveal: jump for joy, then show off the species habit
         S.draw(ctx, c.species, c.toKey, kk < 1200 ? 'happy' : 'quirk', kk < 1200 ? Math.floor(k / 250) : Math.floor((kk - 1200) / 300), cx, y, PET);
+        cutHat(ctx, c, c.toKey, kk < 1200 ? 'happy' : 'quirk', kk < 1200 ? Math.floor(k / 250) : Math.floor((kk - 1200) / 300), cx, y);   // the new form wears it after the flash
         for (var j = 0; j < 8; j++) {
           var a2 = j * Math.PI / 4, r2 = 30 + (k - swapAt) / 25;
           if (r2 < 130) S.drawFx(ctx, j % 2 ? 'star' : 'spark', W / 2 - 8 + Math.cos(a2) * r2, 96 + Math.sin(a2) * r2 * 0.6, 1);
@@ -732,6 +751,7 @@
       } else if (k < 1760) { clear(ctx, C.lite); }
       else {
         S.draw(ctx, c.species, 'baby', 'happy', Math.floor(k / 250), cx, y + 6, PET);
+        cutHat(ctx, c, 'baby', 'happy', Math.floor(k / 250), cx, y + 6);   // an heir egg's Family Ribbon
         F.draw(ctx, 'HATCHED!', W / 2, 10, C.ink, 2, 'center');
         F.draw(ctx, c.name.toUpperCase() + ' THE ' + PP.DATA.NAMES[c.species].baby.toUpperCase(), W / 2, L.bottomText, C.dark, 1, 'center');
       }
@@ -740,7 +760,7 @@
     } else if (c.kind === 'visit' && PP.WorldArt) {
       PP.WorldArt.drawVisit(ctx, c, t, app);
     } else if (c.kind === 'die') {
-      if (k < 1500) S.draw(ctx, c.species, c.key, 'faint', Math.floor(k / 400), cx, y + 6, PET);
+      if (k < 1500) { S.draw(ctx, c.species, c.key, 'faint', Math.floor(k / 400), cx, y + 6, PET); cutHat(ctx, c, c.key, 'faint', Math.floor(k / 400), cx, y + 6); }
       else S.drawFx(ctx, 'tomb', W / 2 - 24, 64, 3);
       F.draw(ctx, c.title, W / 2, 16, C.ink, 1, 'center');
     }

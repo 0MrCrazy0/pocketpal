@@ -15,7 +15,8 @@
   function thingIcon(id, dim) { return '<img class="thing-ic' + (dim ? ' sil' : '') + '" alt="" src="' + PP.WorldArt.thumbUrl(id, 3) + '">'; }
   function where(id) {
     var t = W.thing(id);
-    if (t.src === 'shop') return 'Pal Store, ' + t.price + 'c';
+    if (t.src === 'shop') return 'Pal Store, ' + t.price + 'c' + (t.birthday ? ' (or free on a pal\u2019s 1st birthday)' : '');
+    if (t.src === 'season') return W.SEASONS[t.season].name + ' gift (free once each ' + t.season + ')';
     if (t.src === 'trip') return (t.rare ? 'Rare find on a trip to the ' : 'Find it on a trip to the ') + W.PLACES[t.place].name;
     if (t.src === 'event') return W.EVENTS[t.event].name + ' event (limited)';
     return 'Passed on by a retiring pal';
@@ -28,7 +29,7 @@
       var P = W.PLACES[k], why = W.canTrip(s, p, k, t);
       var finds = Object.keys(W.THINGS).filter(function (id) { return W.THINGS[id].src === 'trip' && W.THINGS[id].place === k; });
       var got = finds.filter(function (id) { return W.owns(s, id); }).length;
-      return { icon: thingIcon(finds[0], !W.owns(s, finds[0])), label: P.name, sub: P.blurb + ' Found ' + got + '/' + finds.length + '.', right: P.energy + 'E',
+      return { icon: thingIcon(finds[0], !W.owns(s, finds[0])), label: P.name, sub: P.blurb + ' ' + P.name + ': found ' + got + '/' + finds.length + '.', right: P.energy + 'E',
         disabled: !!why, reason: why, act: function () { go(k); } };
     });
     items.push({ label: 'Back', act: K().pop });
@@ -66,26 +67,44 @@
     tab = ((tab | 0) + TABS.length) % TABS.length;
     return function () {
       var s = st(), p = pet(), kind = TABS[tab][0], sh = W.shown(s, p);
-      var ids = Object.keys(W.THINGS).filter(function (id) { return W.THINGS[id].kind === kind && (W.THINGS[id].src !== 'heir' || W.owns(s, id)); });
-      var got = ids.filter(function (id) { return W.owns(s, id); }).length;
+      var ids = Object.keys(W.THINGS).filter(function (id) { return W.THINGS[id].kind === kind; });   // 2.5.0: all of them (missing = grey + where to get it)
+      var cn = W.counts(s);
       var items = ids.map(function (id) {
-        var T = W.THINGS[id], own = W.owns(s, id), on = kind === 'hat' ? !!(p && p.hat === id) : s.things[kind] === id;
-        return { icon: thingIcon(id, !own), label: own ? T.name : T.name + ' (not yet)', sub: own ? (on ? (kind === 'hat' ? 'Wearing it - tap to take off' : 'Out - tap to put away') : (kind === 'hat' ? 'Tap to wear' : 'Tap to put out')) : where(id),
-          right: on ? '\u2714' : '', disabled: !own, reason: own ? null : where(id),
+        var T = W.THINGS[id], own = W.owns(s, id), on = kind === 'hat' ? !!(p && p.hat === id) : W.isPlaced(s, id);
+        return { icon: thingIcon(id, !own), label: own ? T.name : T.name + ' (not yet)', sub: own ? (on ? (kind === 'hat' ? 'Wearing it - tap to take off' : 'In the garden - move or put away') : (kind === 'hat' ? 'Tap to wear' : 'Tap to place in the garden')) : where(id),
+          right: on ? '\u2714' : '', disabled: !own, reason: own ? null : where(id), cls: own ? '' : 'missing',
           act: function () {
             var s2 = st(), p2 = pet();
-            if (kind === 'hat' && !p2) { PP.Audio.play('no'); toast('No pal to wear it'); return; }
-            var on2 = kind === 'hat' ? !!(p2 && p2.hat === id) : s2.things[kind] === id;
-            var r = on2 ? W.unequip(s2, p2, kind) : W.equip(s2, p2, id);
+            if (kind !== 'hat') { K().push(placeMenu(id)); return; }   // 2.5.0: place / move / put away
+            if (!p2) { PP.Audio.play('no'); toast('No pal to wear it'); return; }
+            var r = p2.hat === id ? W.unequip(s2, p2, 'hat') : W.equip(s2, p2, id);
             PP.Audio.play(r.ok ? 'ok' : 'no'); toast(r.msg); if (r.ok) App().save(); K().refresh();
           } };
       });
       items.push({ label: '\u25b6 ' + TABS[(tab + 1) % 3][1], act: function () { PP.UI.replace(thingsScreen(tab + 1)); } });
       items.push({ label: 'Get more things', sub: 'Shop' + (W.eventNow(s, now()) ? ' + ' + W.EVENTS[W.eventNow(s, now())].name + ' items' : ''), act: function () { K().push(thingShop); } });
       items.push({ label: 'Back', act: K().pop });
-      var note = kind === 'hat' ? (p ? esc(p.name) + ' wears: <b>' + esc(sh.hat ? W.THINGS[sh.hat].name : 'nothing') + '</b>. Each pal keeps its own hat (it comes off for sleep).' : 'Hats are for pals.')
-        : 'Shows in the garden on the home screen, for every pal: <b>' + esc(sh[kind] ? W.THINGS[sh[kind]].name : 'nothing') + '</b>.';
-      return { title: 'THINGS \u00b7 ' + TABS[tab][1].toUpperCase() + ' ' + got + '/' + ids.length, html: '<p class="tip">' + note + '</p>', items: items };
+      var note = kind === 'hat' ? (p ? esc(p.name) + ' wears: <b>' + esc(sh.hat ? W.THINGS[sh.hat].name : 'nothing') + '</b>. Each pal keeps its own hat, asleep or awake.' : 'Hats are for pals.')
+        : 'In the garden for every pal: <b>' + (W.placedOf(s, kind).map(function (e) { return esc(W.THINGS[e.id].name); }).join(', ') || 'nothing') + '</b> (up to ' + W.PLACE.max[kind] + ').';
+      var tabs = '<p class="dex-sum">' + TABS.map(function (tb, i) { var c = cn[tb[0]]; return (i === tab ? '<b>' : '<span>') + tb[1].toUpperCase() + ' ' + c[0] + '/' + c[1] + (i === tab ? '</b>' : '</span>'); }).join(' ') + '</p>';
+      return { title: 'THINGS \u00b7 COLLECTED ' + cn.got + '/' + cn.total, html: tabs + '<p class="tip">' + note + '</p>', items: items };
+    };
+  }
+  /* 2.5.0: a toy / garden thing: place it (a dotted frame on the LCD, tap where it goes), move it or put it away */
+  function placeMenu(id) {
+    return function () {
+      var s = st(), T = W.THINGS[id], out = W.isPlaced(s, id), n = W.placedOf(s, T.kind).length, max = W.PLACE.max[T.kind], full = !out && n >= max;
+      var items = [];
+      if (!out) items.push({ label: 'Place in the garden', sub: full ? 'The garden has ' + max + ' ' + (T.kind === 'toy' ? 'toys' : 'garden things') + ' - put one away first' : 'Tap the screen where it goes (A moves it, B drops it, C cancels)',
+        disabled: full, reason: 'Put one away first', act: function () { App().startPlace(id); } });
+      else {
+        items.push({ label: 'Move', sub: 'Tap the screen where it goes (A moves it, B drops it, C cancels)', act: function () { App().startPlace(id); } });
+        items.push({ label: 'Put away', sub: 'Back into Things', act: function () { var r = W.unequip(st(), pet(), id); PP.Audio.play('ok'); toast(r.msg); App().save(); K().pop(); } });
+      }
+      items.push({ label: 'Back', act: K().pop });
+      var tip = T.kind === 'toy' ? 'Your pal walks over to play with toys now and then (happy +1 at most once an hour). Tap a toy on the screen to send it there.'
+        : (id === 'bench' ? 'Your pal likes to sit on the Bench.' : id === 'swing' ? 'Your pal likes a go on the Swing.' : 'Garden things are scenery your pal walks past.');
+      return { title: T.name.toUpperCase(), html: '<p class="tip">' + thingIcon(id) + ' ' + esc(tip) + ' Up to ' + max + ' ' + (T.kind === 'toy' ? 'toys' : 'garden things') + ' at once (' + n + ' out).</p>', items: items };
     };
   }
   function thingShop() {
@@ -99,13 +118,16 @@
           act: function () { var r = W.buyEventThing(s, row.id, now()); PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg); if (r.ok) App().save(); K().refresh(); } });
       });
     }
+    var sg = W.seasonGift(s, t);   // 2.5.0: the spring Flower Crown
+    if (sg) items.push({ icon: thingIcon(sg.id), label: W.THINGS[sg.id].name + ' (free gift)', sub: W.SEASONS[sg.season].name + ' gift - one per spring', right: sg.claimed ? '\u2714' : 'FREE', disabled: sg.claimed, reason: 'Already collected',
+      act: function () { var r = W.claimSeasonGift(s, now()); PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg); if (r.ok) App().save(); K().refresh(); } });
     Object.keys(W.THINGS).filter(function (id) { return W.THINGS[id].src === 'shop'; }).forEach(function (id) {
       var T = W.THINGS[id], own = W.owns(s, id);
       items.push({ icon: thingIcon(id), label: T.name, sub: { hat: 'Hat', toy: 'Toy', deco: 'Garden' }[T.kind], right: own ? '\u2714' : T.price + 'c', disabled: own, reason: 'You have it',
         act: function () { var r = W.buyThing(s, id, now()); PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg); if (r.ok) App().save(); K().refresh(); } });
     });
     items.push({ label: 'Back', act: K().pop });
-    return { title: 'GET THINGS', html: '<p class="coins">\u25c9 <b>' + PP.Shop.coins(s) + '</b> coins</p>' + (ev ? '<p class="rare"><b>' + esc(W.EVENTS[ev].name) + '!</b> ' + esc(W.EVENTS[ev].text) + '</p>' : '<p class="tip">Seasonal items come at Halloween, Christmas and Easter. Trips find the rest.</p>'), items: items };
+    return { title: 'GET THINGS', html: '<p class="coins">\u25c9 <b>' + PP.Shop.coins(s) + '</b> coins</p>' + (ev ? '<p class="rare"><b>' + esc(W.EVENTS[ev].name) + '!</b> ' + esc(W.EVENTS[ev].text) + '</p>' : '<p class="tip">Seasonal items come at Halloween, Christmas and Easter, and a Flower Crown each spring. Trips find the rest.</p>'), items: items };
   }
 
   /* ---------------------------------------------------------------- family + memory book */
@@ -115,26 +137,29 @@
     var s = st(), p = pet(), line = p ? W.familyLine(s, p, 8) : [];
     var h = '<div class="dex-sum"><span>This pal: gen <b>' + (p ? p.gen || 1 : 1) + '</b></span><span>Best gen <b>' + W.topGen(s) + '</b></span><span>Retired <b>' + (s.line.retired || 0) + '</b></span></div>';
     if (line.length) h += '<ol class="family-line">' + line.map(function (e) {
-      return '<li>' + K().thumb(e.species, keyOf(e), 'idle', 14) + '<span><b>' + esc(e.name) + '</b> \u00b7 gen ' + e.gen + (e.fate === 'retired' ? ' \u00b7 retired' : e.fate ? ' \u00b7 ' + esc(e.fate) : '') +
+      return '<li>' + K().thumb(e.species, keyOf(e), 'idle', 14, '', K().hatOf ? K().hatOf(e) : null) + '<span><b>' + esc(e.name) + '</b> \u00b7 gen ' + e.gen + (e.fate === 'retired' ? ' \u00b7 retired - resting in the Album' : e.fate ? ' \u00b7 ' + esc(e.fate) : '') +
         (e.trait ? '<br><small>passed on ' + TRAIT[e.trait] + '</small>' : '') + '</span></li>';
     }).join('') + '</ol>';
     else h += '<p class="tip">No pal yet.</p>';
     var items = [];
     if (p && !p.fate) {
       var why = W.canRetire(p);
-      items.push({ label: 'Retire ' + p.name + '\u2026', sub: why || (W.isElder(p) ? 'An Elder - ready when you are' : 'Adult for ' + W.adultDays(p) + ' days'), disabled: !!why, reason: why, act: function () { K().push(retireScreen); } });
+      // 2.5.0: clearer words - retiring is not dying, and an Elder is not a new form
+      var g2 = (p.gen || 1) + 1;
+      items.push({ label: 'Retire ' + p.name + ' (move to the Album)', sub: why || ((W.isElder(p) ? p.name + ' is an Elder (' + W.RETIRE.elderDays + '+ days as an adult). Retiring is optional - Elders can keep playing and battling. ' : '') +
+        p.name + ' stays in your Album forever. An egg from ' + p.name + '\u2019s family starts generation ' + g2 + '.'), disabled: !!why, reason: why, act: function () { K().push(retireScreen); } });
       items.push({ label: 'Memory book: ' + p.name, sub: (p.mem || []).length + ' memories', act: function () { K().push(memScreen(p.id)); } });
     }
     if (line.length > 1) items.push({ label: 'Family memory book', sub: line.length + ' generations', act: function () { K().push(familyBook); } });
     items.push({ label: 'Back', act: K().pop });
-    return { title: 'FAMILY', html: h, items: items, detail: function () { return 'An adult can retire after ' + W.RETIRE.minDays + ' days (an Elder after ' + W.RETIRE.elderDays + '). It rests in the Album and leaves an heir egg with one family trait. Never forced.'; } };
+    return { title: 'FAMILY', html: h, items: items, detail: function () { return 'Retiring is optional, never forced, and it is not dying: after ' + W.RETIRE.minDays + ' days as an adult a pal can move to the Album and leave an heir egg with one family trait. After ' + W.RETIRE.elderDays + ' days it is called an Elder - Elders can keep playing and battling. A retired pal stays in your Album forever.'; } };
   }
   function retireScreen() {
     var s = st(), p = pet(); if (!p || W.canRetire(p)) return null;
     var items = W.traitOptions(p).map(function (o) {
       return { label: o.label, sub: o.sub, disabled: !!o.disabled, reason: o.sub, act: function () {
-        K().push(K().confirm('RETIRE ' + p.name.toUpperCase() + '?', p.name + ' will rest in the Album (with its memory book) and an heir egg, generation ' + ((p.gen || 1) + 1) + ', takes its place. ' +
-          'The egg gets: ' + o.label + '.' + (p.hard ? ' The heir keeps hard mode.' : '') + ' This cannot be undone.', function () {
+        K().push(K().confirm('RETIRE ' + p.name.toUpperCase() + '?', p.name + ' moves to the Album with its memory book (it does not die). Its heir egg, generation ' + ((p.gen || 1) + 1) + ', takes this slot and gets: ' + o.label + '.' +
+          (p.hard ? ' The heir keeps hard mode.' : '') + ' You cannot bring ' + p.name + ' back to the Pal Box.', function () {
           var r = W.retire(s, s.slots.indexOf(p), o.k, now());
           PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg);
           if (r.ok) { App().resetWalker(); App().save(); App().refreshIcons(); K().close(); } else K().pop();
@@ -204,7 +229,7 @@
     if (on && !M.box) items.push({ label: 'Set up my mailbox', act: setupBox });
     if (on && M.box) items.push({ label: 'Check for gifts', sub: 'Up to ' + W.GIFT.usePerDay + ' gifts a day are used; the rest are kept as notes', act: function () { checkBox(false); } });
     s.friends.forEach(function (f, i) {
-      items.push({ icon: K().thumb(f.species, 'adult_' + f.form, 'idle', 15), label: f.name, sub: f.mb ? 'Visit or send a gift' : 'Visit (gifts need their new battle code)', act: function () { K().push(friendWorld(i)); } });
+      items.push({ icon: K().thumb(f.species, 'adult_' + f.form, 'idle', 15, '', K().hatOf ? K().hatOf(f) : null), label: f.name, sub: f.mb ? 'Visit or send a gift' : 'Visit (gifts need their new battle code)', act: function () { K().push(friendWorld(i)); } });
     });
     if (!s.friends.length) h += '<p class="tip">No friends yet: add a friend\u2019s battle code in Battle \u25b8 Friends.</p>';
     var log = M.log.slice(-5).reverse();
@@ -237,7 +262,7 @@
     if (!r.ok) { toast(r.msg); return; }
     var p = pet();
     App().save(); PP.UI.close();
-    App().playScene({ kind: 'visit', species: p.species, key: PP.Sprites.stageKeyOf(p), hat: W.shown(s, p).hat, fSpecies: f.species, fKey: 'adult_' + f.form, fName: f.name },
+    App().playScene({ kind: 'visit', species: p.species, key: PP.Sprites.stageKeyOf(p), hat: W.shown(s, p).hat, fSpecies: f.species, fKey: 'adult_' + f.form, fName: f.name, fHat: PP.Cards.cardHat(f.hat) },
       function () { PP.Audio.play('happy'); toast(r.msg); });
   }
 
@@ -250,7 +275,11 @@
       s.events.hello = day;
       var g = W.eventGift(s, t);
       toast('Happy ' + W.EVENTS[ev].name + '! ' + (g && !g.claimed ? 'A free ' + W.THINGS[g.id].name + ' is waiting (MENU \u25b8 Things \u25b8 Get more things).' : 'Seasonal items are in Things.'));
+    } else if (!ev && p && !p.fate && s.events.hello !== day) {   // 2.5.0: the spring gift, once a day until it is collected
+      var sg = W.seasonGift(s, t);
+      if (sg && !sg.claimed) { s.events.hello = day; toast('Spring is here! A free ' + W.THINGS[sg.id].name + ' is waiting (MENU \u25b8 Things \u25b8 Get more things).'); }
     }
+    if (p && p.stage !== 'egg') { var bd = W.birthday(s, p, t); if (bd) { PP.Audio.play('level'); toast(bd.msg); A.save(); } }   // 2.5.0 Party Hat
     var M = s.mail;
     if (M && M.key && online() && !(root.document && root.document.hidden) && Math.abs(Date.now() - (M.checkAt || 0)) > CHECK_MS) checkBox(true);   // abs: a clock that was ahead never stops the checks
   }

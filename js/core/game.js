@@ -181,7 +181,7 @@
       memo(p, e, t);                                        // 2.4.0 memory book
     });
     if (!p.fate && !p.elderSeen && PP.World.isElder(p)) {   // 2.4.0: an Elder may retire (never forced)
-      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder', t); ev.push({ t: 'elder', name: p.name });
+      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder (' + PP.World.RETIRE.elderDays + '+ days as an adult) - retiring is optional', t); ev.push({ t: 'elder', name: p.name });
     }
     if (grew) unlockEvents(state, ev);
     if (p.stage !== 'egg') {
@@ -229,6 +229,7 @@
       if (action === 'meal') PP.Daily.record(state, 'meal', t);
       if (action === 'clean') PP.Daily.record(state, 'clean', t);
       if (action === 'praise') PP.Daily.record(state, 'praise', t);
+      if (action === 'snack') PP.Daily.record(state, 'snack', t);   // 2.4.99: the 'Give a snack' goal was never counted
       if (action === 'lights' && !p.lights && p.asleep && p.sleepKind === 'night') PP.Daily.record(state, 'lights', t);
       PP.Daily.observe(state, t);
     }
@@ -312,6 +313,7 @@
     p.energy -= R.costs.battle;
     var B = PP.Battle.create(p, oppCard, seed >>> 0 || U.hash(state.seed, p.clock, oppCard.id), { b: { noCondition: true } });
     B.meta = meta || {};
+    B.hats = [PP.World ? PP.World.shown(state, p).hat : null, PP.Cards.cardHat(oppCard.hat)];   // 2.5.0: both hats (cosmetic, never in PP.Battle)
     // Best of 3 (first to 2) on every fight, including live rooms.
     // Live keeps B.turn climbing across rounds so the worker's turn index stays monotonic.
     if (!B.meta.bo3) {

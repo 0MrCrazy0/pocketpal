@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.4.98**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.5.0**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -108,7 +108,7 @@ Your pal keeps living while the game is closed, but don't worry: a night's sleep
 
 - **Trips (MENU ▸ Trips):** take your pal (a child or older) to the **beach**, the **forest** or **town**. A trip uses energy, and then your pal rests for 2 hours (up to 3 trips a day). You might find things to keep, meet a wild pal for your Paldex or earn a few coins.
 - **Things (MENU ▸ Things):** **hats** your pal wears, plus **toys** and **garden decorations** shown on the home screen. Buy some in the Pal Store, find others on trips, and collect seasonal ones.
-- **Family (MENU ▸ Family):** once an adult has been grown up for 5 days, it can **retire**. It rests in the Album, and an **heir egg** of the next generation takes its place, carrying ONE family trait you choose: a strong gene, a skill it knows from birth, or the Family Ribbon hat. You never have to retire a pal; an Elder (after 20 days) just gets a gentle note. The family line shows every generation.
+- **Family (MENU ▸ Family):** once an adult has been grown up for 5 days, it can **retire** - which means moving to the Album, not dying: it stays there forever with its memory book, and an **heir egg** of the next generation takes its slot, carrying ONE family trait you choose: a strong gene, a skill it knows from birth, or the Family Ribbon hat. A retired pal cannot come back to the Pal Box. Retiring is always optional. After 20 days as an adult a pal is called an **Elder** (not a new form) - Elders can keep playing and battling. The family line shows every generation.
 - **Memory book:** every pal keeps a diary of its big moments (hatching, growing up, wins, trips, gifts and more). It stays readable in the Album after the pal retires, and the family memory book walks back through the generations.
 - **Gifts and visits (MENU ▸ Gifts & visits):** set up a mailbox, then share your battle code. Friends can send you a treat (free, 3 a day) or a Berry Cake or Deluxe Feast from their own Bag. Visits work offline: your pal and a friend's pal play together in the garden.
 - **Friends Cup (Battle ▸ Friends Cup):** your newest 3 friend pals, from weakest to strongest. Beat them in a row to win the cup (+20 coins once a day).

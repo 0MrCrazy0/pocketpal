@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 9;   // 2.4.97: battle traits, lobby seat, lobby parent switch
+  var SCHEMA = 10;  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -72,6 +72,11 @@
       st.lobby = null; st.settings = st.settings || {}; st.settings.lobby = false;
       return st;
     },
+    /* 9 -> 10 (2.5.0): the Bowtie is now the Top Hat (owned and worn, slots and album); one toy + one deco become the
+     * placed list at the spots they showed (deco x 55, toy x 90). */
+    9: function (st) {
+      return PP.World.migrate10(st);
+    },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
     3: function (st) {
       st = st || {};
@@ -93,6 +98,7 @@
     o.name = PP.Pet.cleanName(o.name) || 'Friend';
     o.innate = Array.isArray(o.innate) ? o.innate.slice(0, 2) : [];
     o.stage = 'adult';
+    var fh = PP.Cards.cardHat(o.hat); if (fh) o.hat = fh; else delete o.hat;   // 2.5.0 cosmetic hat (bowtie -> tophat)
     if (!(typeof o.code === 'string' && /^PP2-[A-Za-z0-9_-]+-[0-9a-z]{4}$/.test(o.code) && o.code.length <= 2000)) delete o.code;
     if (o.via !== 'live' && o.via !== 'code') delete o.via;
     if (!(typeof o.mb === 'string' && /^[0-9a-f]{16}$/.test(o.mb))) delete o.mb;   // 2.4.0 gift mailbox id
@@ -137,6 +143,7 @@
     e.fate = (a.fate === 'dead' || a.fate === 'gone' || a.fate === 'released' || a.fate === 'retired') ? a.fate : null;   // 2.4.0 + retired
     e.mem = PP.World.cleanMem(a.mem).slice(-ALBUM_MEM);
     if (['gene', 'skill', 'ribbon'].indexOf(a.trait) < 0) delete e.trait;
+    if (typeof a.hat === 'string') { var h = PP.World.canon(a.hat); if (PP.World.thing(h) && PP.World.THINGS[h].kind === 'hat') e.hat = h; else delete e.hat; }   // 2.5.0: bowtie -> tophat
     e.parents = Array.isArray(a.parents) ? a.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : [];
     var snap = (e.fate === 'dead' || e.fate === 'gone') && a.snap ? sanitizePet(a.snap) : null;
     if (snap && snap.id === e.id && snap.species === e.species) e.snap = snap; else delete e.snap;
@@ -268,10 +275,13 @@
     var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'pink';
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
       notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
-      hints: st.hints !== false, music: st.music !== false, hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
+      hints: st.hints !== false, music: st.music !== false, vibrate: st.vibrate !== false,   // 2.5.0 audit: the Vibrate switch was dropped on every load
+      hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
       alertTypes: PP.Reminders.clean(st.alertTypes),   // 1.9.7: per-type alert switches
       lobby: st.lobby === true,   // 2.4.97: the weekly lobby's parent switch (off unless a grown-up turned it on)
-      eventForce: ['off', 'halloween', 'christmas', 'easter'].indexOf(st.eventForce) >= 0 ? st.eventForce : null };   // 2.4.0 admin: test a seasonal event
+      eventForce: ['off', 'halloween', 'christmas', 'easter'].indexOf(st.eventForce) >= 0 ? st.eventForce : null,
+      hemi: st.hemi === 'south' || st.hemi === 'north' ? st.hemi : null,   // 2.5.0: seasons (null = guess from the time zone)
+      seasonForce: ['off', 'winter', 'spring'].indexOf(st.seasonForce) >= 0 ? st.seasonForce : null };   // 2.4.0 admin: test a seasonal event
     out.daily = PP.Daily.clean(s.daily);
     out.junior = cleanJunior(s.junior);   // 2.4.94: Junior ladder trophies + the daily junior coin cap
     out.hints = PP.Hints.clean(s.hints);

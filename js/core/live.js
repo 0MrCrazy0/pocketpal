@@ -15,6 +15,7 @@
   function create(hostCard, guestCard, seed, round) {
     var B = PP.Battle.create(hostCard, guestCard, seedFor(seed, round), { a: { noCondition: true }, b: { noCondition: true } });
     B.meta = { kind: 'friend', live: true, round: round || 0, bo3: { wins: [0, 0], round: 1 } };
+    B.hats = [PP.Cards.cardHat(hostCard && hostCard.hat), PP.Cards.cardHat(guestCard && guestCard.hat)];   // 2.5.0 cosmetic only (not in sum)
     return B;
   }
   /* Everything that decides the next turn, hashed (32-bit). */
@@ -50,6 +51,7 @@
     if (side !== 'g') { B.side = 'h'; return B; }
     var v = { canon: B, side: 'g', meta: B.meta, opp: null, paid: false, fled: null };
     Object.defineProperty(v, 'f', { get: function () { return [B.f[1], B.f[0]]; } });
+    Object.defineProperty(v, 'hats', { get: function () { return B.hats ? [B.hats[1], B.hats[0]] : null; } });
     Object.defineProperty(v, 'over', { get: function () { return B.over; } });
     Object.defineProperty(v, 'turn', { get: function () { return B.turn; } });
     Object.defineProperty(v, 'winner', { get: function () { return B.winner == null ? null : 1 - B.winner; } });

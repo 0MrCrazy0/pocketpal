@@ -176,7 +176,7 @@
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
-        case 'elder': App.toast(e.name + ' is an Elder now! It can retire and pass a trait to an heir egg (MENU \u25b8 Family) - only if you want.'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
+        case 'elder': App.toast(e.name + ' is an Elder now (' + PP.World.RETIRE.elderDays + '+ days as an adult)! Retiring is optional - Elders can keep playing and battling (MENU \u25b8 Family).'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
         case 'sleep': if (!offline) { App.toast(p.name + (e.again ? ' dozed off again. Lights off!' : ' fell asleep. Lights off!')); PP.Audio.play('lullaby'); } woke = null; break;
@@ -193,12 +193,12 @@
         case 'dailyClockBack': App.toast("The clock went back: today's goals stay as they were."); break;
       }
     });
-    if (lastGrow && lastGrow.kind === 'hatch' && !lastGrow.done) queueCut({ kind: 'hatch', species: p.species, name: p.name });
+    if (lastGrow && lastGrow.kind === 'hatch' && !lastGrow.done) queueCut({ kind: 'hatch', species: p.species, name: p.name, hat: PP.World ? PP.World.shown(App.state, p).hat : null });
     if (lastGrow && lastGrow.kind === 'evolve') App.playEvolve(p, spriteKey(lastGrow.from), spriteKey(lastGrow.to));
     if (rare) { PP.Audio.play('rare'); App.toast(rare.name + ' ' + rare.text); }
     if (died) {
       PP.Audio.play(died.hard || p.hard ? 'gameover' : 'die');
-      if (died.t === 'died') queueCut({ kind: 'die', species: p.species, key: PP.Sprites.stageKeyOf(p), title: 'R.I.P. ' + p.name.toUpperCase() });
+      if (died.t === 'died') queueCut({ kind: 'die', species: p.species, key: PP.Sprites.stageKeyOf(p), title: 'R.I.P. ' + p.name.toUpperCase(), hat: PP.World ? PP.World.shown(App.state, p).hat : null });
       App.pendingFate = true;
     }
     if (napWoke && !woke && !died && !App.anim) App.wakeUp('nap');   // 1.9.9: woke from a nap while you watch
@@ -241,7 +241,7 @@
   App.playEvolve = function (p, fromKey, toKey) {
     var stageName = toKey.indexOf('adult_') === 0 ? D.NAMES[p.species][toKey.slice(6)] : D.NAMES[p.species][toKey];
     var sub = toKey.indexOf('adult_') === 0 ? { adult_bad: 'Scrappy form', adult_good: 'Solid form', adult_perfect: 'Champion form!', adult_secret: 'SECRET FORM!', adult_power: 'Mighty form!', adult_swift: 'Swift form!', adult_guard: 'Sturdy form!' }[toKey] : toKey;
-    queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub, secret: toKey === 'adult_secret' });
+    queueCut({ kind: 'evolve', species: p.species, fromKey: fromKey, toKey: toKey, name: stageName, sub: sub, secret: toKey === 'adult_secret', hat: PP.World ? PP.World.shown(App.state, p).hat : null });
   };
   /* 1.9.9: the hatch / evolve / secret-reveal jingle plays when its cut-scene STARTS (not when it was queued), once per
    * cut-scene. A catch-up that grew several stages shows one cut-scene, so it plays one jingle. Muting is handled by
@@ -491,6 +491,7 @@
   /* ------------------------------------------------------------ input */
   App.input = function (btn) {
     if (App.cut) { if (btn === 'B' || btn === 'C') App.cut.t0 -= 60000; return; }
+    if (App.placing && !UI.isOpen() && App.scene === 'home') { placeInput(btn); return; }   // 2.5.0
     if (UI.isOpen()) { UI.input(btn); return; }
     if (App.scene === 'battle') { PP.BattleView.input(btn); return; }
     if (App.scene === 'mini') { PP.Mini.input(btn); return; }
@@ -509,6 +510,8 @@
     if (App.cut) { App.cut.t0 -= 60000; return; }
     if (UI.isOpen()) return;
     if (App.scene === 'mini') { PP.Mini.tap(fx, fy); return; }
+    if (App.scene === 'home' && App.placing) { App.lcdMove(fx, fy); placeDrop(); return; }   // 2.5.0: tap to drop
+    if (App.scene === 'home' && tapToy(fx, fy)) return;                                     // 2.5.0: tap a toy -> the pal goes to play
     if (App.scene === 'home' && !homeB()) App.lookAtYou();
   };
   /* 2.0.0 'look at you': tap the pal (or the LCD) and it turns to face you, then smiles. Only when it is up and about
@@ -518,6 +521,68 @@
     if (!p || p.fate || p.stage === 'egg' || App.anim || App.cut || PP.Care.moodPose(p) !== 'idle') return false;
     App.anim = { kind: 'look', t0: performance.now(), dur: 1800 };
     return true;
+  };
+  /* ------------------------------------------------------------ 2.5.0 the garden: placing things, toy play
+   * Placing: a dotted frame follows your finger on the LCD (tap to drop); buttons too: A / PREV move it 8 px, B drops,
+   * C cancels. The spot snaps clear of the poop pile (PP.World.snapX). */
+  App.placing = null;
+  App.startPlace = function (id) {
+    var s = App.state, e = s.things.placed.filter(function (q) { return q.id === id; })[0], k = PP.World.thing(id).kind;
+    App.placing = { id: id, x: e ? e.x : (k === 'toy' ? 90 : 55), moving: !!e };
+    UI.close();
+    App.toast('Tap where it goes \u00b7 A moves it \u00b7 B drops it \u00b7 C cancels');
+  };
+  App.lcdMove = function (fx) {
+    if (!App.placing || UI.isOpen()) return;
+    var w = PP.WorldArt.widthOf(App.placing.id);
+    App.placing.x = Math.round(Math.max(PP.World.PLACE.minX, Math.min(PP.World.PLACE.maxX - w, fx * R.W - w / 2)));
+  };
+  function placeDrop() {
+    var pl = App.placing; if (!pl) return;
+    var r = PP.World.place(App.state, pl.id, pl.x);
+    PP.Audio.play(r.ok ? 'ok' : 'no'); App.toast(r.msg);
+    if (r.ok) { App.placing = null; App.save(); }
+  }
+  function placeInput(btn) {
+    var pl = App.placing, P = PP.World.PLACE, w = PP.WorldArt.widthOf(pl.id), span = P.maxX - w - P.minX;
+    if (btn === 'A' || btn === 'PREV') { pl.x = P.minX + (((pl.x - P.minX + (btn === 'A' ? P.step : -P.step)) % (span + 1)) + span + 1) % (span + 1); PP.Audio.play('move'); }
+    else if (btn === 'B') placeDrop();
+    else if (btn === 'C') { App.placing = null; PP.Audio.play('back'); App.toast('Cancelled'); }
+  }
+  /* toys under a tap (LCD fractions): send the pal to play at once */
+  function tapToy(fx, fy) {
+    var s = App.state, p = G.active(s), X = fx * R.W, Y = fy * R.H;
+    if (!p || !PP.World || PP.World.canPlayToy(s, p, '-') === 'No pal') return false;
+    var hit = PP.World.placedOf(s, 'toy').filter(function (e) { var b = PP.WorldArt.itemBox(e.id, e.x); return X >= b.x - 3 && X <= b.x + b.w + 3 && Y >= b.y - 4 && Y <= b.y + b.h + 3; })[0];
+    if (!hit) return false;
+    var why = PP.World.canPlayToy(s, p, hit.id);
+    if (why) { App.toast(why); return true; }
+    var w = App.walker || (App.walker = { x: 50, dir: 1, tx: 50, until: 0 });
+    w.goal = { kind: 'toy', id: hit.id }; w.tx = toyStand(hit, w); w.arrived = false; w.act = null;
+    return true;
+  }
+  function toyStand(e, w) { var b = PP.WorldArt.itemBox(e.id, e.x), left = b.x - R.PS + 18, right = b.x + b.w - 18; return Math.max(4, (w && w.x < b.x) || right > R.W - R.PS - 46 ? left : right); }
+  var lastToyAt = 0;
+  /* the walker asks where to go next: now and then a toy (a few times an hour, while content), the bench or the swing */
+  App.gardenGoal = function (p, t, maxX) {
+    var s = App.state; if (!PP.World || p.asleep || p.sick || !p.lights || PP.Care.moodPose(p) !== 'idle') return null;
+    var toys = PP.World.placedOf(s, 'toy'), seats = PP.World.placedOf(s, 'deco').filter(function (e) { return e.id === 'bench' || e.id === 'swing'; });
+    var r = Math.random();
+    if (toys.length && t - lastToyAt > 12 * 60e3 && r < 0.08) { var e = toys[Math.floor(Math.random() * toys.length)]; return { kind: 'toy', id: e.id, tx: Math.min(maxX, toyStand(e, App.walker)) }; }
+    if (seats.length && r > 0.94) { var q = seats[Math.floor(Math.random() * seats.length)], b = PP.WorldArt.itemBox(q.id, q.x); return { kind: 'seat', id: q.id, tx: Math.max(4, Math.min(maxX, b.x + b.w / 2 - R.PS / 2)) }; }
+    return null;
+  };
+  App.arriveGoal = function (w, p, t) {
+    var g = w.goal, s = App.state;
+    if (g.kind === 'toy') {
+      var r = PP.World.playToy(s, p, g.id, G.now(s)); if (!r.ok) return false;
+      lastToyAt = t; App.anim = { kind: 'toyplay', id: g.id, t0: t, dur: 2600 }; w.until = t + 2600;
+      if (g.id === 'duck' || g.id === 'drum') PP.Audio.play('move');
+      if (r.happy) { App.toast(r.msg); App.save(); }
+      return true;
+    }
+    if (g.kind === 'seat') { w.act = { pose: 'sit', dur: 4000, t0: t, seat: g.id }; w.until = t + 4000; return true; }
+    return false;
   };
   App.onMenuClosed = function () { if (PP.Admin) PP.Admin.onMenuClosed(); refreshIcons(); };
 

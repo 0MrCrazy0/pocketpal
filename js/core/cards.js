@@ -40,12 +40,20 @@
     return { id: p.id, name: p.name, species: p.species, sex: p.sex, form: p.form, level: p.level,
       genes: { hp: p.genes.hp, atk: p.genes.atk, def: p.genes.def, spd: p.genes.spd },
       skills: (p.skills || []).slice(), innate: (p.innate || []).slice(), gen: p.gen || 1, stage: 'adult',
-      boost: PP.Shop ? PP.Shop.boosts(p) : undefined, traits: PP.Traits ? PP.Traits.ids(p) : [] };
+      boost: PP.Shop ? PP.Shop.boosts(p) : undefined, traits: PP.Traits ? PP.Traits.ids(p) : [], hat: cardHat(p.hat) || undefined };
+  }
+  /* 2.5.0: the worn hat rides along (field h, cosmetic only: it never enters PP.Battle, ENGINE stays 3). The decoder maps
+   * the old 'bowtie' to 'tophat'; an unknown id is dropped (older games ignore the field). */
+  function cardHat(h) {
+    if (typeof h !== 'string' || !PP.World) return null;
+    h = PP.World.canon(h.slice(0, 16));
+    return PP.World.thing(h) && PP.World.THINGS[h].kind === 'hat' ? h : null;
   }
   /* extra.mb (2.4.0): your gift mailbox id, so friends can send you gifts. Older games ignore the field. */
   function encode(p, extra) {
     if (p && PP.Stats.isJunior(p)) {   // 2.4.92: a young pal's card - no level, skills or boosts; v4 so older games refuse it
       var jp = { v: 4, i: p.id, n: p.name, s: D.SPECIES.indexOf(p.species), x: p.sex, st: p.stage, g: [p.genes.hp, p.genes.atk, p.genes.def, p.genes.spd], gen: p.gen || 1 };
+      if (cardHat(p.hat)) jp.h = cardHat(p.hat);
       var jj = JSON.stringify(jp);
       return 'PP2-' + b64enc(jj) + '-' + checksum(jj);
     }
@@ -57,6 +65,7 @@
     if (c.boost && PP.Shop.boostTotal(c)) payload.b = [c.boost.hp, c.boost.atk, c.boost.def, c.boost.spd];   // Pal Store boosts (optional, capped)
     if (c.traits && c.traits.length) payload.t = c.traits.slice(0, PP.Traits.MAX);   // 2.4.97 battle traits (optional; older games ignore it)
     if (extra && typeof extra.mb === 'string' && /^[0-9a-f]{16}$/.test(extra.mb)) payload.mb = extra.mb;
+    if (c.hat) payload.h = c.hat;   // 2.5.0 cosmetic hat
     var json = JSON.stringify(payload);
     return 'PP2-' + b64enc(json) + '-' + checksum(json);
   }
@@ -103,6 +112,7 @@
         genes: { hp: Array.isArray(p.g) ? p.g[0] : null, atk: Array.isArray(p.g) ? p.g[1] : null, def: Array.isArray(p.g) ? p.g[2] : null, spd: Array.isArray(p.g) ? p.g[3] : null },
         skills: [], innate: [], gen: p.gen, stage: p.st };
       var je = validateCard(jc);
+      if (!je && cardHat(p.h)) jc.hat = cardHat(p.h);
       return je ? fail(je) : { ok: true, card: jc };
     }
     var tree = PP.Skills.tree(species).map(function (s) { return s.id; });
@@ -120,8 +130,9 @@
     var err = validateCard(card);
     if (err) return fail(err);
     if (typeof p.mb === 'string' && /^[0-9a-f]{16}$/.test(p.mb)) card.mb = p.mb;   // 2.4.0 gift mailbox (optional)
+    if (cardHat(p.h)) card.hat = cardHat(p.h);   // 2.5.0 cosmetic hat (bowtie -> tophat)
     return { ok: true, card: card };
   }
 
-  PP.Cards = { CARD_V: CARD_V, encode: encode, decode: decode, validateCard: validateCard, cardFromPet: cardFromPet, _b64enc: b64enc, _b64dec: b64dec, _checksum: checksum };
+  PP.Cards = { CARD_V: CARD_V, cardHat: cardHat, encode: encode, decode: decode, validateCard: validateCard, cardFromPet: cardFromPet, _b64enc: b64enc, _b64dec: b64dec, _checksum: checksum };
 })(typeof window !== 'undefined' ? window : globalThis);

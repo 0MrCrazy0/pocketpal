@@ -259,22 +259,26 @@
       });
       return;
     }
-    var list = menuMoves();
+    var list = menuItems();
     if (!list[bv.cursor] || !list[bv.cursor].ok) bv.cursor = Math.max(0, list.findIndex(function (m) { return m.ok; }));
-    var h = '<div class="bm-q">' + esc(bv.msg) + '</div><div class="bm-grid' + (list.length + 1 > 6 ? ' rows3' : '') + '">';
+    var h = '<div class="bm-q">' + esc(bv.msg) + '</div><div class="bm-grid' + (list.length > 6 ? ' rows3' : '') + '">';
     list.forEach(function (m, i) {
-      h += '<button class="bm' + (m.flee ? ' flee' : '') + (i === bv.cursor ? ' sel' : '') + '" data-i="' + i + '"' + (m.ok ? '' : ' disabled') + '>' + esc(m.name) + '<small>' + m.tag + '</small></button>';
+      h += '<button class="bm' + (m.flee ? ' flee' : '') + (m.auto ? ' auto' : '') + (i === bv.cursor ? ' sel' : '') + '" data-i="' + i + '"' + (m.auto ? ' data-auto="1"' : '') + (m.ok ? '' : ' disabled') + '>' + esc(m.name) + '<small>' + m.tag + '</small></button>';
     });
-    h += '<button class="bm auto" data-auto="1">AUTO<small>C</small></button></div>';
+    h += '</div><div class="bm-hint">A next \u00b7 B choose \u00b7 C auto</div>';   // 2.4.99: the buttons, as they work
     menuEl.innerHTML = h; menuEl.hidden = false;
     Array.prototype.forEach.call(menuEl.querySelectorAll('button'), function (b) {
       b.addEventListener('click', function (ev) {
         ev.stopPropagation(); PP.Audio.unlock();
-        if (b.dataset.auto) { bv.auto = true; PP.Audio.play('ok'); choose(null); return; }
+        if (b.dataset.auto) { startAuto(); return; }
         var m = list[+b.dataset.i]; if (m && m.ok) { PP.Audio.play('ok'); choose(m.id); }
       });
     });
   }
+  /* 2.4.99: the menu A cycles through = every move, Run / Forfeit (if shown) and AUTO (before, AUTO could only be tapped) */
+  function menuItems() { return menuMoves().concat([{ id: 'auto', name: 'AUTO', ok: true, tag: 'C', auto: true }]); }
+  /* AUTO: the pal picks its own moves from now on, until B or C hands control back (2.4.99: C used to do ONE AI move) */
+  function startAuto() { bv.auto = true; PP.Audio.play('ok'); choose(null); }
   function confirmPick(yes) {
     if (yes) { PP.Audio.play('ok'); choose('flee'); }
     else { bv.confirm = false; PP.Audio.play('move'); showMenu(); }
@@ -284,8 +288,9 @@
   function input(btn) {
     if (!bv || bv.done || bv.pending) return;
     if (!bv.waiting) {
-      if (btn === 'C') bv.auto = true;          // C: let the pal fight on its own
-      else if (btn === 'A') bv.auto = false;    // A: take control back at the next turn
+      // 2.4.99: C switches the auto fight on AND off; B (or A) hands control back at the next turn. B / C also skip ahead.
+      if (btn === 'C') bv.auto = !bv.auto;
+      else if (btn === 'A' || btn === 'B') bv.auto = false;
       if ((btn === 'B' || btn === 'C') && bv.cur) bv.dur = Math.min(bv.dur, performance.now() - bv.t0 + 120); // skip ahead
       return;
     }
@@ -295,14 +300,14 @@
       else if (btn === 'C') confirmPick(false);
       return;
     }
-    var list = menuMoves();
+    var list = menuItems();
     if (btn === 'A' || btn === 'PREV') {
       var n = list.length, d = btn === 'A' ? 1 : -1;
       for (var k = 0; k < n; k++) { bv.cursor = (bv.cursor + d + n) % n; if (list[bv.cursor].ok) break; }
       PP.Audio.play('move'); showMenu();
     } else if (btn === 'B') {
-      var m = list[bv.cursor]; if (m && m.ok) { PP.Audio.play('ok'); choose(m.id); }
-    } else if (btn === 'C') { PP.Audio.play('ok'); choose(null); }
+      var m = list[bv.cursor]; if (m && m.auto) startAuto(); else if (m && m.ok) { PP.Audio.play('ok'); choose(m.id); }
+    } else if (btn === 'C') startAuto();
   }
 
   /* ------------------------------------------------------------ drawing */
@@ -619,7 +624,10 @@
           if (pose === 'happy') dy += 2;   // 2.4.94: the happy hop of the tallest pals (lion) poked 2 px into the top band
           S.draw(ctx, f.species, sk, pose, fr, x + off + dx, TOP + dy, sc, flipMe);
           bv.drawn[i] = { seq: ++bv.seq, key: sk, scale: sc, x: x + off + dx, y: TOP + dy, size: 32 * sc };
-          if (i === 0 && PP.App && PP.App.state && PP.WorldArt && PP.World) { var p = PP.Game.active(PP.App.state); if (p && p.hat) PP.WorldArt.drawHat(ctx, p.hat, f.species, sk, pose, fr, x + off + dx, TOP + dy, flipMe, false, sc); }
+          // 2.5.0: both pals' hats (B.hats, cosmetic: never part of the battle), live included
+          var hat = B.hats ? B.hats[i] : null;
+          if (!B.hats && i === 0 && PP.App && PP.App.state && PP.World) { var p = PP.Game.active(PP.App.state); hat = p ? PP.World.shown(PP.App.state, p).hat : null; }
+          if (hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, hat, f.species, sk, pose, fr, x + off + dx, TOP + dy, flipMe, false, sc);
         }
       }
     }
@@ -652,7 +660,10 @@
     ctx.fillStyle = C.ink; ctx.fillRect(0, BOX, W, 160 - BOX);
     ctx.fillStyle = C.lite; ctx.fillRect(2, BOX + 2, W - 4, 160 - BOX - 4);
     ctx.fillStyle = C.mid; ctx.fillRect(2, BOX + 2, W - 4, 0.8);
-    F.wrap(bv.msg, 34).slice(0, 4).forEach(function (line, n) { F.draw(ctx, line, 6, BOX + 7 + n * 10, C.ink); });
+    // 2.4.99: while the auto fight runs, the last line says so and how to stop it
+    var lines = F.wrap(bv.msg, 34).slice(0, bv.auto && !bv.waiting ? 3 : 4);
+    if (bv.auto && !bv.waiting && !bv.B.over) lines[3] = 'B or C: take control';   // next to the AUTO tag
+    lines.forEach(function (line, n) { if (line) F.draw(ctx, line, 6, BOX + 7 + n * 10, C.ink); });
     if (bv.waiting && Math.floor(t / 400) % 2) { ctx.fillStyle = C.ink; ctx.fillRect(W - 10, 160 - 9, 4, 1); ctx.fillRect(W - 9.4, 160 - 8, 2.8, 1); ctx.fillRect(W - 8.8, 160 - 7, 1.6, 1); }   // 'your turn' cursor
     if (bv.auto && !B.over) F.draw(ctx, 'AUTO', W - 6, 160 - 12, C.dark, 1, 'right');
   }

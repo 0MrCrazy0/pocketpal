@@ -17,7 +17,7 @@
   function drawPal(ctx, p, sk, pose, frame, x, y, scale, flip) {
     S.draw(ctx, p.species, sk, pose, frame, x, y, scale, flip);
     var hat = hatOf(p);
-    if (hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, hat, p.species, sk, pose, frame, x, y, !!flip, false);
+    if (hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, hat, p.species, sk, pose, frame, x, y, !!flip, false, scale);   // 2.5.0: sized with the pal
   }
 
 
@@ -351,7 +351,7 @@
       if (show) {
         ctx.save(); ctx.beginPath(); ctx.rect(cx + 2, cy + 2, CARD_W - 4, CARD_H - 4); ctx.clip();   // never over the card frame
         S.drawFx(ctx, MEM_BADGE[g.cards[i]], cx + 3, cy + 3, 1.5);                                   // 24 px mood symbol, top left
-        S.draw(ctx, p.species, sk, g.cards[i], Math.floor(t / 300), cx + CARD_W - 2 - 32 * CARD_PAL, cy + CARD_H - 2 - 32 * CARD_PAL, CARD_PAL);
+        drawPal(ctx, p, sk, g.cards[i], Math.floor(t / 300), cx + CARD_W - 2 - 32 * CARD_PAL, cy + CARD_H - 2 - 32 * CARD_PAL, CARD_PAL);   // 2.5.0: the hat on the cards too
         ctx.restore();
       } else F.draw(ctx, '?', cx + CARD_W / 2, cy + 17, C.dark, 3, 'center');
     }

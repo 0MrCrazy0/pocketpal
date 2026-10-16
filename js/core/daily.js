@@ -35,7 +35,8 @@
     { id: 'lights', need: 1, text: 'Lights off at bedtime' },
     { id: 'snack', need: 1, text: 'Give a snack' },
     { id: 'visit', need: 1, text: 'Visit a friend' },
-    { id: 'gift', need: 1, text: 'Send a gift' }
+    { id: 'gift', need: 1, text: 'Send a gift' },
+    { id: 'find', need: 1, text: 'Find a new thing' }   // 2.5.0: buy one or find one on a trip (only while one is still collectable)
   ];
   var SEASONS = [
     { id: 'spooky', name: 'Spooky', months: [9], window: 'October' },
@@ -58,12 +59,23 @@
     if (!state.daily || typeof state.daily !== 'object') state.daily = blank();
     return state.daily;
   }
-  function eligible(p) {
-    var st = p ? p.stage : 'baby';
-    return POOL.filter(function (g) { return !(g.adult && st !== 'adult') && !(g.notBaby && st === 'baby'); });
+  /* 2.4.99: never an impossible goal - no 'Visit a friend' without a friend, no 'Send a gift' without a friend who has a
+   * gift mailbox (and your own mailbox, which the online worker gives you) */
+  function eligible(p, state) {
+    var st = p ? p.stage : 'baby', fr = (state && Array.isArray(state.friends)) ? state.friends : [];
+    var box = !!(state && state.mail && typeof state.mail.box === 'string' && state.mail.box);
+    var mbFriend = fr.some(function (f) { return f && typeof f.mb === 'string' && f.mb; });
+    return POOL.filter(function (g) {
+      if (g.adult && st !== 'adult') return false;
+      if (g.notBaby && st === 'baby') return false;
+      if (g.id === 'visit' && !fr.length) return false;
+      if (g.id === 'gift' && !(box && mbFriend)) return false;
+      if (g.id === 'find' && !(state && PP.World && PP.World.collectable(state, p))) return false;
+      return true;
+    });
   }
   function pickGoals(state, p, dk) {
-    var list = eligible(p).slice(), out = [], rng = U.makeRng(U.hash(state.seed, 'goals', dk) >>> 0);
+    var list = eligible(p, state).slice(), out = [], rng = U.makeRng(U.hash(state.seed, 'goals', dk) >>> 0);
     while (out.length < 4 && list.length) {
       var i = Math.floor(rng() * list.length), g = list.splice(i, 1)[0];
       out.push({ id: g.id, n: 0, need: g.need, done: false });

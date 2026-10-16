@@ -13,7 +13,7 @@
    * src: shop (price) | trip (place) | event (season) | heir (only from a retiring pal). rare: a rare trip find. */
   var THINGS = {
     bow:       { name: 'Red Bow',       kind: 'hat',  src: 'shop', price: 30 },
-    bowtie:    { name: 'Bowtie',        kind: 'hat',  src: 'shop', price: 35 },
+    tophat:    { name: 'Top Hat',       kind: 'hat',  src: 'shop', price: 35 },   // 2.5.0: took the Bowtie's slot (save 9 -> 10)
     cap:       { name: 'Sports Cap',    kind: 'hat',  src: 'shop', price: 45 },
     sunhat:    { name: 'Sun Hat',       kind: 'hat',  src: 'trip', place: 'beach' },
     leafcrown: { name: 'Leaf Crown',    kind: 'hat',  src: 'trip', place: 'forest' },
@@ -22,6 +22,10 @@
     santa:     { name: 'Santa Hat',     kind: 'hat',  src: 'event', event: 'christmas' },
     bunny:     { name: 'Bunny Ears',    kind: 'hat',  src: 'event', event: 'easter' },
     heirloom:  { name: 'Family Ribbon', kind: 'hat',  src: 'heir' },
+    pirate:    { name: 'Pirate Hat',    kind: 'hat',  src: 'trip', place: 'lake', rare: true },        // 2.5.0
+    flowercrown: { name: 'Flower Crown', kind: 'hat', src: 'season', season: 'spring' },             // 2.5.0: free once per spring
+    party:     { name: 'Party Hat',     kind: 'hat',  src: 'shop', price: 60, birthday: true },        // 2.5.0: or free on the 1st hatch birthday
+    wizard:    { name: 'Wizard Hat',    kind: 'hat',  src: 'trip', place: 'mountain', rare: true },    // 2.5.0
     ball:      { name: 'Bouncy Ball',   kind: 'toy',  src: 'shop', price: 25 },
     blocks:    { name: 'Toy Blocks',    kind: 'toy',  src: 'shop', price: 35 },
     shell:     { name: 'Seashell',      kind: 'toy',  src: 'trip', place: 'beach' },
@@ -30,6 +34,11 @@
     pumpkin:   { name: 'Jack-o-Lantern', kind: 'toy', src: 'event', event: 'halloween' },
     snowman:   { name: 'Little Snowman', kind: 'toy', src: 'event', event: 'christmas' },
     basket:    { name: 'Egg Basket',    kind: 'toy',  src: 'event', event: 'easter' },
+    kite:      { name: 'Kite',          kind: 'toy',  src: 'shop', price: 40 },                        // 2.5.0
+    teddy:     { name: 'Teddy',         kind: 'toy',  src: 'shop', price: 50 },
+    yoyo:      { name: 'Yo-yo',         kind: 'toy',  src: 'shop', price: 30 },
+    drum:      { name: 'Drum',          kind: 'toy',  src: 'trip', place: 'town' },
+    duck:      { name: 'Rubber Duck',   kind: 'toy',  src: 'trip', place: 'lake' },
     flowers:   { name: 'Flower Pot',    kind: 'deco', src: 'shop', price: 30 },
     sign:      { name: 'Signpost',      kind: 'deco', src: 'shop', price: 40 },
     sandcastle:{ name: 'Sandcastle',    kind: 'deco', src: 'trip', place: 'beach', rare: true },
@@ -38,31 +47,116 @@
     forestgem: { name: 'Mossy Stone',   kind: 'deco', src: 'trip', place: 'forest', rare: true },
     ghost:     { name: 'Friendly Ghost', kind: 'deco', src: 'event', event: 'halloween' },
     gifts:     { name: 'Gift Pile',     kind: 'deco', src: 'event', event: 'christmas' },
-    eggs:      { name: 'Painted Eggs',  kind: 'deco', src: 'event', event: 'easter' }
+    eggs:      { name: 'Painted Eggs',  kind: 'deco', src: 'event', event: 'easter' },
+    bench:     { name: 'Bench',         kind: 'deco', src: 'shop', price: 45 },                        // 2.5.0
+    birdhouse: { name: 'Birdhouse',     kind: 'deco', src: 'shop', price: 55 },
+    pond:      { name: 'Pond',          kind: 'deco', src: 'shop', price: 80 },
+    swing:     { name: 'Swing',         kind: 'deco', src: 'trip', place: 'forest', rare: true },
+    tent:      { name: 'Tent',          kind: 'deco', src: 'trip', place: 'mountain' },
+    flag:      { name: 'Summit Flag',   kind: 'deco', src: 'trip', place: 'mountain', first: true }    // the first Mountain trip always finds it
   };
   var KINDS = ['hat', 'toy', 'deco'];
   function thing(id) { return Object.prototype.hasOwnProperty.call(THINGS, id) ? THINGS[id] : null; }
-  function things(state) { return state.things || (state.things = { own: {}, toy: null, deco: null }); }
+  function things(state) { var T = state.things || (state.things = { own: {}, placed: [] }); if (!Array.isArray(T.placed)) T.placed = []; return T; }
+  /* 2.5.0: old ids renamed (a stray one in an old backup or a friend code) */
+  var RENAMED = { bowtie: 'tophat' };
+  function canon(id) { return typeof id === 'string' && RENAMED[id] ? RENAMED[id] : id; }
   function owns(state, id) { return !!(things(state).own[id]); }
   /* gain a thing; returns true if it is new (a duplicate is not kept: things are one of a kind) */
   function give(state, id, now) {
     if (!thing(id)) return false;
     var T = things(state); if (T.own[id]) return false;
     T.own[id] = Math.round(now || Date.now()) || 1;
+    if (PP.Daily && state.daily && PP.Game && state.slots) PP.Daily.record(state, 'find', PP.Game.now(state));   // 2.5.0 goal 'Find a new thing'
     return true;
   }
+  /* 2.5.0 'Collected X/42': every thing counts (the Family Ribbon too) */
+  function counts(state) {
+    var o = { got: 0, total: 0, hat: [0, 0], toy: [0, 0], deco: [0, 0], places: {} };
+    Object.keys(THINGS).forEach(function (id) {
+      var t = THINGS[id], h = owns(state, id) ? 1 : 0;
+      o.total++; o.got += h; o[t.kind][1]++; o[t.kind][0] += h;
+      if (t.src === 'trip') { var q = o.places[t.place] || (o.places[t.place] = [0, 0]); q[1]++; q[0] += h; }
+    });
+    return o;
+  }
+  /* something can still be collected today by playing: a shop thing not owned yet, or a trip find (the pal can go) */
+  function collectable(state, p) {
+    return Object.keys(THINGS).some(function (id) {
+      var t = THINGS[id]; if (owns(state, id)) return false;
+      if (t.src === 'shop') return true;
+      if (t.src === 'trip') return !!p && !p.fate && stageAtLeast(p, PLACES[t.place].minStage || 'child');
+      return false;
+    });
+  }
   function ownedList(state, kind) { var T = things(state); return Object.keys(THINGS).filter(function (id) { return T.own[id] && (!kind || THINGS[id].kind === kind); }); }
-  /* equip: a hat is worn by one pal (p.hat); the toy and the decoration belong to the room (every pal sees them) */
-  function equip(state, p, id) {
+  /* 2.5.0 placement: the garden holds up to PLACE.max[kind] toys and garden items at once, each at an x (LCD px, its left
+   * edge; the bottom always sits on the grass line). Spots over the poop pile, the food or the pal's centre lane snap to
+   * the nearest free spot (PLACE.keepOut, [from, to) in LCD px). */
+  var PLACE = { max: { toy: 3, deco: 3 }, minX: 2, maxX: 168, keepOut: [[170, 216]], step: 8 };   // keep-out: the poop pile (render poopAt: x >= W - 44); the pal and its food are drawn in front
+  function isPlaced(state, id) { return things(state).placed.some(function (e) { return e.id === id; }); }
+  function placedOf(state, kind) { return things(state).placed.filter(function (e) { return THINGS[e.id] && (!kind || THINGS[e.id].kind === kind); }); }
+  function itemW(id) { return (PP.WorldArt && PP.WorldArt.widthOf) ? PP.WorldArt.widthOf(id) : 16; }
+  /* the nearest free x for this item (out of the keep-out lanes, not overlapping another placed thing much) */
+  function snapX(state, id, x) {
+    var w = itemW(id), others = things(state).placed.filter(function (e) { return e.id !== id; });
+    function ok(xx) {
+      if (xx < PLACE.minX || xx + w > PLACE.maxX) return false;
+      if (PLACE.keepOut.some(function (k) { return xx < k[1] && xx + w > k[0]; })) return false;
+      return !others.some(function (e) { var ow = itemW(e.id); return xx < e.x + ow - 4 && xx + w - 4 > e.x; });
+    }
+    x = Math.max(PLACE.minX, Math.min(PLACE.maxX - w, Math.round(Number(x) || 0)));   // a spot off the grass comes back onto it
+    for (var d = 0; d < 220; d++) { if (ok(x - d)) return x - d; if (ok(x + d)) return x + d; }
+    return null;
+  }
+  /* put a toy / garden item down at x (or move it there) */
+  function place(state, id, x) {
+    var t = thing(id);
+    if (!t || !owns(state, id)) return { ok: false, msg: 'You do not have that' };
+    if (t.kind === 'hat') return { ok: false, msg: 'Hats are worn, not placed' };
+    var T = things(state), here = isPlaced(state, id);
+    if (!here && placedOf(state, t.kind).length >= PLACE.max[t.kind]) return { ok: false, msg: 'The garden has ' + PLACE.max[t.kind] + ' ' + (t.kind === 'toy' ? 'toys' : 'garden things') + ' - put one away first' };
+    var sx = snapX(state, id, x);
+    if (sx == null) return { ok: false, msg: 'No free spot there' };
+    if (here) T.placed.forEach(function (e) { if (e.id === id) e.x = sx; });
+    else T.placed.push({ id: id, x: sx });
+    return { ok: true, x: sx, msg: t.name + (here ? ' moved' : ' placed') };
+  }
+  /* 2.5.0 toy play: the pal walks to a placed toy and plays (hop, note, the toy wobbles). Happy +1 at most once per
+   * TOYPLAY.capMs (p.toyAt), so it is a treat, not a farm. A clock set back restarts the wait from now. */
+  var TOYPLAY = { capMs: 3600e3 };
+  function canPlayToy(state, p, id) {
+    if (!p || p.fate || p.stage === 'egg') return 'No pal';
+    if (p.asleep) return 'It is asleep';
+    if (p.sick) return 'Too sick to play';
+    if (!p.lights) return 'The lights are off';
+    var t = thing(id);
+    if (!t || t.kind !== 'toy' || !owns(state, id) || !isPlaced(state, id)) return 'That toy is not out';
+    return null;
+  }
+  function playToy(state, p, id, ms) {
+    var why = canPlayToy(state, p, id); if (why) return { ok: false, msg: why, happy: 0 };
+    ms = Math.round(ms);
+    if (Number.isFinite(p.toyAt) && p.toyAt > ms) p.toyAt = ms;   // the clock went back
+    var gain = !Number.isFinite(p.toyAt) || ms - p.toyAt >= TOYPLAY.capMs;
+    if (gain) { p.toyAt = ms; p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); }
+    return { ok: true, happy: gain ? 1 : 0, msg: p.name + ' plays with the ' + THINGS[id].name + (gain ? '! Happy +1' : '') };
+  }
+  /* equip: a hat is worn by one pal (p.hat); toys and garden things belong to the garden (every pal sees them) */
+  function equip(state, p, id, x) {
     var t = id == null ? null : thing(id);
     if (id != null && (!t || !owns(state, id))) return { ok: false, msg: 'You do not have that' };
     if (t && t.kind === 'hat') { if (!p) return { ok: false, msg: 'No pal' }; p.hat = id; return { ok: true, msg: p.name + ' wears the ' + t.name }; }
-    if (t) { things(state)[t.kind] = id; return { ok: true, msg: t.name + ' placed' }; }
+    if (t) return place(state, id, x != null ? x : (t.kind === 'toy' ? 90 : 55));
     return { ok: false, msg: 'Nothing chosen' };
   }
-  function unequip(state, p, kind) {
-    if (kind === 'hat') { if (p) delete p.hat; return { ok: true, msg: 'Hat off' }; }
-    if (kind === 'toy' || kind === 'deco') { things(state)[kind] = null; return { ok: true, msg: 'Put away' }; }
+  /* unequip(state, p, 'hat') takes the hat off; unequip(state, p, id) puts that toy / garden thing away;
+   * unequip(state, p, 'toy' | 'deco') puts every one of that kind away */
+  function unequip(state, p, what) {
+    if (what === 'hat') { if (p) delete p.hat; return { ok: true, msg: 'Hat off' }; }
+    var T = things(state);
+    if (what === 'toy' || what === 'deco') { T.placed = T.placed.filter(function (e) { return THINGS[e.id].kind !== what; }); return { ok: true, msg: 'Put away' }; }
+    if (thing(what)) { T.placed = T.placed.filter(function (e) { return e.id !== what; }); return { ok: true, msg: 'Put away' }; }
     return { ok: false, msg: '?' };
   }
   function buyThing(state, id, now) {
@@ -77,15 +171,42 @@
   function shown(state, p) {
     var T = things(state);
     var hat = p && p.hat && owns(state, p.hat) && THINGS[p.hat].kind === 'hat' ? p.hat : null;
-    return { hat: hat, toy: T.toy && owns(state, T.toy) ? T.toy : null, deco: T.deco && owns(state, T.deco) ? T.deco : null };
+    var placed = T.placed.filter(function (e) { return owns(state, e.id); });
+    var first = function (k) { var e = placed.filter(function (q) { return THINGS[q.id].kind === k; })[0]; return e ? e.id : null; };
+    return { hat: hat, placed: placed, toy: first('toy'), deco: first('deco') };
   }
   function cleanThings(t) {
-    var o = { own: {}, toy: null, deco: null };
+    var o = { own: {}, placed: [] };
     if (t && typeof t === 'object') {
-      if (t.own && typeof t.own === 'object') Object.keys(t.own).forEach(function (id) { if (thing(id) && Number.isFinite(t.own[id]) && t.own[id] > 0) o.own[id] = Math.round(t.own[id]); });
-      ['toy', 'deco'].forEach(function (k) { if (typeof t[k] === 'string' && o.own[t[k]] && THINGS[t[k]].kind === k) o[k] = t[k]; });
+      if (t.own && typeof t.own === 'object') Object.keys(t.own).forEach(function (id0) { var id = canon(id0); if (thing(id) && Number.isFinite(t.own[id0]) && t.own[id0] > 0 && !o.own[id]) o.own[id] = Math.round(t.own[id0]); });
+      var n = { toy: 0, deco: 0 }, seen = {};
+      (Array.isArray(t.placed) ? t.placed : []).forEach(function (e) {
+        if (!e || typeof e !== 'object') return;
+        var id = canon(e.id), k = thing(id) && THINGS[id].kind;
+        if (!o.own[id] || k === 'hat' || seen[id] || n[k] >= PLACE.max[k] || !Number.isFinite(e.x)) return;
+        seen[id] = 1; n[k]++; o.placed.push({ id: id, x: U.int(e.x, 0, PLACE.minX, PLACE.maxX - 4) });
+      });
+      // a pre-2.5.0 shape (one toy + one deco) still loads, at the spots they showed
+      [['deco', 55], ['toy', 90]].forEach(function (kx) { var id = canon(t[kx[0]]); if (typeof id === 'string' && o.own[id] && THINGS[id].kind === kx[0] && !seen[id] && n[kx[0]] < PLACE.max[kx[0]]) { seen[id] = 1; n[kx[0]]++; o.placed.push({ id: id, x: kx[1] }); } });
     }
     return o;
+  }
+  /* 9 -> 10 (2.5.0): the Bowtie became the Top Hat; one toy + one deco became the placed list */
+  function migrate10(st) {
+    st = st || {};
+    var hatFix = function (p) { if (p && typeof p === 'object' && p.hat === 'bowtie') p.hat = 'tophat'; };
+    var T = st.things && typeof st.things === 'object' ? st.things : (st.things = { own: {} });
+    T.own = T.own && typeof T.own === 'object' ? T.own : {};
+    if (T.own.bowtie != null) { if (T.own.tophat == null) T.own.tophat = T.own.bowtie; delete T.own.bowtie; }
+    var placed = [];
+    if (typeof T.deco === 'string') placed.push({ id: canon(T.deco), x: 55 });
+    if (typeof T.toy === 'string') placed.push({ id: canon(T.toy), x: 90 });
+    if (!Array.isArray(T.placed)) T.placed = placed;
+    delete T.toy; delete T.deco;
+    (Array.isArray(st.slots) ? st.slots : []).forEach(hatFix);
+    (Array.isArray(st.album) ? st.album : []).forEach(hatFix);
+    if (st.settings && typeof st.settings === 'object' && !('hemi' in st.settings)) st.settings.hemi = null;   // null = guess from the time zone
+    return st;
   }
 
   /* ------------------------------------------------------------------ seasonal events
@@ -149,6 +270,65 @@
     if (PP.Shop.coins(state) < row.price) return { ok: false, msg: 'Need ' + row.price + ' coins' };
     PP.Shop.add(state, -row.price); give(state, id, ms);
     return { ok: true, msg: 'Got the ' + THINGS[id].name + '! (-' + row.price + 'c)' };
+  }
+
+  /* ------------------------------------------------------------------ seasons (2.5.0)
+   * Winter and spring touches in the garden, by the device's hemisphere: south (Australia, NZ, South America, southern
+   * Africa) winter Jun-Aug / spring Sep-Nov; north winter Dec-Feb / spring Mar-May. settings.hemi ('south' | 'north')
+   * overrides the guess (from the time zone name, else from which half of the year has daylight saving). An event
+   * (Halloween, Christmas, Easter) takes priority on its days. The Flower Crown is free once per spring. */
+  var SEASONS = {
+    winter: { name: 'Winter', text: 'Snowflakes drift over the garden.' },
+    spring: { name: 'Spring', text: 'Blossom on the trees - and a free Flower Crown to collect.', gift: 'flowercrown' }
+  };
+  var SOUTH_TZ = /^(Australia|Antarctica)\/|^Pacific\/(Auckland|Chatham|Fiji|Tongatapu|Apia|Noumea|Efate|Port_Moresby|Guadalcanal)$|^America\/(Argentina\/|Santiago|Sao_Paulo|Montevideo|Asuncion|La_Paz|Lima|Punta_Arenas|Campo_Grande|Cuiaba|Porto_Velho|Recife|Bahia|Fortaleza|Maceio|Belem|Araguaina|Rio_Branco|Manaus)|^Africa\/(Johannesburg|Maputo|Harare|Windhoek|Gaborone|Maseru|Mbabane|Lusaka|Blantyre|Lubumbashi|Luanda)$|^Indian\/(Antananarivo|Mauritius|Reunion)$|^Atlantic\/(Stanley|St_Helena)$|^Asia\/(Jakarta|Dili)$/;
+  function guessHemi(tz, janOff, julOff) {
+    if (typeof tz === 'string' && tz) return SOUTH_TZ.test(tz) ? 'south' : 'north';
+    if (Number.isFinite(janOff) && Number.isFinite(julOff) && janOff !== julOff) return janOff < julOff ? 'south' : 'north';   // getTimezoneOffset: summer time = smaller
+    return 'north';
+  }
+  function deviceHemi() {
+    var tz = null, y = new Date().getFullYear();
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { tz = null; }
+    return guessHemi(tz, new Date(y, 0, 1).getTimezoneOffset(), new Date(y, 6, 1).getTimezoneOffset());
+  }
+  function hemi(state) { var h = state && state.settings && state.settings.hemi; return h === 'south' || h === 'north' ? h : deviceHemi(); }
+  function seasonOnDate(ms, h) {
+    var m = new Date(ms).getMonth() + 1;
+    if (h === 'south') return m >= 6 && m <= 8 ? 'winter' : m >= 9 && m <= 11 ? 'spring' : null;
+    return m === 12 || m <= 2 ? 'winter' : m >= 3 && m <= 5 ? 'spring' : null;
+  }
+  function seasonNow(state, ms) {
+    var f = state && state.settings && state.settings.seasonForce;
+    if (f === 'off') return null;
+    if (f && SEASONS[f]) return f;
+    return seasonOnDate(ms, hemi(state));
+  }
+  /* what the garden shows: the event if one is on, else the season */
+  function garden(state, ms) { return eventNow(state, ms) || seasonNow(state, ms); }
+  /* the spring gift key: a northern winter spans the new year, but spring never does, so the year names it */
+  function seasonGift(state, ms) {
+    var se = seasonNow(state, ms); if (!se || !SEASONS[se].gift) return null;
+    var id = SEASONS[se].gift, key = se + '-' + new Date(ms).getFullYear(), got = (state.events && state.events.got) || {};
+    return { season: se, id: id, key: key, claimed: !!got[key] || owns(state, id) };
+  }
+  function claimSeasonGift(state, ms) {
+    var g = seasonGift(state, ms);
+    if (!g) return { ok: false, msg: 'Not in spring' };
+    if (g.claimed) return { ok: false, msg: 'Already collected' };
+    state.events = state.events || { got: {} }; state.events.got = state.events.got || {};
+    state.events.got[g.key] = Math.round(ms) || 1;
+    give(state, g.id, ms);
+    return { ok: true, id: g.id, msg: SEASONS[g.season].name + ' gift: the ' + THINGS[g.id].name + '!' };
+  }
+  /* the Party Hat: free on a pal's first hatch birthday (365 days since it hatched), if not owned yet */
+  var BIRTHDAY_MS = 365 * DAY;
+  function birthday(state, p, ms) {
+    if (!p || p.fate || !Number.isFinite(p.hatchedAt) || owns(state, 'party')) return null;
+    if (ms - p.hatchedAt < BIRTHDAY_MS) return null;
+    give(state, 'party', ms);
+    remember(p, 'event', 'First birthday! Got a Party Hat', ms);
+    return { ok: true, id: 'party', msg: 'Happy 1st birthday, ' + p.name + '! A Party Hat for you (Things \u25b8 Hats).' };
   }
 
   /* ------------------------------------------------------------------ memory book
@@ -260,15 +440,19 @@
   var PLACES = {
     beach:  { name: 'Beach',  energy: 20, blurb: 'Sand, waves and seashells.', minStage: 'child' },
     forest: { name: 'Forest', energy: 25, blurb: 'Tall trees, mushrooms and pinecones.', minStage: 'child' },
-    town:   { name: 'Town',   energy: 15, blurb: 'Shops, lamps and friendly faces.', minStage: 'child' }
+    town:   { name: 'Town',   energy: 15, blurb: 'Shops, lamps and friendly faces.', minStage: 'child' },
+    mountain: { name: 'Mountain', energy: 30, blurb: 'Snowy peaks, pines and a summit flag.', minStage: 'teen' },   // 2.5.0
+    lake:   { name: 'Lake',   energy: 20, blurb: 'Reeds, lily pads and a little dock.', minStage: 'child' }        // 2.5.0
   };
+  var STAGE_ORDER = ['egg', 'baby', 'child', 'teen', 'adult'];
+  function stageAtLeast(p, st) { return STAGE_ORDER.indexOf(p.stage) >= STAGE_ORDER.indexOf(st); }
   var TRIP = { coolMin: 120, perDay: 3, findPct: 0.4, rarePct: 0.08, meetPct: 0.15, coins: [3, 8] };
   function trips(state) { return state.trips || (state.trips = { last: null, day: null, n: 0, count: 0, visits: {} }); }
   function tripDay(ms) { return PP.Shop.dayOf(ms); }
   function canTrip(state, p, where, ms) {
     var P = PLACES[where]; if (!P) return 'Unknown place';
     if (!p || p.fate) return 'No pal';
-    if (p.stage === 'egg' || p.stage === 'baby') return 'Too little for trips (wait until it is a child)';
+    if (!stageAtLeast(p, P.minStage || 'child')) return P.minStage === 'teen' ? 'The ' + P.name + ' is for teens and up' : 'Too little for trips (wait until it is a child)';
     if (p.asleep) return 'It is asleep';
     if (p.sick) return 'Too sick for a trip';
     if (p.fake) return 'Not during a tantrum';
@@ -299,8 +483,9 @@
     out.coins = PP.Shop.earn(state, c, ms);
     var here = Object.keys(THINGS).filter(function (id) { return THINGS[id].src === 'trip' && THINGS[id].place === where && !owns(state, id); });
     var common = here.filter(function (id) { return !THINGS[id].rare; }), rare = here.filter(function (id) { return THINGS[id].rare; });
-    var r = roll('find');
-    if (rare.length && r < TRIP.rarePct) out.found = rare[Math.floor(roll('which') * rare.length)];
+    var r = roll('find'), sure = here.filter(function (id) { return THINGS[id].first && T.visits[where] === 1; });
+    if (sure.length) out.found = sure[0];                  // 2.5.0: the Summit Flag on the first Mountain trip
+    else if (rare.length && r < TRIP.rarePct) out.found = rare[Math.floor(roll('which') * rare.length)];
     else if (common.length && r < TRIP.findPct) out.found = common[Math.floor(roll('which') * common.length)];
     if (out.found) give(state, out.found, ms);
     if (roll('meet') < TRIP.meetPct) {
@@ -359,6 +544,7 @@
     M.sent.n++; if (g.free) M.sent.free++;
     if (g.item) { state.inv[g.item] = Math.max(0, (state.inv[g.item] || 0) - 1); if (!state.inv[g.item]) delete state.inv[g.item]; }   // moved out of the bag (not used on your pal)
     logMail(M, { dir: 'out', g: giftId, who: PP.Pet.cleanName(friend.name) || 'Friend', at: Math.round(ms) });
+    if (PP.Daily) PP.Daily.record(state, 'gift', PP.Game.now(state));   // 2.4.99: the 'Send a gift' goal was never counted
     var p = PP.Game.active(state); if (p) remember(p, 'gift', 'Sent a ' + g.name + ' to ' + (friend.name || 'a friend'), ms);
   }
   function logMail(M, e) { M.log.push(e); if (M.log.length > GIFT.keepLog) M.log.splice(0, M.log.length - GIFT.keepLog); }
@@ -398,6 +584,7 @@
     V.met[key] = U.newDay(V.met[key], day) ? day : V.met[key];
     var keys = Object.keys(V.met); if (keys.length > 30) keys.sort(function (a, b) { return V.met[a] - V.met[b]; }).slice(0, keys.length - 30).forEach(function (k) { delete V.met[k]; });
     if (firstEver || bonus) remember(p, 'visit', (firstEver ? 'Met ' : 'Played with ') + (friend.name || 'a friend') + ' the ' + D.NAMES[friend.species][friend.form || 'good'], ms);
+    if (PP.Daily) PP.Daily.record(state, 'visit', PP.Game.now(state));   // 2.4.99: the 'Visit a friend' goal was never counted
     return { ok: true, bonus: bonus, msg: bonus ? 'They had a great time! Happy +1' : already ? 'Fun visit (the happy bonus is once a day per friend)' : 'Fun visit (' + VISIT.perDay + ' happy bonuses a day)' };
   }
   function cleanMail(m) {
@@ -476,7 +663,7 @@
 
   /* ------------------------------------------------------------------ state defaults / cleaning (save.js) */
   function defaults() {
-    return { things: { own: {}, toy: null, deco: null }, trips: cleanTrips(null), mail: cleanMail(null), visits: cleanVisits(null), events: { got: {} }, line: { top: 1, retired: 0 }, fcup: cleanFcup(null) };
+    return { things: { own: {}, placed: [] }, trips: cleanTrips(null), mail: cleanMail(null), visits: cleanVisits(null), events: { got: {} }, line: { top: 1, retired: 0 }, fcup: cleanFcup(null) };
   }
   function cleanState(out, s) {
     out.things = cleanThings(s.things);
@@ -485,7 +672,7 @@
     out.visits = cleanVisits(s.visits);
     out.fcup = cleanFcup(s.fcup);
     var ev = { got: {} };
-    if (s.events && s.events.got && typeof s.events.got === 'object') Object.keys(s.events.got).forEach(function (k) { if (/^(halloween|christmas|easter)-\d{4}$/.test(k) && Number.isFinite(s.events.got[k])) ev.got[k] = Math.round(s.events.got[k]); });
+    if (s.events && s.events.got && typeof s.events.got === 'object') Object.keys(s.events.got).forEach(function (k) { if (/^(halloween|christmas|easter|spring)-\d{4}$/.test(k) && Number.isFinite(s.events.got[k])) ev.got[k] = Math.round(s.events.got[k]); });
     if (s.events && Number.isFinite(s.events.hello)) ev.hello = Math.round(s.events.hello);   // the day the event hello was shown
     out.events = ev;
     var L = s.line && typeof s.line === 'object' ? s.line : {};
@@ -496,12 +683,14 @@
   /* per pal (sanitizePet): memory book, worn hat, heir note */
   function cleanPet(out, p) {
     out.mem = cleanMem(p.mem);
-    if (typeof p.hat === 'string' && thing(p.hat) && THINGS[p.hat].kind === 'hat') out.hat = p.hat; else delete out.hat;
+    var h = canon(p.hat);
+    if (typeof h === 'string' && thing(h) && THINGS[h].kind === 'hat') out.hat = h; else delete out.hat;
     if (p.heir && typeof p.heir === 'object' && ['gene', 'skill', 'ribbon'].indexOf(p.heir.trait) >= 0) {
       out.heir = { from: String(p.heir.from || '').slice(0, 40), name: PP.Pet.cleanName(p.heir.name) || '?', trait: p.heir.trait };
       if (typeof p.heir.v === 'string') out.heir.v = p.heir.v.slice(0, 24);
     } else delete out.heir;
     if (p.elderSeen === true) out.elderSeen = true; else delete out.elderSeen;
+    if (Number.isFinite(p.toyAt) && p.toyAt > 0) out.toyAt = Math.round(p.toyAt); else delete out.toyAt;   // 2.5.0 toy play cap
     return out;
   }
   /* 7 -> 8 migration: the new parts start empty, nothing is lost; every pal's memory book starts with what the save
@@ -528,7 +717,8 @@
   }
 
   PP.World = {
-    THINGS: THINGS, KINDS: KINDS, thing: thing, owns: owns, give: give, ownedList: ownedList, equip: equip, unequip: unequip, buyThing: buyThing, shown: shown,
+    THINGS: THINGS, KINDS: KINDS, thing: thing, canon: canon, RENAMED: RENAMED, counts: counts, collectable: collectable, TOYPLAY: TOYPLAY, canPlayToy: canPlayToy, playToy: playToy, PLACE: PLACE, place: place, snapX: snapX, isPlaced: isPlaced, placedOf: placedOf, migrate10: migrate10, owns: owns, give: give, ownedList: ownedList, equip: equip, unequip: unequip, buyThing: buyThing, shown: shown,
+    SEASONS: SEASONS, guessHemi: guessHemi, hemi: hemi, seasonOnDate: seasonOnDate, seasonNow: seasonNow, garden: garden, seasonGift: seasonGift, claimSeasonGift: claimSeasonGift, birthday: birthday, BIRTHDAY_MS: BIRTHDAY_MS,
     EVENTS: EVENTS, easterOf: easterOf, eventOnDate: eventOnDate, eventNow: eventNow, eventGift: eventGift, claimEventGift: claimEventGift,
     eventShop: eventShop, buyEventThing: buyEventThing, EVENT_PRICE: EVENT_PRICE,
     MEM_MAX: MEM_MAX, remember: remember, cleanMem: cleanMem, familyLine: familyLine,

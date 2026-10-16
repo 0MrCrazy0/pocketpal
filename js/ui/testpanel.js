@@ -27,6 +27,7 @@
       ['Revive RIP', function () { var r = T.revive(st()); done(r && r.msg ? r.msg : 'Nothing to revive'); }]]],
     // 2.4.0: seasonal events (Auto = the device date) and the wider world
     ['Event', [['Auto', function () { ev(null); }], ['Halloween', function () { ev('halloween'); }], ['Christmas', function () { ev('christmas'); }], ['Easter', function () { ev('easter'); }], ['Off', function () { ev('off'); }]]],
+    ['Season', [['Auto', function () { se(null); }], ['Winter', function () { se('winter'); }], ['Spring', function () { se('spring'); }], ['Off', function () { se('off'); }]]],   // 2.5.0
     ['World', [['Trip ready', function () { var T9 = st().trips; T9.last = null; T9.n = 0; done('Trips ready'); }], ['All things', function () { Object.keys(PP.World.THINGS).forEach(function (id) { PP.World.give(st(), id, Date.now()); }); done('Every thing owned'); }],
       ['Elder', function () { var p = pet(); if (p && p.stage === 'adult') { p.stageMin = Math.max(p.stageMin, PP.World.RETIRE.elderDays * 1440); done('Elder (can retire)'); } else done('Adults only'); }],
       ['Gift in', function () { var r = PP.World.receive(st(), [{ g: 'treat', n: 'Tester', s: 1 }], G.now(st())); done(r.length ? 'Got a ' + r[0].name + (r[0].used ? '' : ' (note)') : 'No gift'); }]]],
@@ -39,6 +40,7 @@
     done(msg + (fresh.length ? '' : ' (no new shells)'));
   }
   function ev(k) { st().settings.eventForce = k; done('Event: ' + (k ? k : 'auto (device date)')); }
+  function se(k) { st().settings.seasonForce = k; done('Season: ' + (k ? k : 'auto (date + hemisphere)')); }
   function setSpeed(n) { st().settings.speed = n; done('Time x' + n); }
   function skip(min) {
     var ev = T.skip(st(), min, Date.now());

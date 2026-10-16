@@ -143,6 +143,8 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .thumb.dim { opacity: .45; }
 .thumb.sil.secret { filter: brightness(0); opacity: .92; }   /* 1.9.7: an unknown secret form is a solid dark silhouette */
 .flip .thumb { transform: scaleX(-1); }
+.thumb.hatted { position: relative; overflow: visible; }   /* 2.5.0: the worn hat over a menu thumbnail */
+.thumb-hat { position: absolute; display: block; background-size: 100% 100%; background-repeat: no-repeat; image-rendering: pixelated; pointer-events: none; }
 .st-top { display: flex; gap: calc(var(--u) * 4); align-items: center; margin-bottom: calc(var(--u) * 1.5); line-height: 1.25; }
 .st-top > div { min-width: 0; overflow-wrap: anywhere; }
 .kv { width: 100%; border-collapse: collapse; font-size: calc(var(--u) * 6.3); }
@@ -210,6 +212,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .bm.sel { border-color: var(--lcd-lite); background: #2c5c2c; }
 .bm:disabled { opacity: .45; cursor: default; }
 .bm.auto { color: var(--lcd-lite); }
+.bm-hint { flex: none; text-align: center; color: var(--lcd-lite); opacity: .8; font: 700 calc(var(--u) * 4.2)/1.2 'PocketPal LCD', 'Courier New', monospace; padding-top: calc(var(--u) * 0.6); }   /* 2.4.99 */
 .bm.flee { color: #f0d890; }   /* 1.8.4 Run / Forfeit */
 .foes { list-style: none; margin: calc(var(--u) * 1) 0; } .foes li { display: flex; align-items: center; gap: calc(var(--u) * 2); padding: calc(var(--u) * .6) 0; overflow-wrap: anywhere; }
 .pips { letter-spacing: .15em; margin: calc(var(--u) * .6) 0; }
