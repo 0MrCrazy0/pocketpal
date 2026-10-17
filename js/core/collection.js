@@ -87,7 +87,7 @@
     if (u.cup) return 'Win the ' + D.ARENA[u.cup - 1].name + ' (arena cup ' + u.cup + ')';
     if (u.champion) return 'Become Arena Champion (win all ' + D.ARENA_MAIN + ' main cups)';
     if (u.dex) return 'Raise ' + u.dex + ' different adult forms (Paldex)';
-    if (u.season) { var se = PP.Daily.season(u.season); return 'Finish all 3 daily goals on ' + PP.Daily.SEASON_DAYS + ' days in ' + (se ? se.window : u.season); }
+    if (u.season) { var se = PP.Daily.season(u.season); return 'Finish all the daily goals on ' + PP.Daily.SEASON_DAYS + ' days in ' + (se ? se.window : u.season); }
     if (u.golden) return 'Hatch a rare golden egg';
     return '';
   }

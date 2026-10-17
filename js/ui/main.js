@@ -98,8 +98,17 @@
     App.toasts.push({ msg: msg, at: Date.now() }); if (App.toasts.length > 4) App.toasts.shift();
   };
   App.clearToasts = function () { App.toasts = []; App.toastUntil = 0; var el = document.getElementById('toast'); if (el) el.hidden = true; };
+  /* 2.5.1: while a menu is open the toast sits on its bottom hint row; a 2-line toast covered the menu's own buttons.
+   * The menu gets that much bottom padding while the toast shows, so its buttons move up (nothing is cut off). */
+  function fitToast(el) {
+    var ov = document.getElementById('overlay'); if (!ov) return;
+    var want = '';
+    if (!ov.hidden && !el.hidden) { var hint = ov.querySelector('.ov-hint'), o = ov.getBoundingClientRect(), t = el.getBoundingClientRect(), hb = hint ? hint.getBoundingClientRect().top : o.bottom; var over = Math.ceil(hb + (parseFloat(ov.style.paddingBottom) || 0) - t.top); /* as if unpadded: no feedback loop */ if (over > 0) want = over + 'px'; }
+    if (ov.style.paddingBottom !== want) ov.style.paddingBottom = want;
+  }
   function pumpToasts(now) {
     var el = document.getElementById('toast');
+    fitToast(el);
     if (now < App.toastUntil) return;
     if (App.cut || App.scene === 'battle') { if (!el.hidden) el.hidden = true; return; } // keep the stage clear
     var t = Date.now();

@@ -442,6 +442,7 @@
       }
       if (!p.asleep) {
         p.wokeAt = null;   // 2.4.99: falling asleep always ends 'woken early' (lights off right at the night edge left it set)
+        p.night = null;    // 2.5.1: the night is over - a log left from being woken early ends too (the save dropped it: a reload changed the state)
         p.asleep = true; p.sleepKind = 'nap'; p.fake = null;
         return Object.assign(res(true, 'Lights off - a nap. Energy is recovering.', null), { resleep: true });
       }

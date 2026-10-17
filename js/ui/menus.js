@@ -132,7 +132,7 @@
     return { title: 'MENU', items: [
       { label: 'Status', sub: 'Needs, stats, care report', act: function () { push(statusScreen(0)); } },
       dailyItem(),
-      { label: 'Trips', sub: 'Beach, forest or town with your pal', act: function () { push(PP.WorldUI.tripsScreen); } },   // 2.4.0
+      { label: 'Trips', sub: 'Beach, forest, town, lake or mountain', act: function () { push(PP.WorldUI.tripsScreen); } },   // 2.4.0
       { label: 'Skills', sub: 'Skill tree (adults)', act: function () { push(skillsScreen); } },
       { label: 'Paldex', sub: c.adults + '/' + DEX_ADULTS + ' adult forms \u00b7 ' + c.total + '/' + DEX_ALL + ' in all', right: c.adults + '/' + DEX_ADULTS, act: function () { push(paldexScreen(0)); } },
       { label: 'Shell colour', sub: 'Repaint your handheld', act: openShells },
@@ -175,7 +175,7 @@
     h += '<p class="tip">Seasonal shells: ' + D9.SEASONS.map(function (se) {
       var have = PP.Collection.shellStatus(s, se.id).ok;
       return '<b>' + esc(se.name) + '</b> ' + (have ? '\u2714' : Math.min(D9.SEASON_DAYS, D9.seasonDays(s, se.id)) + '/' + D9.SEASON_DAYS + (cur.indexOf(se.id) >= 0 ? ' (now!)' : ' (' + esc(se.window) + ')'));
-    }).join(' \u00b7 ') + '. Finish all 3 goals on ' + D9.SEASON_DAYS + ' days in the season.</p>';
+    }).join(' \u00b7 ') + '. Finish all the daily goals on ' + D9.SEASON_DAYS + ' days in the season.</p>';
     var items = [];
     if (d && d.loginDay !== PP.Shop.dayOf(t)) items.push({ label: 'Claim daily bonus', sub: 'Coins for opening the game today', act: function () { var r = PP.Daily.loginBonus(s, t); App().toast(r.ok ? '+' + r.coins + ' coins (streak ' + r.streak + ')' : r.msg); App().save(); refresh(); } });
     if (d && D9.visitorReady(s, t)) items.push({ label: 'Battle the visitor', sub: 'One try today \u00b7 win for +' + D9.VISITOR_BONUS + ' coins', disabled: !!G.canBattle(pet()), reason: G.canBattle(pet()), act: function () { close(); App().startVisitor(); } });
@@ -626,7 +626,7 @@
   }
   /* 1.8.4: per-cup progress. A star only for a cup really won (state.arena.cups[i].won). */
   var ROLE = { challenger: 'Challenger', rival: 'Rival', boss: 'Cup boss' };
-  function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); return Math.min.apply(null, l) + '-' + Math.max.apply(null, l); }
+  function cupLevels(cup) { var l = cup.foes.map(function (f) { return f[2]; }); var a = Math.min.apply(null, l), b = Math.max.apply(null, l); return a === b ? String(a) : a + '-' + b; }   // 2.5.1: 'Lv 1', not 'Lv 1-1'
   // 2.4.96: >= (a clock set back keeps it done) and the game's own clock for both (daily used Date.now())
   function dailyDone(s) { var p = pet(); return !!p && p.arenaDay != null && !PP.util.newDay(p.arenaDay, PP.Shop.dayOf(PP.Game.now(s))); }
   function weeklyDone(s) { var p = pet(); return !!p && p.weekDone != null && !PP.util.newDay(p.weekDone, PP.Daily.weekOf(PP.Game.now(s)), 2); }   // 2.4.92: same clock as the game's check
@@ -1207,7 +1207,7 @@
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
       '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected.</p>' +
       '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +
-      '<p><b>Out and about (2.4.0):</b> MENU \u25b8 Trips (beach, forest, town, lake, mountain), Things (hats, toys, garden - place up to 3 toys and 3 garden things), Family (retiring moves an adult to the Album - it does not die - and an heir egg carries one trait), Gifts &amp; visits, and every pal\u2019s Memory book. Battle \u25b8 Friends Cup pits you against your friends\u2019 pals. Halloween, Christmas and Easter bring seasonal items.</p>' +
+      '<p><b>Out and about:</b> MENU \u25b8 Trips (beach, forest, town, lake, mountain), Things (hats, toys, garden - place up to 3 toys and 3 garden things), Family (retiring moves an adult to the Album - it does not die - and an heir egg carries one trait), Gifts &amp; visits, and every pal\u2019s Memory book. Battle \u25b8 Friends Cup pits you against your friends\u2019 pals. Halloween, Christmas and Easter bring seasonal items, and the garden follows the real season (Settings ▸ Seasons).</p>' +
       '<p>Paldex: raise all ' + DEX_ADULTS + ' adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
   }
 

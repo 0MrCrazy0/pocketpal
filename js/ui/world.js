@@ -271,7 +271,9 @@
   function tick() {
     var A = App(); if (!A || !A.state || A.passive || A.cut || A.scene !== 'home') return;
     var s = A.state, t = now(), ev = W.eventNow(s, t), day = PP.Shop.dayOf(t), p = pet();
-    if (ev && p && !p.fate && s.events.hello !== day) {
+    var busy = !!(PP.UI && PP.UI.isOpen && PP.UI.isOpen());   // 2.5.1: hellos wait until no menu is open (the toast sat on the guide's buttons)
+    if (busy) { /* the mailbox check below still runs */ }
+    else if (ev && p && !p.fate && s.events.hello !== day) {
       s.events.hello = day;
       var g = W.eventGift(s, t);
       toast('Happy ' + W.EVENTS[ev].name + '! ' + (g && !g.claimed ? 'A free ' + W.THINGS[g.id].name + ' is waiting (MENU \u25b8 Things \u25b8 Get more things).' : 'Seasonal items are in Things.'));
@@ -279,7 +281,7 @@
       var sg = W.seasonGift(s, t);
       if (sg && !sg.claimed) { s.events.hello = day; toast('Spring is here! A free ' + W.THINGS[sg.id].name + ' is waiting (MENU \u25b8 Things \u25b8 Get more things).'); }
     }
-    if (p && p.stage !== 'egg') { var bd = W.birthday(s, p, t); if (bd) { PP.Audio.play('level'); toast(bd.msg); A.save(); } }   // 2.5.0 Party Hat
+    if (!busy && p && p.stage !== 'egg') { var bd = W.birthday(s, p, t); if (bd) { PP.Audio.play('level'); toast(bd.msg); A.save(); } }   // 2.5.0 Party Hat
     var M = s.mail;
     if (M && M.key && online() && !(root.document && root.document.hidden) && Math.abs(Date.now() - (M.checkAt || 0)) > CHECK_MS) checkBox(true);   // abs: a clock that was ahead never stops the checks
   }

@@ -191,14 +191,21 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
 .overlay .mi.lock .swatch { filter: grayscale(.85) brightness(.7); }
 /* guide */
 .guide-art { display: flex; justify-content: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 2) 0; }
-.gbtn { display: inline-flex; align-items: center; justify-content: center; width: calc(var(--u) * 13); height: calc(var(--u) * 13); border-radius: 50%; background: #333; color: #ddd; font-weight: 800; font-size: calc(var(--u) * 6); border: 2px solid #4a9; }
+.gbtn { flex: none; display: inline-flex; align-items: center; justify-content: center; width: calc(var(--u) * 13); height: calc(var(--u) * 13); border-radius: 50%; background: #333; color: #ddd; font-weight: 800; font-size: calc(var(--u) * 6); border: 2px solid #4a9; }
 .gbtn.b { border-color: #49a; } .gbtn.c { border-color: #a54; }
-.gicon { display: inline-block; width: calc(var(--u) * 12); height: calc(var(--u) * 12); background: url(../sprites/icons.png) no-repeat; background-size: calc(var(--u) * 132) calc(var(--u) * 12); background-position: calc(var(--i) * var(--u) * -12) 0; image-rendering: pixelated; vertical-align: middle; background-color: #222; border-radius: calc(var(--u) * 2); }
+.gicon { flex: none; display: inline-block; width: calc(var(--u) * 12); height: calc(var(--u) * 12); background: url(../sprites/icons.png) no-repeat; background-size: calc(var(--u) * 132) calc(var(--u) * 12); background-position: calc(var(--i) * var(--u) * -12) 0; image-rendering: pixelated; vertical-align: middle; background-color: #222; border-radius: calc(var(--u) * 2); }
 .glist { list-style: none; } .glist li { display: flex; align-items: center; gap: calc(var(--u) * 3); margin: calc(var(--u) * 1) 0; }
 .sicon { flex: none; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: calc(var(--u) * 1); box-shadow: 0 0 0 calc(var(--u) * .5) #0f380f; }   /* 1.9.2 screen icons legend: the real LCD glyphs */
 .hl { animation: hlPulse 1s ease-in-out infinite; outline: 3px solid #fff !important; outline-offset: 2px; z-index: 40; position: relative; }
 @keyframes hlPulse { 50% { outline-color: var(--lcd); } }
-@media (prefers-reduced-motion: reduce) { .hl { animation: none; } }
+/* 2.5.1: the guide highlight hugs what it points at. On a care icon it sits on the icon's own border (the old outside
+ * ring spilled 5px into the 4px gap and over the next icon); round the A/B/C buttons it wraps just the 3 buttons,
+ * not the whole full-width row (which ran past the shell). */
+.icons .icon.hl { outline: 2px solid #fff !important; outline-offset: -2px; border-color: #fff; }
+.shell-controls .sbtn.hl { outline-width: 2px !important; outline-offset: 0; }   /* the 4px gap between the pills: a 2px ring touches no neighbour */
+.btns.hl { outline: none !important; animation: none; }
+.btns.hl .btn { outline: 3px solid #fff; outline-offset: 2px; animation: hlPulse 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .hl, .btns.hl .btn { animation: none; } }
 
 /* battle move menu: exactly covers the canvas message box (bottom 48 of 160 LCD px) */
 .bmenu { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; z-index: 15; background: var(--ink); padding: calc(var(--u) * 1) calc(var(--u) * 1.5) calc(var(--u) * 1.5); display: flex; flex-direction: column; gap: calc(var(--u) * 1); }
@@ -229,7 +236,7 @@ body.finish-clear .device::after { /* see-through 'circuit board' glimpse */
   background: var(--ink); color: var(--lcd-lite); font: 700 calc(var(--u) * 6.2)/1.25 'PocketPal LCD', 'Courier New', monospace; font-synthesis: none; box-shadow: 0 2px 0 rgba(0,0,0,.3); pointer-events: none; overflow-wrap: anywhere;
 }
 /* while a menu is open the toast drops to the bottom hint row, so it never hides a menu's title or first lines */
-#overlay:not([hidden]) ~ .toast { top: auto; bottom: calc(var(--u) * 1.5); font-size: calc(var(--u) * 5.6); padding: calc(var(--u) * 1) calc(var(--u) * 3); opacity: .96; }
+#overlay:not([hidden]) ~ .toast { top: auto; bottom: calc(var(--u) * 1.5); font-size: calc(var(--u) * 5.6); padding: calc(var(--u) * 1) calc(var(--u) * 3); opacity: .96; }   /* 2.5.1: main.js lifts the menu's own buttons above a 2-line toast (fitToast), nothing is cut off */
 
 /* test panel */
 #testpanel {
@@ -367,3 +374,7 @@ body.finish-gilded .device { background:
 .traits li.dim, .lean-forms li.dim { opacity: .65; }
 .traits .inh { font-size: .85em; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; }
 .tr-h { margin: 6px 0 0; font-weight: bold; }
+/* 2.5.1: a hint bubble waits while a menu is open (it covered the menu's own buttons); it shows again when the menu closes */
+#overlay:not([hidden]) ~ .hint { display: none; }
+/* 2.5.1: on narrow phones the bell / MENU / sound pills reach the middle of the shell: drop the speaker slot they sat on */
+@media (max-width: 360px) { .device::before { display: none; } }
