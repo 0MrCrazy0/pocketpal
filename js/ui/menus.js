@@ -299,7 +299,7 @@
     { row: 1, parts: [['food'], ['hearts', 3]], name: 'Hunger', text: '4 hearts. Feed a meal when they run low. The picture is your pal\'s own food: meat (lion, wolf), fish (croc, eagle), honey (bear) or fruit (elephant).' },
     { row: 1, parts: [['smile'], ['hearts', 2]], name: 'Happiness', text: '4 hearts. Play a game or give a snack.' },
     { row: 1, parts: [['bolt'], ['pips', 3]], name: 'Energy', text: '4 pips, 25% each. They blink when your pal is tired.' },
-    { row: 1, parts: [['text', 'TEEN 3D']], name: 'Stage + age', text: 'H = hours, D = days old.' },
+    { row: 1, parts: [['text', 'TEEN 3 DAYS']], name: 'Stage + age', text: 'How old your pal is: minutes, then hours (HRS), then days. Time asleep and away counts; the Pal Box pauses it.' },
     { row: 2, parts: [['flag'], ['bar', 60]], name: 'Discipline', text: 'The bar fills when you scold a tantrum or praise good behaviour.' },
     { row: 2, parts: [['dtext', 'WT'], ['text', 'OK']], name: 'Weight', text: 'WT + LO (underweight: feed meals), OK (fine) or HI (overweight: fewer snacks, more play).' },
     { row: 2, parts: [['sick']], name: 'Sick', text: 'The skull: give medicine.' },
@@ -402,17 +402,16 @@
       var pages = p.stage === 'adult' ? ['care', 'battle', 'genes'] : p.stage === 'child' || p.stage === 'teen' ? ['care', 'leaning', 'report', 'genes'] : ['care', 'report', 'genes'];   // 2.4.97 leaning meter
       var pg = pages[page % pages.length], h = '';
       var top = '<div class="st-top">' + thumb(p.species, S.stageKeyOf(p), PP.Care.moodPose(p), 26, '', hatOf(p)) + '<div><b>' + esc(p.name) + '</b> ' + (p.sex === 'M' ? '\u2642' : '\u2640') +
-        '<br>' + esc(PP.Pet.formName(p)) + ' \u00b7 ' + esc(p.stage === 'adult' ? FORM_LABEL[p.form] + ' adult' : p.stage) + '<br>Gen ' + p.gen + ' \u00b7 Age ' + PP.Pet.ageDays(p) + 'd' + (PP.World ? ' \u00b7 Things ' + PP.World.counts(st()).got + '/' + PP.World.counts(st()).total : '') + '</div></div>';   // 2.5.0 collected
+        '<br>' + esc(PP.Pet.formName(p)) + ' \u00b7 ' + esc(p.stage === 'adult' ? FORM_LABEL[p.form] + ' adult' : p.stage) + '<br>Gen ' + p.gen + (p.stage === 'egg' ? ' \u00b7 Egg' : ' \u00b7 Age ' + PP.Pet.ageText(p)) + (PP.World ? ' \u00b7 Things ' + PP.World.counts(st()).got + '/' + PP.World.counts(st()).total : '') + '</div></div>';   // 2.5.0 collected
       if (pg === 'care') {
-        var next = PP.Evolution.minutesToNextStage(p);
         h = top + '<table class="kv">' +
           '<tr><td>Hunger</td><td>' + hearts(p.hunger) + '</td></tr>' +
           '<tr><td>Happy</td><td>' + hearts(p.happy) + '</td></tr>' +
-          '<tr><td>Energy</td><td>' + bar(p.energy, 100, 'Energy') + '</td></tr>' +
+          '<tr><td>Energy</td><td>' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '%</td></tr>' +
           '<tr><td>Discipline</td><td>' + bar(p.discipline, 100, 'Discipline') + ' ' + Math.round(p.discipline) + '%</td></tr>' +
-          '<tr><td>Health</td><td>' + bar(p.health, 100, 'Health') + (p.sick ? ' SICK' : '') + '</td></tr>' +
+          '<tr><td>Health</td><td>' + bar(p.health, 100, 'Health') + ' ' + Math.round(p.health) + '%' + (p.sick ? ' SICK' : '') + '</td></tr>' +
           '<tr title="Status strip: WT + LO / OK / HI. All icons: MENU \u25b8 Screen icons"><td>Weight</td><td>' + p.weight + 'g' + (PP.Care.isOverweight(p) ? ' (heavy, strip: HI)' : PP.Care.isUnderweight(p) ? ' (skinny, strip: LO)' : ' (strip: OK)') + '</td></tr>' +
-          (next != null && p.stage !== 'egg' ? '<tr><td>Grows in</td><td>' + hm(next) + '</td></tr>' : '') +
+          (p.fate ? '' : '<tr><td>Growing</td><td>' + esc(PP.Evolution.growText(p)) + '</td></tr>') +   // 2.5.2: by the real rule (was 'Grows in 0h 0m' all night)
           (p.stage !== 'egg' ? '<tr><td>Sleeps</td><td>' + schedText(PP.Sleep.of(p)) + (p.sched ? '' : ' (default)') + '</td></tr>' : '') +
           '<tr><td>Status</td><td>' + (p.fate ? esc(p.fateCause || p.fate) : p.asleep ? (p.sleepKind === 'nap' ? 'Napping' : 'Asleep') + (p.lights ? ' (lights ON!)' : '') : p.fake ? 'Tantrum!' : 'Awake') + '</td></tr>' +
           '</table>';
@@ -467,12 +466,12 @@
   function feedMenu() {
     var p = pet();
     var items = [
-      { label: 'Meal: ' + D.foodOf(p && p.species).name, sub: 'Hunger +1, weight +1g (free)', act: function () { App().doAct('meal'); } },   // 1.9.9: per diet
+      { label: 'Meal: ' + D.foodOf(p && p.species).name, sub: 'Hunger +1, energy +' + D.RULES.energyFood.meal + ', weight +1g (free)', act: function () { App().doAct('meal'); } },   // 1.9.9: per diet
       (function () {   // 2.4.95: say how many snacks are left before the overfeeding mistake
         var R = D.RULES, used = p ? (p.snacks || []).filter(function (c) { return p.clock - c < R.snackWindowMin; }).length : 0;
         var over = used >= R.snackLimit;
         return { label: over ? 'Snack (care mistake!)' : 'Snack', cls: over ? 'warn' : '',
-          sub: over ? 'Already ' + used + ' snacks in 3h - another one now counts as a care mistake' : 'Happy +1, weight +2g. ' + used + ' of ' + R.snackLimit + ' snacks used (3h)',
+          sub: over ? 'Already ' + used + ' snacks in 3h - another one now counts as a care mistake' : 'Happy +1, energy +' + R.energyFood.snack + ', weight +2g. ' + used + ' of ' + R.snackLimit + ' snacks used (3h)',
           act: function () { App().doAct('snack'); } };
       })()
     ].concat(PP.Shop.owned(st(), ['food', 'energy']).map(function (id) { return itemRow(id); }));
@@ -541,7 +540,7 @@
   }
 
   function trainMenu() {
-    var p = pet(), R = D.RULES, young = p && p.stage !== 'adult' && p.stage !== 'egg';
+    var p = pet(), R = D.RULES, baby = p && p.stage === 'baby', young = p && (p.stage === 'child' || p.stage === 'teen');   // 2.5.2: style leans are child / teen only
     var whyT = p ? G.canTrainDummy(p) : 'No pal';
     var a = { ok: !whyT, msg: whyT || '' }, b = p ? PP.Care.canExercise(p, 'game') : { ok: false, msg: 'No pal' };
     var trainPay = p && p.stage === 'adult'
@@ -550,10 +549,12 @@
     var playPay = p && p.stage === 'adult'
       ? 'Win: happy +2, XP, coins'
       : 'Win: happy +2';
-    var tip = young
+    var tip = baby
+      ? 'Baby training: discipline +5% and happy +1 for a win, and every training (up to 12) makes a stronger adult. Battle leans (ATK / SPD / DEF) start when it\u2019s a child.'
+      : young
       ? 'One drill for each battle lean. While young, the drill you run most shapes the adult: Mighty (ATK), Swift (SPD) or Sturdy (DEF).'
       : 'Adult drills: Power Training builds discipline and full XP. Memory and Match keep the pal happy and pay half XP.';
-    return { title: 'TRAINING', html: (p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '</p>' : '') +
+    return { title: 'TRAINING', html: (p ? '<p>Energy ' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '%</p>' : '') +
       '<p class="tip">' + tip + '</p>', items: [
       { label: 'Power Training', sub: '-' + R.costs.train + ' energy. Easy dummy fight - use your moves like a real battle. ' + trainPay + (young ? ' · Mighty (ATK)' : ''), disabled: !a.ok, reason: a.msg,
         act: function () { close(); App().startDummy(); } },
@@ -563,6 +564,12 @@
   }
 
   function discMenu() {
+    var p = pet();
+    if (p && p.stage === 'baby') return { title: 'DISCIPLINE', html: '<p>Discipline ' + bar(p.discipline, 100, 'Discipline') + ' ' + Math.round(p.discipline) + '%</p><p class="tip">Babies don\u2019t throw tantrums, so there is nothing to scold or praise yet. That starts when it grows into a child. Training raises discipline now (+5%).</p>', items: [   // 2.5.2
+      { label: 'Train instead', sub: 'Discipline +5% for a win', act: function () { replace(trainMenu); } },
+      { label: 'Scold', sub: 'From child on: a tantrum', disabled: true, reason: 'Babies don\u2019t throw tantrums yet' },
+      { label: 'Praise', sub: 'From child on: after care or training', disabled: true, reason: 'Praise starts when it\u2019s a child' }
+    ] };
     return { title: 'DISCIPLINE', html: '<p class="tip">Scold a tantrum. Praise after training or a refused meal.</p>', items: [
       { label: 'Scold', sub: 'Tantrum: +25% discipline. Wrong time: happy -1', act: function () { close(); App().doAct('scold'); } },
       { label: 'Praise', sub: 'After care or training: +12%. Any time: +4% once an hour. A tantrum: spoils.', act: function () { close(); App().doAct('praise'); } }
@@ -606,9 +613,22 @@
         { label: 'Back', act: pop }
       ] };
   }
+  /* 2.5.2: eggs and babies can't battle (on purpose: a child gets junior battles). Say when, not 7 greyed-out rows. */
+  function battleUnlockText(p) {
+    var left = p.stage === 'egg' ? Math.max(0, D.STAGE_MIN.egg - p.stageMin) + D.STAGE_MIN.baby : Math.max(0, D.STAGE_MIN.baby - p.stageMin);
+    return left > 0 ? 'Battles unlock when your pal grows into a child: in ' + PP.Evolution.aboutText(left) + ' (awake).' : 'Battles unlock as soon as it grows into a child (when it wakes).';
+  }
+  function youngBattleMenu(p) {
+    return { title: 'BATTLE', html: '<p class="tip">' + esc((p.stage === 'egg' ? 'Eggs' : 'Babies') + ' can\u2019t battle yet. ' + battleUnlockText(p)) + ' Train now to get ready.</p>', items: [
+      p.stage === 'baby' ? { label: 'Train', sub: 'Get ready: discipline, happy and a stronger adult', act: function () { replace(trainMenu); } } : null,
+      { label: 'Add friend code', sub: 'Paste, type or scan a code (battle or breed)', act: function () { push(addCodeScreen); } },
+      { label: 'Find friends', sub: 'Weekly lobby: friend requests and challenges', right: st().settings.lobby ? '' : 'OFF', act: function () { push(PP.LobbyUI.lobbyScreen); } }
+    ].filter(Boolean) };
+  }
   function battleMenu() {
     var p = pet(), why = G.canBattle(p);
     if (p && PP.Stats.isJunior(p)) return juniorBattleMenu(p, why);
+    if (p && !p.fate && (p.stage === 'egg' || p.stage === 'baby')) return youngBattleMenu(p);   // 2.5.2: no dead options
     var items = [
       { label: 'Daily Arena', sub: 'One special foe today. Win for +50 bonus coins. Resets in ' + resetText() + '.', right: dailyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || dailyDone(st()), reason: dailyDone(st()) ? 'Already beaten today' : why, act: function () { close(); App().startDaily(); } },
       { label: 'Weekly Tournament', sub: 'One tough foe this week. Win for +150 bonus coins. Resets in ' + weekResetText() + '.', right: weeklyDone(st()) ? '\u2714' : 'NEW', disabled: !!why || weeklyDone(st()), reason: weeklyDone(st()) ? 'Already beaten this week' : why, act: function () { close(); App().startWeekly(); } },
@@ -1237,7 +1257,7 @@
       var p = pet(), titles = { memory: 'MEMORY', match: 'MATCH', train: 'TRAINING', dummy: 'TRAINING', game: 'PLAY', rhythm: 'RHYTHM' };
       var title = (titles[kind] || 'PLAY') + ' OVER';
       var won = !!success;
-      var lean = { dummy: 'Mighty (ATK)', train: 'Mighty (ATK)', memory: 'Swift (SPD)', match: 'Sturdy (DEF)', game: 'Swift (SPD)', rhythm: 'Swift (SPD)' }[kind] || '';
+      var lean = !p || (p.stage !== 'child' && p.stage !== 'teen') ? '' : { dummy: 'Mighty (ATK)', train: 'Mighty (ATK)', memory: 'Swift (SPD)', match: 'Sturdy (DEF)', game: 'Swift (SPD)', rhythm: 'Swift (SPD)' }[kind] || '';
       var h = '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30, '', hatOf(p)) + '</div>' +
         '<p><b>' + (won ? 'NICE WORK!' : 'KEEP TRYING...') + '</b></p><ul class="away">' +
         (r && r.msg ? '<li>' + esc(r.msg) + '</li>' : '') +

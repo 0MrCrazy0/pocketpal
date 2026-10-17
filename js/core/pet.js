@@ -79,7 +79,17 @@
   function spriteStage(p) { return p.stage === 'adult' ? 'adult_' + (p.form || 'good') : (p.stage === 'dead' ? 'adult_good' : p.stage); }
   function isAlive(p) { return p && !p.fate; }
   function ageDays(p) { return Math.floor((p.ageMin || 0) / 1440); }
+  /* 2.5.2: the age in plain words, from the pal's own minutes since hatching (they run while it sleeps and while you are
+   * away, stand still in the Pal Box, and never go back when the clock does): '20 min', '1 hr', '5 hrs', '1 day', '12 days'.
+   * Whole units, rounded down (a pal is '1 day' old from its first full day). Eggs have no age yet. */
+  function ageText(p) {
+    if (!p || p.stage === 'egg') return '';
+    var m = Math.max(0, Math.floor(p.ageMin || 0));
+    if (m < 60) return Math.max(1, m) + ' min';
+    if (m < 1440) { var h = Math.floor(m / 60); return h + (h === 1 ? ' hr' : ' hrs'); }
+    var d = Math.min(9999, Math.floor(m / 1440)); return d + (d === 1 ? ' day' : ' days');
+  }
 
   PP.Pet = { createEgg: createEgg, randomGenes: randomGenes, sanitizeGenes: sanitizeGenes, cleanName: cleanName,
-    randomName: randomName, formName: formName, spriteStage: spriteStage, stageKey: stageKey, isAlive: isAlive, ageDays: ageDays };
+    randomName: randomName, formName: formName, spriteStage: spriteStage, stageKey: stageKey, isAlive: isAlive, ageDays: ageDays, ageText: ageText };
 })(typeof window !== 'undefined' ? window : globalThis);

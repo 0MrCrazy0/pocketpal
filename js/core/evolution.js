@@ -118,6 +118,24 @@
     if (!D.STAGE_MIN[p.stage]) return null;
     return Math.max(0, D.STAGE_MIN[p.stage] - p.stageMin);
   }
+  /* 2.5.2: a rough, kid-friendly duration: '15 min', '~3 hrs', '~2 days' (hours up to 2 days, then days, rounded). */
+  function aboutText(min) {
+    min = Math.max(0, Math.round(min));
+    if (min < 60) return Math.max(1, min) + ' min';
+    if (min < 48 * 60) { var h = Math.round(min / 60); return '~' + h + (h === 1 ? ' hr' : ' hrs'); }
+    var d = Math.round(min / 1440 * 2) / 2; return '~' + d + ' days';
+  }
+  /* 2.5.2: when the pal grows up, by the real rule: its stage clock runs every minute (asleep or awake, not in the Pal
+   * Box), and once it is full the pal grows up at the next minute it is AWAKE (stepMinute) - a pal that is due in the
+   * night grows up when it wakes. An egg hatches in its first minutes, asleep or not. */
+  function growText(p) {
+    if (!p || p.fate) return '';
+    if (p.stage === 'adult') return 'Fully grown';
+    var left = minutesToNextStage(p); if (left == null) return '';
+    if (p.stage === 'egg') return left > 0 ? 'Hatches in ' + aboutText(left) : 'Hatching now!';
+    if (left > 0) return 'Grows up in ' + aboutText(left) + (p.asleep ? ' (counts while asleep)' : '');
+    return p.asleep ? 'Ready - grows up when it wakes' : 'Growing up now!';
+  }
 
   /* 1.9.7: training streak for the eagle's secret: consecutive pet-days with 6+ trainings while a child/teen. */
   function noteTraining(p) {
@@ -137,5 +155,5 @@
     v[r[2]] = Math.min(9999, (v[r[2]] || 0) + (success ? r[0] : r[1]));
   }
   PP.Evolution = { careScore: careScore, adultForm: adultForm, style: style, hint: hint, noteStyle: noteStyle, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
-    becomeAdult: becomeAdult, forceStage: forceStage, minutesToNextStage: minutesToNextStage };
+    becomeAdult: becomeAdult, forceStage: forceStage, minutesToNextStage: minutesToNextStage, growText: growText, aboutText: aboutText };
 })(typeof window !== 'undefined' ? window : globalThis);

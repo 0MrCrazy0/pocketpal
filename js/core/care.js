@@ -82,6 +82,7 @@
     return h * (1 - 0.4 * (p.genes ? p.genes.hardy : 0.5));
   }
 
+  var ACC_FULL = 1 - 1e-9;   // 2.5.2: 30 x (1/30) adds up to 0.99999...: a heart dropped one minute late
   var HOLD_MAX = 120;   // 1.9.1: longest clock-back hold (daylight saving is 60 min, Lord Howe 30)
   /* Advance one simulated minute. tMs = wall-clock time of this minute. */
   /* 1.9.1: what the night was like, for the morning report card (null if not tracked). */
@@ -174,16 +175,16 @@
     if (!p.asleep) {
       var app = p.genes ? p.genes.appetite : 1;
       p.acc.hunger += app / cfg.hungerMin;
-      if (p.acc.hunger >= 1) { p.acc.hunger -= 1; if (p.hunger > 0) p.hunger--; }
+      if (p.acc.hunger >= ACC_FULL) { p.acc.hunger = Math.max(0, p.acc.hunger - 1); if (p.hunger > 0) p.hunger--; }
       var hm = 1;
       if (p.sick) hm *= 2;
       if (p.poop >= 2) hm *= 1.5;
       if (p.energy <= 0) hm *= 2;
       p.acc.happy += hm / cfg.happyMin;
-      if (p.acc.happy >= 1) { p.acc.happy -= 1; if (p.happy > 0) p.happy--; }
+      if (p.acc.happy >= ACC_FULL) { p.acc.happy = Math.max(0, p.acc.happy - 1); if (p.happy > 0) p.happy--; }
       p.acc.poop += 1 / cfg.poopMin;
-      if (p.acc.poop >= 1) {
-        p.acc.poop -= 1;
+      if (p.acc.poop >= ACC_FULL) {
+        p.acc.poop = Math.max(0, p.acc.poop - 1);
         if (p.poop < R.maxPoop) { p.poop++; ev.push({ t: 'poop' }); }
       }
       p.energy = Math.max(0, p.energy - 1 / R.energyAwakeMin);
@@ -192,7 +193,7 @@
       // heavy. Before this, weight only ever went up and every well-fed adult ended up "Heavy".
       if (p.weight > cfg.weight) {
         p.acc.weight = (p.acc.weight || 0) + app / cfg.hungerMin;
-        if (p.acc.weight >= 1) { p.acc.weight -= 1; p.weight = Math.max(cfg.weight, p.weight - 1); }
+        if (p.acc.weight >= ACC_FULL) { p.acc.weight = Math.max(0, p.acc.weight - 1); p.weight = Math.max(cfg.weight, p.weight - 1); }
       } else p.acc.weight = 0;
     } else {
       p.energy = Math.min(100, p.energy + 1 / (p.lights ? R.energySleepLitMin : (p.sleepKind === 'nap' ? R.energyNapMin : R.energySleepMin)));
@@ -204,6 +205,7 @@
     }
 
     // ---- fake calls (tantrums): child and older, awake, nothing really wrong
+    if (p.fake && p.stage === 'baby') p.fake = null;   // 2.5.2: a baby can't be disciplined, so it never has a tantrum to lose discipline over (old saves)
     if (p.fake && p.clock >= p.fake.until) {
       p.fake = null;
       p.discipline = Math.max(0, p.discipline - 8);
@@ -346,6 +348,9 @@
       for (var j = n0; j < ev.length; j++) ev[j].at = tm;   // when it happened (away summary)
       if (p.fate) break;
     }
+    // 2.5.2: away longer than the simulation cap (14 days): only the last 14 days are played, but the pal still got that
+    // much older - its age follows real time (the stage clock does not, so a long absence never skips a stage)
+    if (steps < elapsed && !p.fate && p.stage !== 'egg') p.ageMin = (p.ageMin || 0) + (elapsed - steps);
     p.lastTickAt += elapsed * U.MIN;
     if (ctx.offline) ev.push({ t: 'caughtUp', minutes: elapsed, mistakes: ctx.offlineMistakes });
     return ev;
@@ -468,7 +473,7 @@
   }
   function scold(p) {
     var b = blocked(p); if (b) return b;
-    if (p.stage === 'baby') return res(false, 'Too young to scold');
+    if (p.stage === 'baby') return res(false, 'Babies don\u2019t throw tantrums yet. Nothing to scold!');   // 2.5.2: no penalty, no tantrums, the meter cannot drop
     if (p.asleep) return asleepRes();
     if (p.fake) {
       p.fake = null;
@@ -483,7 +488,7 @@
   function praiseOpen(p) { return !!p.praiseReady && p.clock - (p.praiseAt == null ? p.clock : p.praiseAt) <= R.praise.deedMin; }
   function praise(p) {
     var b = blocked(p); if (b) return b;
-    if (p.stage === 'baby') return res(false, 'Too young to praise');
+    if (p.stage === 'baby') return res(false, 'Praise starts when it\u2019s a child. Train it for discipline +5% now');
     if (p.asleep) return asleepRes();
     var open = praiseOpen(p);
     p.praiseReady = false;
@@ -506,6 +511,8 @@
     return res(true, 'It likes that. Praise again in a bit.', 'happy');
   }
   /* Mini-game / training results. kind: 'train' | 'game'. success: bool */
+  /* 2.5.2: babies get no XP or style points; their trainings count toward the adult's care score (up to 12, kept at growing up). */
+  function babyTrainNote(p) { var n = Math.min(12, (p.evo && p.evo.trainings) || 0); return ' \u00b7 Stronger adult: training ' + n + '/12'; }
   function canExercise(p, kind) {
     var b = blocked(p); if (b) return b;
     if (p.asleep) return asleepRes();
@@ -529,7 +536,8 @@
       PP.Evolution.noteTraining(p);                         // 1.9.7: training streak (Aurorawing)
       var full = p.trainDay.n <= R.trainDayFull;
       if (success && full) { p.happy = Math.min(R.maxHearts, p.happy + 1); p.discipline = Math.min(100, p.discipline + 5); deed(p); }
-      msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +5%' : 'Nice try!';
+      msg = !full ? (success ? 'Good hit, but your pal is over-trained today' : 'Nice try!') : success ? 'Great training! Discipline +5%, happy +1' : 'Nice try!';
+      if (p.stage === 'baby') msg += babyTrainNote(p);   // 2.5.2: what a baby's training really changes
       if (p.stage === 'adult') {
         var xp = PP.Traits.trainXp(p, !full ? 1 : success ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3));   // 2.4.97 Humble
         var lv = PP.Stats.addXp(p, xp);
@@ -616,7 +624,7 @@
   PP.Care = { SLEEP_MSG: SLEEP_MSG, nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
     careStatus: careStatus, minText: minText, BEDTIME_SOON_MIN: BEDTIME_SOON_MIN, tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
     feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights, nightReport: nightReport, outOfBox: outOfBox,
-    scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, moodPose: moodPose, isTired: isTired,
+    scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, babyTrainNote: babyTrainNote, moodPose: moodPose, isTired: isTired,
     baseWeight: baseWeight, isOverweight: isOverweight, isUnderweight: isUnderweight, canAct: canAct,
     sicknessPerHour: sicknessPerHour, addMistake: addMistake, firstDay: firstDay, HARD: HARD, defaultHourOf: defaultHourOf, defaultMinuteOf: defaultMinuteOf
   };

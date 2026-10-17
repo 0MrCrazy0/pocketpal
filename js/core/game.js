@@ -545,7 +545,8 @@
       var msg;
       if (won && full) { p.happy = Math.min(4, p.happy + 1); p.discipline = Math.min(100, p.discipline + 5); }
       msg = !full ? (won ? 'Good fight, but your pal is over-trained today' : 'Nice try!')
-                  : won ? 'Dummy down! Discipline +5%' : 'Nice try!';
+                  : won ? 'Dummy down! Discipline +5%, happy +1' : 'Nice try!';
+      if (p.stage === 'baby') msg += PP.Care.babyTrainNote(p);   // 2.5.2
       if (PP.Stats.isJunior(p) && won && full) { out.xp = bankJunior(p, JUNIOR.xpTrain); if (out.xp) msg += ' +' + out.xp + ' XP saved for adulthood'; }   // 2.4.92
       if (p.stage === 'adult') {
         var xp = PP.Traits.trainXp(p, !full ? 1 : won ? D.LEVEL.trainXp(p.level) : Math.ceil(D.LEVEL.trainXp(p.level) / 3));   // 2.4.97 Humble

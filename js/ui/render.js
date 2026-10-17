@@ -81,8 +81,7 @@
   function stageAge(p) {
     if (p.stage === 'egg') return 'EGG';
     var label = { baby: 'BABY', child: 'CHILD', teen: 'TEEN', adult: 'ADULT' }[p.stage] || '';
-    var min = p.ageMin || 0, age = min < 1440 ? Math.max(0, Math.floor(min / 60)) + 'H' : Math.min(999, Math.floor(min / 1440)) + 'D';
-    return label + ' ' + age;
+    return label + ' ' + PP.Pet.ageText(p).toUpperCase();   // 2.5.2: '5 HRS' / '2 DAYS' (was '0H' / '1D')
   }
   /* The strip as boxes [kind, x, width] - also used by the layout audit to prove nothing overlaps. */
   function weightKind(p) { return PP.Care.isOverweight(p) ? 'HI' : PP.Care.isUnderweight(p) ? 'LO' : 'OK'; }
