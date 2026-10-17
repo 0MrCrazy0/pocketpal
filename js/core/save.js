@@ -272,9 +272,9 @@
     });
     out.unlocks = Array.isArray(s.unlocks) ? s.unlocks.filter(function (id, i, a) { var sh = PP.Collection.shell(id); return sh && (sh.unlock || sh.price) && a.indexOf(id) === i; }) : [];
     var st = s.settings || {};
-    var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'pink';
+    var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'black';
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
-      notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
+      notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, alertsAsked: !!st.alertsAsked, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
       hints: st.hints !== false, music: st.music !== false, vibrate: st.vibrate !== false,   // 2.5.0 audit: the Vibrate switch was dropped on every load
       hardNext: !!st.hardNext, cloud: !!st.cloud, reportCard: st.reportCard !== false,
       alertTypes: PP.Reminders.clean(st.alertTypes),   // 1.9.7: per-type alert switches

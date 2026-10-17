@@ -816,7 +816,17 @@
   function palBox() {
     var s = st();
     var items = s.slots.map(function (p, i) {
-      if (!p) return { label: 'Slot ' + (i + 1) + ': empty', sub: 'Start a new egg here', act: function () { push(speciesPicker(function (sp) { var r = G.startEgg(s, sp, Date.now()); App().toast(r.ok ? 'New ' + D.SPECIES_INFO[sp].label + ' egg!' : r.msg); App().save(); close(); })); } };
+      if (!p) return { label: 'Slot ' + (i + 1) + ': empty', sub: 'Start a new egg here', act: function () { push(speciesPicker(function (sp) {
+        var r = G.startEgg(s, sp, Date.now());
+        if (r.ok) {
+          var cur = G.active(s);
+          if (!cur || cur.fate) G.setActive(s, r.slot, Date.now());
+          App().toast('New ' + D.SPECIES_INFO[sp].label + ' egg!');
+          close();
+          if (App().onEggStarted) App().onEggStarted();
+          else App().save();
+        } else { App().toast(r.msg || 'Could not start egg'); }
+      })); } };
       return { icon: thumb(p.species, S.stageKeyOf(p), p.fate ? 'faint' : 'idle', 15, '', hatOf(p)), label: (i === s.active ? '\u25b6 ' : '') + p.name + ' ' + (p.sex === 'M' ? '\u2642' : '\u2640'),
         sub: slotLine(p) + (i === s.active ? ' \u00b7 out now' : ' \u00b7 resting (time frozen)'), act: function () { push(slotMenu(i)); } };
     });

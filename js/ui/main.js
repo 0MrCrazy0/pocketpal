@@ -464,14 +464,52 @@
   function D_JR() { return PP.DATA.JUNIOR; }
   App.startDummy = function () { beginBattle(G.startDummy(App.state, rndSeed()), 'TRAINING'); };
 
-  App.afterGuide = function () { if (!G.active(App.state)) setTimeout(firstEgg, 150); };
+  App.afterGuide = function () { setTimeout(askCareAlerts, 150); };
   App.firstEgg = function () { firstEgg(); };
+  App.onEggStarted = onEggStarted;
+  /* After any first egg (B, picker, or empty Pal Box slot): guide once, then care-alerts question once. */
+  function askCareAlerts() {
+    if (!App.state || App.state.settings.alertsAsked) return;
+    App.state.settings.alertsAsked = true;
+    App.save();
+    UI.open(function () {
+      return {
+        title: 'CARE ALERTS',
+        html: '<p>Get a ping when your pal needs you - even if the game is closed. Hatch, bedtime, hungry, sick and more.</p>' +
+          '<p class="tip">You can change this any time with the bell or in Settings. Hatch alerts are on by default once alerts are enabled.</p>',
+        items: [
+          { label: 'Turn alerts on', act: function () {
+              UI.close();
+              if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(true);
+              else { App.state.settings.alerts = true; App.state.settings.notify = true; App.save(); App.toast('Alerts on - need https for push'); }
+            } },
+          { label: 'Not now', act: function () { UI.close(); App.toast('You can turn alerts on later with the bell'); } }
+        ]
+      };
+    });
+  }
+  function onEggStarted() {
+    App.resetWalker();
+    App.save();
+    if (!App.state.settings.guideSeen) {
+      setTimeout(function () { UI.open(UI.screens.guideScreen(0)); }, 250);
+    } else {
+      setTimeout(askCareAlerts, 250);
+    }
+  }
   function firstEgg() {
     UI.open(UI.screens.speciesPicker(function (sp) {
       var r = G.startEgg(App.state, sp, Date.now());
       if (r && r.ok && PP.Net) PP.Net.scheduleAlert(App.state);
-      if (r.ok) { G.setActive(App.state, r.slot, Date.now()); App.toast('Your ' + D.SPECIES_INFO[sp].label + ' egg is warming up...'); }
-      App.resetWalker(); App.save(); UI.close();
+      if (r.ok) {
+        G.setActive(App.state, r.slot, Date.now());
+        App.toast('Your ' + D.SPECIES_INFO[sp].label + ' egg is warming up...');
+        UI.close();
+        onEggStarted();
+      } else {
+        App.toast(r && r.msg ? r.msg : 'Could not start egg');
+        UI.close();
+      }
     }, 'CHOOSE YOUR EGG'));
   }
   function homeB() {
@@ -506,7 +544,11 @@
     if (App.scene === 'mini') { PP.Mini.input(btn); return; }
     if (btn === 'A') { App.iconSel = (App.iconSel + 1) % ICONS.length; PP.Audio.play('move'); }
     else if (btn === 'PREV') { App.iconSel = (App.iconSel + ICONS.length - 1) % ICONS.length; PP.Audio.play('move'); }
-    else if (btn === 'B') { if (App.iconSel >= 0) activateIcon(App.iconSel); else if (!homeB()) activateIcon(0); }
+    else if (btn === 'B') {
+      if (!G.active(App.state)) { homeB(); return; }   // PRESS B FOR AN EGG - never open Status first
+      if (App.iconSel >= 0) activateIcon(App.iconSel);
+      else if (!homeB()) activateIcon(0);
+    }
     else if (btn === 'C') { App.iconSel = -1; PP.Audio.play('back'); }
     refreshIcons();
   };
@@ -701,8 +743,8 @@
     updateSim(true);
     if (App.state.settings.test) PP.TestPanel.show();
     var noGuide = /[?&]guide=0\b/.test(root.location.search);
-    if (!App.state.settings.guideSeen && !noGuide) setTimeout(function () { UI.open(UI.screens.guideScreen(0)); }, 300);
-    else if (!G.active(App.state)) setTimeout(firstEgg, 300);
+    // Fresh start: egg first. Guide runs after the first egg (onEggStarted). Never show the guide with an empty LCD.
+    if (!G.active(App.state)) setTimeout(firstEgg, 300);
     // background ticks: keep the sim (and opt-in alerts) going while the tab is hidden
     setInterval(function () { if (document.hidden) { updateSim(); favicon(); } }, 30000);
     document.getElementById('soundBtn').addEventListener('click', function () {

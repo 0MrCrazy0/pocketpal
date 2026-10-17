@@ -15,7 +15,7 @@
       arena: { rank: 0, attempt: 0, champion: false, cups: [], run: null, note: null },
       dex: {}, unlocks: [],
       wallet: { coins: D.ECONOMY.startCoins, day: null, earned: 0, lastDaily: null, streak: 0, mistakesAt: null }, inv: {},
-      settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'pink', guideSeen: false, clock: PP.Time.defaultClock(),
+      settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'black', guideSeen: false, alertsAsked: false, clock: PP.Time.defaultClock(),
         hints: true, music: true, hardNext: false, cloud: false, reportCard: true, alertTypes: PP.Reminders.defaults() },
       daily: null, hints: { done: {} }, backup: { lastExport: null, snoozeUntil: null },
       timeOffset: 0, lastSeenAt: now
