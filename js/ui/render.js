@@ -151,6 +151,22 @@
   /* 1.9.8: where poop #i sits (LCD px, top-left of its x2 FX cell). Two side by side stay inside the LCD (tested). */
   function poopAt(i) { return [W - 44 + (i % 2) * 15, GROUND - 32 - Math.floor(i / 2) * 30]; }
   /* ------------------------------------------------------------ wandering */
+  /* 2.6.0: garden things vs the pal. The pal's body fills about [px + BODY_IN, px + PS - BODY_IN] of its sprite box. */
+  var BODY_IN = 18;
+  function gardenBoxes(app) {
+    var st = app && app.state; if (!st || !PP.World || !PP.WorldArt) return [];
+    return (PP.World.shown(st, PP.Game.active(st)).placed || []).map(function (e) { var b = PP.WorldArt.itemBox(e.id, e.x); b.id = e.id; return b; });
+  }
+  function bodyHits(px, b) { return px + PS - BODY_IN > b.x + 1 && px + BODY_IN < b.x + b.w - 1; }
+  function overlapPx(px, boxes) { var L = px + BODY_IN, Rr = px + PS - BODY_IN, n = 0; boxes.forEach(function (b) { n += Math.max(0, Math.min(Rr, b.x + b.w) - Math.max(L, b.x)); }); return n; }
+  /* the nearest x to want, inside [4, maxX], where the pal's body overlaps placed things the least (beside them when
+   * there is room; a crowded garden can leave no free spot, then the toy is drawn in front - the pal stands behind it) */
+  function clearSpot(app, want, maxX) {
+    var boxes = gardenBoxes(app); if (!boxes.length) return want;
+    var best = want, bo = overlapPx(want, boxes), bd = 0;
+    for (var x = 4; x <= maxX; x++) { var o = overlapPx(x, boxes), d = Math.abs(x - want); if (o < bo - 0.01 || (Math.abs(o - bo) <= 0.01 && d < bd)) { best = x; bo = o; bd = d; } }
+    return best;
+  }
   function walkerUpdate(app, p, dt, t) {
     var w = app.walker || (app.walker = { x: 50, dir: 1, tx: 50, until: 0 });
     var maxX = W - PS - (p.poop > 0 ? 42 : 4);
@@ -169,7 +185,7 @@
         if (Math.random() < 0.35) { w.act = PP.Behave.pickIdle(p, Math.random(), Math.random()); w.act.t0 = t; w.until = t + w.act.dur; }
         else {
           var goal = app.gardenGoal ? app.gardenGoal(p, t, maxX) : null;   // 2.5.0: now and then, a placed toy / the bench / the swing
-          w.tx = goal ? goal.tx : 4 + Math.random() * Math.max(1, maxX - 4); w.goal = goal; w.arrived = false; w.act = null;
+          w.tx = goal ? goal.tx : clearSpot(app, 4 + Math.random() * Math.max(1, maxX - 4), maxX); w.goal = goal; w.arrived = false; w.act = null;   // 2.6.0: stops beside garden things, not on them
         }
       }
       return false;
@@ -565,6 +581,8 @@
     // 2.4.0: the pal's hat, on the head-top anchor of this very frame (2.5.0: every pose, sleep included)
     if (p.hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
+    // 2.6.0: a pal walking past a garden thing goes behind it (no clipping through toys); seated / playing pals stay in front
+    if (!(w.act && w.act.seat) && toyK == null) gardenBoxes(app).forEach(function (b) { if (bodyHits(px, b) && b.id !== 'swing' && b.id !== 'bench') PP.WorldArt.drawItem(ctx, b.id, b.x, sceneInfo(st).phase === 'night', t); });
     if (toyK != null && toyK > 0.15 && toyK < 0.9) S.drawFx(ctx, 'note', px + (flip ? 4 : PS - 20), y + 6 - Math.round(toyK * 14), 1);
 
     // poop pile (bottom right)
@@ -766,7 +784,7 @@
   }
   function cutDuration(c) { return c.kind === 'evolve' ? (c.secret ? 6400 : 5200) : c.kind === 'hatch' ? 3600 : c.kind === 'trip' ? PP.WorldArt.TRIP_MS : c.kind === 'visit' ? PP.WorldArt.VISIT_MS : 3200; }
 
-  PP.Render = { W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, PS: PS, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
+  PP.Render = { clearSpot: clearSpot, overlapPx: overlapPx, bodyHits: bodyHits, gardenBoxes: gardenBoxes, BODY_IN: BODY_IN, W: W, H: H, DPR: DPR, GROUND: GROUND, PET: PET, PS: PS, C: C, LAYOUT: L, clear: clear, fshape: fshape, inCap: inCap, inDisc: inDisc, drawHome: drawHome, drawCut: drawCut, cutDuration: cutDuration,
     statusBar: statusBar, drawEgg: drawEgg, stripBoxes: stripBoxes, stageAge: stageAge, MINI: MINI, mini: mini, poopAt: poopAt,
     sceneInfo: sceneInfo, drawScene: drawScene, FLOOR_TOP: FLOOR_TOP, TREES: TREES, foodSpot: foodSpot, eatFacing: eatFacing, mouthAt: mouthAt, forceScene: function (v) { sceneForce = v || null; } };
 })(typeof window !== 'undefined' ? window : globalThis);

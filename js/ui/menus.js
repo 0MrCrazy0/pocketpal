@@ -42,6 +42,13 @@
     if (PP.Shells && PP.App && PP.App.state) PP.Shells.apply(st().settings.shell);   // end any shell preview
     if (App()) App().onMenuClosed();
   }
+  /* 2.6.0: a modal screen (guide, alert question, fate, away / night report, results, confirmations) can only be left
+   * with its own buttons or C. Icons, MENU, the bell and a push action no longer close it, and a cutscene parks it and
+   * brings it back afterwards (before, all of these closed it for good). */
+  function isModal() { return stack.some(function (s) { return !!s.modal; }); }
+  function hold() { if (!stack.length) return null; stack[stack.length - 1].cursor = cursor; var h = { stack: stack.slice(), cursor: cursor }; stack = []; cur = null; clearHighlight(); if (el) { el.hidden = true; el.innerHTML = ''; } return h; }
+  function resume(h) { if (!h || !h.stack.length) return; stack = h.stack; cursor = h.cursor || 0; render(); }
+  function nudge() { if (!el) return; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
   function clearHighlight() { Array.prototype.forEach.call(document.querySelectorAll('.hl'), function (x) { x.classList.remove('hl'); }); }
   function refresh() { if (stack.length) render(true); }
 
@@ -58,6 +65,7 @@
     var screen = stack[stack.length - 1];
     var oldMain = el && el.querySelector('.ov-main'), oldTop = keepScroll && oldMain ? oldMain.scrollTop : 0;
     cur = screen();
+    if (cur && screen.modal) cur.modal = true;   // 2.6.0: see modalFactory
     if (!cur) return close();
     clearHighlight();
     var items = cur.items || [];
@@ -204,8 +212,8 @@
     return '<p class="lean-now">Leaning: <b>' + esc(FORM_LABEL[f] || 'Solid') + '</b></p>' +
       '<table class="kv lean">' +
       '<tr><td>Care</td><td>' + bar(Math.max(0, score), 100, 'Care score') + ' ' + Math.round(score) + ' \u00b7 ' + (care === 'perfect' ? 'Champion care' : care === 'good' ? 'Solid care' : 'Scrappy care') + '</td></tr>' +
-      one('power') + one('swift') + one('guard') +
-      '</table>' +
+      one('power') + one('swift') + one('guard') + strRow(p) +
+      '</table>' + '<p class="tip">' + esc(STYLE_NOTE) + (score > 100 ? ' A care score over 100 means extra great care.' : '') + '</p>' +
       '<p class="tip">Style needs ' + S.minPts + '+ points, ' + Math.round(S.minShare * 100) + '% of all and ' + S.minLead + ' ahead of the next. ' + (v.lead ? 'Ahead now: ' + FORM_LABEL[v.lead] + '.' : 'No style is ahead yet.') + (v.calm ? ' Great manners add to Sturdy.' : '') + '</p>' +
       '<ul class="lean-forms">' + row('perfect', 'Champion') + row('power', 'Mighty') + row('swift', 'Swift') + row('guard', 'Sturdy') + row('good', 'Solid') + row('bad', 'Scrappy') +
       '<li><b>???</b>: ' + esc(LEAN_HINT.secret) + '</li></ul>';
@@ -219,9 +227,23 @@
   }
   function styleRow(p) {
     var v = PP.Evolution.style(p), mx = Math.max(8, v.power, v.swift, v.guard);
-    var one = function (k, lab) { return lab + ' ' + bar(v[k], mx, lab); };
-    return '<tr><td>Training style</td><td class="style-bars">' + one('power', 'Power') + '<br>' + one('swift', 'Quick') + '<br>' + one('guard', 'Calm') + '</td></tr>';
+    var one = function (k, lab) { return lab + ' ' + bar(v[k], mx, lab) + ' <b class="num">' + Math.round(v[k]) + '</b>'; };   // 2.6.0: numbers like the other meters
+    return '<tr><td>Training style</td><td class="style-bars">' + one('power', 'Power') + '<br>' + one('swift', 'Quick') + '<br>' + one('guard', 'Calm') + '</td></tr>' + strRow(p);
   }
+  /* 2.6.0 STRENGTH meter (children and teens) */
+  function strText(p) { var S = D.JUNIOR.str, n = p.str || 0; return n + '/' + S.cap + ' (+' + Math.round(PP.Stats.strBonus(p) * 100) + '% HP ATK DEF in battle)'; }
+  function strRow(p) {
+    if (p.stage !== 'child' && p.stage !== 'teen') return '';
+    return '<tr><td>Strength</td><td>' + bar(p.str || 0, D.JUNIOR.str.cap, 'Strength') + ' ' + esc(strText(p)) + '</td></tr>';
+  }
+  var STYLE_NOTE = 'Power / Quick / Calm are style points: they only pick the adult form (Mighty / Swift / Sturdy), not battle power. Strength (from training and battles) makes a young pal stronger in fights.';
+  /* 2.6.0: care mistakes in words - the young ones pick the adult form; an adult's still count (health, battles, Elder age) */
+  function mistakesText(p) {
+    if (p.stage !== 'adult') return p.mistakes + ' (these decide the adult form)';
+    var a = PP.Stats.adultMistakes(p), r = PP.Stats.recentAdultMistakes(p), wk = D.RULES.adultCare.weak.filter(function (q) { return r >= q[0]; })[0];
+    return a + ' as an adult \u00b7 ' + r + ' in the last 3 days' + (wk ? ' (weaker in battle -' + Math.round((1 - wk[1]) * 100) + '%)' : '');
+  }
+  function scoreText(score) { return Math.round(score) + (score > 100 ? ' (over 100 = extra great care)' : '') + ' \u00b7 ' + D.EVO.good.minScore + '+ Solid, ' + D.EVO.perfect.minScore + '+ Champion'; }
   function nextDexReward(s) {
     var c = PP.Collection.counts(s), best = null;
     D.SHELLS.forEach(function (sh) { if (sh.unlock && sh.unlock.dex && c.adults < sh.unlock.dex && (!best || sh.unlock.dex < best.unlock.dex)) best = sh; });
@@ -410,6 +432,7 @@
           '<tr><td>Energy</td><td>' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '%</td></tr>' +
           '<tr><td>Discipline</td><td>' + bar(p.discipline, 100, 'Discipline') + ' ' + Math.round(p.discipline) + '%</td></tr>' +
           '<tr><td>Health</td><td>' + bar(p.health, 100, 'Health') + ' ' + Math.round(p.health) + '%' + (p.sick ? ' SICK' : '') + '</td></tr>' +
+          (p.stage !== 'egg' ? '<tr><td>Care mistakes</td><td>' + esc(mistakesText(p)) + '</td></tr>' : '') +   // 2.6.0
           '<tr title="Status strip: WT + LO / OK / HI. All icons: MENU \u25b8 Screen icons"><td>Weight</td><td>' + p.weight + 'g' + (PP.Care.isOverweight(p) ? ' (heavy, strip: HI)' : PP.Care.isUnderweight(p) ? ' (skinny, strip: LO)' : ' (strip: OK)') + '</td></tr>' +
           (p.fate ? '' : '<tr><td>Growing</td><td>' + esc(PP.Evolution.growText(p)) + '</td></tr>') +   // 2.5.2: by the real rule (was 'Grows in 0h 0m' all night)
           (p.stage !== 'egg' ? '<tr><td>Sleeps</td><td>' + schedText(PP.Sleep.of(p)) + (p.sched ? '' : ' (default)') + '</td></tr>' : '') +
@@ -419,13 +442,13 @@
         h = top + leaningHtml(p);
       } else if (pg === 'report') {
         var f = PP.Evolution.forecast(p), score = PP.Evolution.careScore(p);
-        h = '<table class="kv"><tr><td>Care mistakes</td><td>' + p.mistakes + '</td></tr>' +
-          '<tr><td>Care score</td><td>' + score + '</td></tr>' +
+        h = '<table class="kv"><tr><td>Care mistakes</td><td>' + esc(mistakesText(p)) + '</td></tr>' +
+          '<tr><td>Care score</td><td>' + esc(scoreText(score)) + '</td></tr>' +
           '<tr><td>Trainings</td><td>' + p.evo.trainings + (p.evo.best ? ' \u00b7 best streak ' + p.evo.best + ' day' + (p.evo.best > 1 ? 's' : '') : '') + '</td></tr>' +
           (f ? '<tr><td>On track for</td><td><b>' + FORM_LABEL[f] + '</b> (' + esc(D.NAMES[p.species][f]) + ')</td></tr>' : '') +
           (p.stage !== 'egg' ? styleRow(p) : '') +
           '</table>' + (PP.Evolution.hint(p) ? '<p class="evo-hint">\u2728 ' + esc(PP.Evolution.hint(p)) + '</p>' : '') + '<p class="tip">Champion: \u2264' + D.EVO.perfect.maxMistakes + ' mistakes, score \u2265' + D.EVO.perfect.minScore + ', discipline \u2265' + D.EVO.perfect.minDiscipline +
-          '%. Solid: score \u2265' + D.EVO.good.minScore + ' - and HOW you train a Solid-care pal can make it Mighty (Power Training / ATK), Swift (Memory / SPD) or Sturdy (Match / DEF, or great manners). A secret form needs Champion care plus something special - see the Paldex.</p>' +
+          '%. ' + STYLE_NOTE + ' Solid: score \u2265' + D.EVO.good.minScore + ' - and HOW you train a Solid-care pal can make it Mighty (Power Training / ATK), Swift (Memory / SPD) or Sturdy (Match / DEF, or great manners). A secret form needs Champion care plus something special - see the Paldex.</p>' +
           recentMistakes(p);
       } else if (pg === 'battle') {
         var bs = PP.Stats.battleStats(p), cap = PP.Stats.levelCap(p.form), need = D.LEVEL.xpNeed(p.level);
@@ -436,7 +459,7 @@
           '<tr><td>Battle Power</td><td><b>' + PP.Stats.bp(bs) + '</b></td></tr>' +
           '<tr><td>Skill points</td><td>' + p.sp + '</td></tr>' +
           '<tr><td>Wins / losses</td><td>' + p.wins + ' / ' + p.losses + '</td></tr>' +
-          '<tr><td>Care mistakes</td><td>' + p.totalMistakes + ' (life)</td></tr></table>' + traitsHtml(p) +
+          '<tr><td>Care mistakes</td><td>' + esc(mistakesText(p)) + ' \u00b7 life ' + p.totalMistakes + '</td></tr></table>' + traitsHtml(p) +
           (bs.notes.length ? '<p class="tip">Condition: ' + esc(bs.notes.join(', ')) + '</p>' : '');
       } else {
         var g = p.genes, word = function (v) { return v >= 2 ? 'great' : v === 1 ? 'good' : v === 0 ? 'normal' : v === -1 ? 'weak' : 'poor'; };
@@ -580,8 +603,9 @@
   function juniorBattleMenu(p, why) {
     var J = D.JUNIOR, L = J.ladders[p.stage], c = G.ladderRun(p), run = c ? c.foe : 0, tro = G.juniorState(st()).trophies[p.stage] | 0;
     var bank = p.jxp || 0;
-    return { title: 'BATTLE', html: (why ? '<p class="tip">' + esc(why) + '</p>' : '') +
-      '<p class="tip">Young pals spar with pals of the same stage (' + esc(p.stage) + ') only. XP saved for adulthood: <b>' + bank + '/' + J.bankCap + '</b> (paid in when it grows up, at most up to level 4). Care still decides what it becomes.</p>', items: [
+    var cn = PP.Stats.battleStats(p).notes;   // 2.6.0: say why it would fight weaker (hungry / unhappy / weight)
+    return { title: 'BATTLE', html: (why ? '<p class="tip">' + esc(why) + '</p>' : '') + (cn.length ? '<p class="tip"><b>Weaker today: ' + esc(cn.join(', ')) + '</b> - feed and play first.</p>' : '') +
+      '<p class="tip">Young pals spar with pals of the same stage (' + esc(p.stage) + ') only. XP saved for adulthood: <b>' + bank + '/' + J.bankCap + '</b> (paid in when it grows up, at most up to level 4). Strength: <b>' + esc(strText(p)) + '</b> - training and battles raise it (the first ' + J.str.full + ' battles a day count in full, the next ' + J.str.half + ' half). Care still decides what it becomes.</p>', items: [
       { label: 'Quick battle', sub: 'A wild ' + p.stage + ' pal. Best of 3. Win: happy +1, +' + J.xpWin[p.stage] + ' XP saved, +' + J.coins.win + 'c', disabled: !!why, reason: why, act: function () { close(); App().startJuniorQuick(); } },
       { label: J.cupName + ': ' + L.name, sub: L.foes.length + ' ' + p.stage + ' foes, each a bit tougher' + (run ? ' · run on: foe ' + (run + 1) + '/' + L.foes.length : '') + ' · clear: +' + J.coins.clear + 'c once a day', right: run ? (run + 1) + '/' + L.foes.length : tro ? '★' + tro : 'OPEN', disabled: !!why, reason: why, act: function () { push(juniorLadderScreen); } },
       { label: 'Live battle', sub: 'Room code: a friend’s ' + p.stage + ' pal only', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
@@ -1289,6 +1313,7 @@
           '<div class="vs">' + thumb(p.species, S.stageKeyOf(p), won ? 'happy' : 'sad', 30, '', hatOf(p)) + '</div><p><b>' + (won ? 'VICTORY!' : 'Defeat...') + '</b></p><ul class="away">' +
           (out.cup ? '<li>' + esc(out.cup) + ': foe ' + out.foe + '/' + out.foes + (won ? (out.cleared ? ' - cleared! Trophies: \u2605' + out.trophies : ' beaten') : ' - run over, start again') + '</li>' : '') +
           '<li>' + (out.xp ? '+' + out.xp + ' XP saved for adulthood' : 'XP savings are full') + ' (' + out.bank + '/' + out.bankCap + ')</li>' +
+          '<li>' + (out.str ? 'Strength +' + out.str : 'No Strength from more battles today') + ' (' + out.strNow + '/' + out.strCap + ')</li>' +
           '<li>Happy ' + (won ? '+1' : '-1') + ', weight -1g. No injuries for young pals.</li>' +
           (out.coins ? '<li>+' + out.coins + ' coins' + (out.cleared && !out.bonusPaid ? ' (incl. the clear bonus)' : '') + '</li>' : '') +
           (out.bonusPaid ? '<li>Clear bonus already paid today.</li>' : '') + (out.jrCap ? '<li>Junior coins for today are used up.</li>' : '') + '</ul>';
@@ -1353,8 +1378,12 @@
     return { title: p.fate === 'dead' ? 'GOODBYE, ' + p.name.toUpperCase() : p.name.toUpperCase() + ' LEFT', html: '<p>' + (p.fate === 'dead' ? esc(p.name) + ' passed away (' + esc(p.fateCause || '') + ').' : esc(p.name) + ' ran away after being unhappy and undisciplined for too long.') + '</p><p class="tip">' + (p.hard ? 'This was a hard-mode pal: it cannot be revived, but its memory stays in your Album.' : 'Care mistakes are counted, but pals only die or leave after long neglect.') + '</p>', items: items };
   }
 
+  function modalFactory(f) { return function () { var s = f.apply(this, arguments); s.modal = true; return s; }; }
+  guideScreen = modalFactory(guideScreen); confirmScreen = modalFactory(confirmScreen); importConfirm = modalFactory(importConfirm);
+  reportCard = modalFactory(reportCard); awaySummary = modalFactory(awaySummary); trainResult = modalFactory(trainResult); battleResult = modalFactory(battleResult);
+  fateScreen.modal = true; hardWarning.modal = true; backupReminder.modal = true; cloudRestore.modal = true;
   PP.UI = { init: init, open: open, push: push, pop: pop, close: close, replace: replace, refresh: refresh, isOpen: isOpen, input: input,
-    top: function () { return cur; },
+    top: function () { return cur; }, isModal: isModal, hold: hold, resume: resume, nudge: nudge,
     screens: { mainMenu: mainMenu, aboutScreen: aboutScreen, alertsScreen: alertsScreen, statusScreen: statusScreen, feedMenu: feedMenu, trainMenu: trainMenu, discMenu: discMenu, battleMenu: battleMenu, juniorLadderScreen: juniorLadderScreen, arenaScreen: arenaScreen, fcupScreen: fcupScreen,
       skillsScreen: skillsScreen, palBox: palBox, breedScreen: breedScreen, albumScreen: albumScreen, settingsScreen: settingsScreen, helpScreen: helpScreen,
       speciesPicker: speciesPicker, awaySummary: awaySummary, reportCard: reportCard, trainResult: trainResult, battleResult: battleResult, fateScreen: fateScreen, confirmScreen: confirmScreen, addCodeScreen: addCodeScreen, myCodeScreen: myCodeScreen,

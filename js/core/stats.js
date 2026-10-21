@@ -53,17 +53,30 @@
   function condition(p) {
     var c = { all: 1, spd: 1, hp: 1, notes: [] };
     if (!p || p.hunger == null) return c;
-    if (p.hunger <= 0 || p.happy <= 0) { c.all = 0.85; c.notes.push(p.hunger <= 0 ? 'Hungry -15%' : 'Unhappy -15%'); }
+    // 2.6.0: children and teens lose less (-8%): with tiny junior stats -15% turned a fair fight into a 1-in-20 win
+    if (p.hunger <= 0 || p.happy <= 0) { var pen = isJunior(p) ? 8 : 15; c.all = 1 - pen / 100; c.notes.push((p.hunger <= 0 ? 'Hungry -' : 'Unhappy -') + pen + '%'); }
     if (PP.Care.isOverweight(p)) { c.spd = 0.9; c.notes.push('Heavy: SPD -10%'); }
     if (PP.Care.isUnderweight(p)) { c.hp = 0.9; c.notes.push('Skinny: HP -10%'); }
+    var nm = recentAdultMistakes(p), wk = D.RULES.adultCare.weak.filter(function (r) { return nm >= r[0]; })[0];   // 2.6.0 adult neglect
+    if (wk) { c.all *= wk[1]; c.notes.push('Neglected (' + nm + ' care mistakes in 3 days) -' + Math.round((1 - wk[1]) * 100) + '%'); }
     return c;
   }
   /* Final battle stats for a pet-like object {species, form, level, genes, skills} */
   function isJunior(p) { return !!(p && D.JUNIOR && D.JUNIOR.stages.indexOf(p.stage) >= 0); }
   /* 2.4.92: a child / teen fights with the Solid adult's level-1 stats scaled down by stage (no skills, no boosts) */
+  /* 2.6.0 adult care: mistakes made as an adult (lifetime total minus the young ones) and those of the last 3 pet-days */
+  function adultMistakes(p) { return p && p.stage === 'adult' ? Math.max(0, (p.totalMistakes || 0) - (p.mistakes || 0)) : 0; }
+  function recentAdultMistakes(p) {
+    if (!p || p.stage !== 'adult' || !Array.isArray(p.mistakeAt)) return 0;
+    var now = p.lastTickAt || 0, win = D.RULES.adultCare.recentMin * 60000;
+    return Math.min(adultMistakes(p), p.mistakeAt.filter(function (t) { return t > 0 && now - t < win; }).length);
+  }
+  /* 2.6.0 STRENGTH: 0..cap points -> +0..maxBonus HP / ATK / DEF for a child or teen (not ladder foes) */
+  function strBonus(p) { var S = D.JUNIOR.str; return p && !p.cpu ? Math.min(1, Math.max(0, (p.str || 0) / S.cap)) * S.maxBonus : 0; }
   function juniorStats(p) {
     var r = rawStats(p.species, 'good', 1, p.genes), k = D.JUNIOR.scale[p.stage] * (p.cpu && p.jpow > 0 ? Math.min(1.3, p.jpow) : 1);   // 2.4.94: ladder foes (cpu) are a notch stronger per rung
-    return { hp: Math.max(1, Math.floor(r.hp * k)), atk: Math.max(1, Math.floor(r.atk * k)), def: Math.max(1, Math.floor(r.def * k)), spd: Math.max(1, Math.floor(r.spd * k)) };
+    var b = 1 + strBonus(p);
+    return { hp: Math.max(1, Math.floor(r.hp * k * b)), atk: Math.max(1, Math.floor(r.atk * k * b)), def: Math.max(1, Math.floor(r.def * k * b)), spd: Math.max(1, Math.floor(r.spd * k)) };
   }
   function battleStats(p, opts) {
     if (isJunior(p)) {
@@ -105,6 +118,6 @@
   /* Skill points a pet of this level can have earned in total (1 at adulthood + 1 per level). */
   function totalSpForLevel(level) { return 1 + (level - 1); }
 
-  PP.Stats = { levelCap: levelCap, rawStats: rawStats, passives: passives, condition: condition,
+  PP.Stats = { adultMistakes: adultMistakes, recentAdultMistakes: recentAdultMistakes, strBonus: strBonus, levelCap: levelCap, rawStats: rawStats, passives: passives, condition: condition,
     battleStats: battleStats, isJunior: isJunior, juniorStats: juniorStats, bp: bp, scale: scale, addXp: addXp, totalSpForLevel: totalSpForLevel };
 })(typeof window !== 'undefined' ? window : globalThis);

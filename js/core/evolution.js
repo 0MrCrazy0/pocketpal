@@ -78,7 +78,8 @@
     p.stageMin = 0;
     var newBase = D.CARE[p.stage].weight;
     p.weight = Math.max(newBase, p.weight + (newBase - oldBase));
-    if (p.stage === 'adult') becomeAdult(p);
+    if (p.stage === 'teen') p.str = Math.floor((p.str || 0) * D.JUNIOR.str.teenKeep);   // 2.6.0: a new teen keeps half
+    if (p.stage === 'adult') { becomeAdult(p); delete p.str; delete p.strDay; }
   }
   function becomeAdult(p, form) {
     p.stage = 'adult';
@@ -148,12 +149,28 @@
   }
 
   /* 2.4.0: a finished child / teen training or mini-game adds its style points (mini = the exact game played). */
+  /* 2.6.0 STRENGTH: add points (child / teen only, capped); returns what was really added */
+  function addStr(p, n) {
+    if (!p || (p.stage !== 'child' && p.stage !== 'teen')) return 0;
+    var S = D.JUNIOR.str, before = p.str || 0;
+    p.str = Math.min(S.cap, Math.round((before + Math.max(0, n)) * 2) / 2);
+    return p.str - before;
+  }
+  /* battle Strength with a daily taper: the first `full` battles of the pet-day count in full, the next `half` half, then 0 */
+  function battleStr(p, won) {
+    var S = D.JUNIOR.str, day = Math.floor((p.clock || 0) / 1440);
+    if (!p.strDay || p.strDay.d !== day) p.strDay = { d: day, n: 0 };
+    p.strDay.n++;
+    var k = p.strDay.n <= S.full ? 1 : p.strDay.n <= S.full + S.half ? 0.5 : 0;
+    return addStr(p, S.battle[won ? 0 : 1] * k);
+  }
   function noteStyle(p, mini, success) {
     if (!p || (p.stage !== 'child' && p.stage !== 'teen') || !p.evo) return;
     var r = D.STYLE.pts[mini]; if (!r) return;
     var v = p.evo.sty || (p.evo.sty = { power: 0, swift: 0, guard: 0 });
+    if (!(p.trainDay && p.trainDay.n > D.RULES.trainDayFull)) addStr(p, D.JUNIOR.str.train[success ? 0 : 1]);   // 2.6.0 Strength (within the daily full trainings)
     v[r[2]] = Math.min(9999, (v[r[2]] || 0) + (success ? r[0] : r[1]));
   }
-  PP.Evolution = { careScore: careScore, adultForm: adultForm, style: style, hint: hint, noteStyle: noteStyle, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
+  PP.Evolution = { careScore: careScore, adultForm: adultForm, style: style, hint: hint, noteStyle: noteStyle, addStr: addStr, battleStr: battleStr, secretMet: secretMet, championMet: championMet, noteTraining: noteTraining, forecast: forecast, advance: advance,
     becomeAdult: becomeAdult, forceStage: forceStage, minutesToNextStage: minutesToNextStage, growText: growText, aboutText: aboutText };
 })(typeof window !== 'undefined' ? window : globalThis);

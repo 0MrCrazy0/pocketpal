@@ -77,7 +77,8 @@
   }
 
   function sicknessPerHour(p) {
-    var h = 0.004 + 0.03 * p.poop + (p.hunger <= 0 ? 0.03 : 0) + (isOverweight(p) ? 0.02 : 0) + (p.happy <= 0 ? 0.01 : 0);
+    var K = R.sick;   // 2.6.0: neglect makes a pal sick (was 0.004 + 0.03 / poop + 0.03 hungry + 0.02 heavy + 0.01 unhappy)
+    var h = K.base + K.poop * p.poop + (p.poop >= K.pileAt ? K.pile : 0) + (p.hunger <= 0 ? K.hungry : 0) + (isOverweight(p) ? K.heavy : 0) + (p.happy <= 0 ? K.unhappy : 0);
     if (p.asleep) h *= 0.5;
     return h * (1 - 0.4 * (p.genes ? p.genes.hardy : 0.5));
   }

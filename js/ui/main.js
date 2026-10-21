@@ -91,10 +91,12 @@
   /* Toasts are short-lived: anything still queued after TOAST_TTL is stale (e.g. an
    * "egg is warming up" note that waited behind a cut-scene) and is dropped. */
   var TOAST_TTL = 6000;
-  App.toast = function (msg) {
+  App.toast = function (msg, urgent) {
     if (!msg) return;
     msg = String(msg);
     if (App.toasts.length && App.toasts[App.toasts.length - 1].msg === msg) return;
+    // 2.6.0: an urgent care warning (one with a deadline) goes first and replaces a showing tip / seasonal note at once
+    if (urgent) { App.toasts.unshift({ msg: msg, at: Date.now() }); App.toastUntil = 0; if (App.toasts.length > 4) App.toasts.pop(); return; }
     App.toasts.push({ msg: msg, at: Date.now() }); if (App.toasts.length > 4) App.toasts.shift();
   };
   App.clearToasts = function () { App.toasts = []; App.toastUntil = 0; var el = document.getElementById('toast'); if (el) el.hidden = true; };
@@ -185,7 +187,7 @@
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
-        case 'elder': App.toast(e.name + ' is an Elder now (' + PP.World.RETIRE.elderDays + '+ days as an adult)! Retiring is optional - Elders can keep playing and battling (MENU \u25b8 Family).'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
+        case 'elder': App.toast(e.name + ' is an Elder now (' + PP.World.elderAt(G.active(App.state)) + '+ days as an adult)! Retiring is optional - Elders can keep playing and battling (MENU \u25b8 Family).'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
         case 'sleep': if (!offline) { App.toast(p.name + (e.again ? ' dozed off again. Lights off!' : ' fell asleep. Lights off!')); PP.Audio.play('lullaby'); } woke = null; break;
@@ -305,7 +307,7 @@
     // the bedtime heads-up, once per evening
     if (st && st.kind === 'bedsoon' && !UI.isOpen()) {
       var key = Math.floor((p.clock + 60) / 1440);
-      if (soonToastAt !== key) { soonToastAt = key; App.toast('Bedtime in ' + st.left + ' min - switch the lights off when ' + p.name + ' gets sleepy.'); }
+      if (soonToastAt !== key) { soonToastAt = key; App.toast('Bedtime in ' + st.left + ' min - switch the lights off when ' + p.name + ' gets sleepy.', true); }
     }
   }
   App.careStatusUpdate = careStatusUpdate;
@@ -469,30 +471,46 @@
   App.onEggStarted = onEggStarted;
   /* After any first egg (B, picker, or empty Pal Box slot): guide once, then care-alerts question once. */
   function askCareAlerts() {
-    if (!App.state || App.state.settings.alertsAsked) return;
-    App.state.settings.alertsAsked = true;
-    App.save();
-    UI.open(function () {
+    if (!App.state || App.state.settings.alertsAsked || UI.isOpen()) return;
+    if (App.state.settings.alerts) { answered(); return; }       // already on: nothing to ask
+    App.askPending = false;   // shown now: a cut-scene parks and restores it; it is not pushed again after every screen
+    // 2.6.0: saved as asked only when it is answered (Turn alerts on / Not now / C), never just because it was shown
+    function answered() { App.state.settings.alertsAsked = true; App.save(); }
+    var ask = function () {
       return {
         title: 'CARE ALERTS',
         html: '<p>Get a ping when your pal needs you - even if the game is closed. Hatch, bedtime, hungry, sick and more.</p>' +
           '<p class="tip">You can change this any time with the bell or in Settings. Hatch alerts are on by default once alerts are enabled.</p>',
+        back: function () { answered(); UI.close(); },
         items: [
           { label: 'Turn alerts on', act: function () {
-              UI.close();
+              answered(); UI.close();
               if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(true);
               else { App.state.settings.alerts = true; App.state.settings.notify = true; App.save(); App.toast('Alerts on - need https for push'); }
             } },
-          { label: 'Not now', act: function () { UI.close(); App.toast('You can turn alerts on later with the bell'); } }
+          { label: 'Not now', act: function () { answered(); UI.close(); App.toast('You can turn alerts on later with the bell'); } }
         ]
       };
-    });
+    };
+    ask.modal = true;
+    UI.open(ask);
+  }
+  App.askCareAlerts = askCareAlerts;
+  /* 2.6.0: a first-run screen that something else closed (a cutscene, a reload) comes back: the guide while it is not
+   * seen, then the alert question until it is answered. Checked once a second while nothing else is on screen. */
+  var NO_GUIDE = /[?&]guide=0\b/.test(root.location.search);
+  function firstRunPending() {
+    var s = App.state, p = G.active(s);
+    if (NO_GUIDE || !p || App.scene !== 'home' || App.cut || App.cutQueue.length || UI.isOpen() || App.awayInfo || App.pendingFate || App.placing) return;
+    if (!s.settings.guideSeen) UI.open(UI.screens.guideScreen(0));
+    else if (!s.settings.alertsAsked && App.askPending) askCareAlerts();
   }
   function onEggStarted() {
     App.resetWalker();
     App.save();
-    if (!App.state.settings.guideSeen) {
-      setTimeout(function () { UI.open(UI.screens.guideScreen(0)); }, 250);
+    App.askPending = !App.state.settings.alertsAsked;   // 2.6.0: asked after this egg, as soon as nothing else is open (once)
+    if (!App.state.settings.guideSeen && !NO_GUIDE) {   // ?guide=0 (tests / dev): no guide, straight to the alert question
+      setTimeout(function () { if (!UI.isOpen() && !App.state.settings.guideSeen) UI.open(UI.screens.guideScreen(0)); }, 250);   // 2.6.0: not again after a quick Skip
     } else {
       setTimeout(askCareAlerts, 250);
     }
@@ -552,8 +570,12 @@
     else if (btn === 'C') { App.iconSel = -1; PP.Audio.play('back'); }
     refreshIcons();
   };
+  /* 2.6.0: input that has nothing to do with an open modal screen shakes it instead of closing it */
+  function blockedByModal() { if (!UI.isOpen() || !UI.isModal()) return false; UI.nudge(); PP.Audio.play('no'); return true; }
+  App.blockedByModal = blockedByModal;
   App.iconTap = function (i) {
     if (App.cut || App.scene !== 'home') return;
+    if (blockedByModal()) return;
     if (UI.isOpen()) UI.close();
     App.iconSel = i; refreshIcons(); activateIcon(i);
   };
@@ -635,7 +657,7 @@
     if (g.kind === 'seat') { w.act = { pose: 'sit', dur: 4000, t0: t, seat: g.id }; w.until = t + 4000; return true; }
     return false;
   };
-  App.onMenuClosed = function () { if (PP.Admin) PP.Admin.onMenuClosed(); refreshIcons(); };
+  App.onMenuClosed = function () { if (PP.Admin) PP.Admin.onMenuClosed(); refreshIcons(); if (App.heldUI && !App.cut && !App.cutQueue.length) { var h = App.heldUI; App.heldUI = null; setTimeout(function () { if (!UI.isOpen() && !App.cut && App.scene === 'home') UI.resume(h); else App.heldUI = h; }, 0); } };   // 2.6.0: bring back a parked modal
 
   /* 2.0.0: an LCD celebration (happy hop / dance with music notes, earned praise) always comes with its sound, once
    * per animation; PP.Audio.celebrate skips it when a celebration jingle (win, cup, level...) has just played. */
@@ -661,16 +683,17 @@
       var top = UI.top(); if (UI.isOpen() && top && top.live && !document.activeElement.matches('input,textarea')) UI.refresh();
       PP.TestPanel.update(); refreshIcons(); careStatusUpdate();
       if (Date.now() - App.lastSaveReal > 10000) { App.save(); if (PP.CloudSync && !App.passive) PP.CloudSync.auto(App.state); }
+      firstRunPending();   // 2.6.0
       pumpDaily(); updateHint(); favicon(); if (PP.WorldUI) PP.WorldUI.tick();   // 2.4.0: event hello, gift mailbox
       if (App.scene === 'home' && !App.cut && !UI.isOpen() && !App.awayInfo && !App.pendingFate && backupDue()) { App.state.backup.snoozeUntil = Date.now() + 3 * 864e5; UI.open(UI.screens.backupReminder); }
     }
     var ctx = App.ctx;
     ctx.setTransform(R.DPR || 1, 0, 0, R.DPR || 1, 0, 0);   // 1.9.4: draw in LCD pixels on the x5 backing store
     ctx.imageSmoothingEnabled = false;
-    if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; UI.close(); App.clearToasts(); cutJingle(App.cut); }
+    if (!App.cut && App.cutQueue.length) { App.cut = App.cutQueue.shift(); App.cut.t0 = tNow; if (UI.isOpen() && UI.isModal()) App.heldUI = UI.hold(); else UI.close(); App.clearToasts(); cutJingle(App.cut); }   // 2.6.0: a modal screen is parked, not lost
     if (App.cut) {
       R.drawCut(ctx, App, tNow);
-      if (tNow - App.cut.t0 > R.cutDuration(App.cut)) { var done = App.cut; App.cut = null; if (done.after) done.after(); }   // 2.4.0: a trip / visit opens its result
+      if (tNow - App.cut.t0 > R.cutDuration(App.cut)) { var done = App.cut; App.cut = null; if (done.after) done.after(); if (!App.cutQueue.length && App.heldUI) { var h = App.heldUI; App.heldUI = null; if (!UI.isOpen()) UI.resume(h); } }   // 2.4.0: a trip / visit opens its result
     } else if (App.scene === 'battle') PP.BattleView.draw(ctx, tNow);
     else if (App.scene === 'mini') PP.Mini.draw(ctx, tNow);
     else {
@@ -753,9 +776,10 @@
     document.getElementById('testBtn').addEventListener('click', function () { App.toggleTestPanel(); });
     var hintX = document.getElementById('hintClose');
     if (hintX) hintX.addEventListener('click', function (ev) { ev.stopPropagation(); if (hintId) { PP.Hints.dismiss(App.state, hintId); App.save(); } updateHint(); });
-    document.getElementById('menuBtn').addEventListener('click', function () { PP.Audio.unlock(); if (App.scene === 'home' && !App.cut) { UI.open(UI.screens.mainMenu); } });
+    document.getElementById('menuBtn').addEventListener('click', function () { PP.Audio.unlock(); if (App.scene === 'home' && !App.cut && !blockedByModal()) { UI.open(UI.screens.mainMenu); } });
     document.getElementById('bellBtn').addEventListener('click', function () {
       PP.Audio.unlock();
+      if (blockedByModal()) return;   // 2.6.0
       if (PP.Net && PP.Net.setAlerts) PP.Net.setAlerts(!App.state.settings.alerts);
       else App.toast('Alerts need the live https game');
     });
@@ -775,7 +799,8 @@
       if (!act) return;
       var map = { clean: 'clean', meal: 'meal', snack: 'snack', lights: 'lights', medicine: 'medicine' };
       if (!map[act]) return;
-      setTimeout(function () {
+      setTimeout(function run() {
+        if (UI.isOpen() && UI.isModal() || App.cut || App.scene !== 'home') { if ((run.n = (run.n || 0) + 1) < 120) setTimeout(run, 1000); return; }   // 2.6.0: wait until the modal screen / cutscene / battle is done
         if (act === 'lights') { updateSim(true); var q = G.active(App.state); if (!q || !q.lights) return; }   // 2.4.92: "Lights off" never switches them ON (it was a toggle)
         App.doAct(map[act]);
       }, 400);

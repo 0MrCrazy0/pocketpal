@@ -43,12 +43,17 @@
   /* Care tuning per stage. Rates are "minutes per heart lost while awake". */
   var CARE = {
     baby:  { hungerMin: 30, happyMin: 35,  poopMin: 50,  sleep: [19, 7], weight: 5 },
-    child: { hungerMin: 55, happyMin: 60,  poopMin: 100, sleep: [20, 7], weight: 12 },
-    teen:  { hungerMin: 75, happyMin: 80,  poopMin: 130, sleep: [21, 8], weight: 22 },
-    adult: { hungerMin: 90, happyMin: 100, poopMin: 160, sleep: [22, 8], weight: 35 }
+    child: { hungerMin: 45, happyMin: 50,  poopMin: 80,  sleep: [20, 7], weight: 12 },   // 2.6.0 Tamagotchi pacing (was 55 / 60 / 100)
+    teen:  { hungerMin: 60, happyMin: 65,  poopMin: 105, sleep: [21, 8], weight: 22 },   // (was 75 / 80 / 130)
+    adult: { hungerMin: 75, happyMin: 85,  poopMin: 130, sleep: [22, 8], weight: 35 }    // (was 90 / 100 / 160)
   };
   var RULES = {
     maxHearts: 4, maxPoop: 4,
+    /* 2.6.0: sickness chance per hour awake (half asleep, hardy gene -40% at most): mostly from neglect */
+    sick: { base: 0.003, poop: 0.04, pile: 0.03, pileAt: 3, hungry: 0.05, unhappy: 0.02, heavy: 0.02 },
+    /* 2.6.0: adults keep making care mistakes. They no longer change the form, but the last 3 days of them weaken the
+     * pal in battle (3+ = -5%, 6+ = -10%) and every adult mistake past 5 brings the Elder age a day nearer (min 10 days). */
+    adultCare: { recentMin: 3 * 1440, weak: [[6, 0.9], [3, 0.95]], elderFree: 5, elderMin: 10 },
     firstDayGraceMin: 1440,  // 1.9.0: for this long after hatching (normal mode) every need window is doubled
     callGraceMin: 30,        // a real need (hungry/unhappy/sick call) left this long = 1 care mistake
     neglectRepeatMin: 180,   // ...and another every 3 h it stays unanswered
@@ -63,7 +68,7 @@
     energySleepLitMin: 8,    // +1 every 8 min asleep with the lights left on
     napEnergy: 40,           // lights off in the day and energy under this = nap
     wokenAwakeMin: 30,       // 2.2.0: lights on at night wakes the pal (grumpy, happy -1 once a night); it stays up this long, then dozes off again
-    healthDrain: { hunger: 0.08, sick: 0.06, poop: 0.03, happy: 0.02 },  // per minute
+    healthDrain: { hunger: 0.07, sick: 0.06, poop: 0.03, happy: 0.02 },  // per minute
     healthRegen: 0.12, healthRegenSleep: 0.2,
     runawayMin: 24 * 60,     // 24 h of being miserable (happy 0, discipline < 40) = runs away
     offlineMaxMistakes: 3,   // mercy: at most 3 mistakes per offline catch-up
@@ -142,7 +147,7 @@
     kings_roar:   { name: "King's Roar", power: 34, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.3, turns: 3 }] },   // 1.8.0 balance
     savage_maul:  { name: 'Savage Maul', power: 87, acc: 85, cd: 2 },   // 1.8.0 balance
     rending_fury: { name: 'Rending Fury', power: 28, acc: 90, cd: 2, hits: [2, 3] },
-    sun_king:     { name: 'Sun King Strike', power: 58, acc: 90, cd: 4, crit: 1 },   // 1.8.0 balance
+    sun_king:     { name: 'Sun King Strike', power: 66, acc: 90, cd: 4, crit: 1 },   // 1.8.0 balance   // 2.6.0 skill balance (power was 58)
     peck:         { name: 'Peck', power: 43, acc: 100 },
     gust:         { name: 'Gust', power: 35, acc: 95, cd: 2, fx: [{ t: 'stun', chance: 0.2 }] },   // 1.8.0 balance
     dive_bomb:    { name: 'Dive Bomb', power: 68, acc: 85, cd: 2 },   // 1.8.0 balance
@@ -168,7 +173,7 @@
     grizzly:      { name: 'Grizzly Rampage', power: 33, acc: 90, cd: 4, hits: [3, 3] },   // 1.8.0 balance
     bite:         { name: 'Bite', power: 46, acc: 95 },   // 1.8.0 balance
     howl:         { name: 'Howl', power: 36, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.1, turns: 3 }] },   // a hit + small ATK buff, so the AI actually uses it (1.8.0: 30 -> 36)
-    fang_bleed:   { name: 'Fang Bleed', power: 31, acc: 95, cd: 1, fx: [{ t: 'bleed', turns: 3 }] },
+    fang_bleed:   { name: 'Fang Bleed', power: 34, acc: 95, cd: 1, fx: [{ t: 'bleed', turns: 3 }] },   // 2.6.0 skill balance (power was 31)
     lunge:        { name: 'Lunge', power: 60, acc: 95, pri: 1, cd: 1 },   // 1.8.0 balance
     moon_howl:    { name: 'Moon Howl', power: 34, acc: 100, cd: 3, fx: [{ t: 'buff', stat: 'atk', mult: 1.22, turns: 3 }, { t: 'buff', stat: 'spd', mult: 1.12, turns: 3 }] },
     frost_fang:   { name: 'Frost Fang', power: 76, acc: 90, cd: 2, fx: [{ t: 'debuff', stat: 'spd', mult: 0.8, turns: 3 }] },   // 1.8.0 balance
@@ -192,7 +197,7 @@
       T('death_roll', 'Death Roll', 2, 'move', 'death_roll', ['ambush'], 'Big spin: 30% stun'),
       T('swamp_soak', 'Swamp Soak', 2, 'move', 'swamp_soak', ['thick_hide'], 'Heal 21% HP (2x per battle)'),
       T('iron_jaw', 'Iron Jaw', 2, 'passive', { atkPct: 16 }, ['thick_hide', 'ambush'], 'ATK +16%'),
-      T('ancient_scales', 'Ancient Scales', 3, 'passive', { lowHpGuard: 12 }, ['swamp_soak', 'iron_jaw'], 'Under 50% HP: take 12% less damage'),
+      T('ancient_scales', 'Ancient Scales', 3, 'passive', { lowHpGuard: 15 }, ['swamp_soak', 'iron_jaw'], 'Under 50% HP: take 15% less damage'),   // 2.6.0 skill balance
       T('frenzy_bite', 'Frenzy Bite', 3, 'move', 'frenzy_bite', ['death_roll', 'iron_jaw'], 'Bite that causes bleeding'),
       T('leviathan', 'Leviathan Crush', 4, 'move', 'leviathan', ['ancient_scales', 'frenzy_bite'], 'Ultimate: crushing power')
     ],
@@ -239,10 +244,10 @@
     wolf: [
       T('swift_paws', 'Swift Paws', 1, 'passive', { spdPct: 16 }, null, 'SPD +16%'),
       T('fang_bleed', 'Fang Bleed', 1, 'move', 'fang_bleed', null, 'Bite that causes bleeding'),
-      T('pack_tactics', 'Pack Tactics', 2, 'passive', { fasterDmg: 17 }, ['swift_paws'], '+17% damage when faster than foe'),
+      T('pack_tactics', 'Pack Tactics', 2, 'passive', { fasterDmg: 19 }, ['swift_paws'], '+19% damage when faster than foe'),   // 2.6.0 skill balance
       T('lunge', 'Lunge', 2, 'move', 'lunge', ['swift_paws', 'fang_bleed'], 'Quick lunge, strikes first'),
       T('moon_howl', 'Moon Howl', 2, 'move', 'moon_howl', ['fang_bleed'], 'Hit + ATK +22%, SPD +12% for 3 turns'),
-      T('alpha', 'Alpha Instinct', 3, 'passive', { critAdd: 11 }, ['pack_tactics', 'moon_howl'], 'Crit chance +11%'),
+      T('alpha', 'Alpha Instinct', 3, 'passive', { critAdd: 16 }, ['pack_tactics', 'moon_howl'], 'Crit chance +16%'),   // 2.6.0 skill balance
       T('frost_fang', 'Frost Fang', 3, 'move', 'frost_fang', ['lunge', 'moon_howl'], 'Chilling bite, slows foe'),
       T('lunar_hunt', 'Lunar Hunt', 4, 'move', 'lunar_hunt', ['alpha', 'frost_fang'], 'Ultimate: savage hunt, bleeding')
     ]
@@ -349,13 +354,17 @@
     coins: { win: 3, loss: 1, clear: 15 },
     dailyCoins: 30,                    // 2.4.94: junior battle coins a day at most (wins, losses and the clear bonus)
     cupName: 'Junior Cup',
+    /* 2.6.0 STRENGTH (V-Pet effort): training and battles make a child / teen stronger. 0..cap points, bonus = pts/cap x
+     * maxBonus on HP, ATK and DEF. Training counts within RULES.trainDayFull; battles: the first full a day count in full,
+     * the next half count half, then none. A new teen keeps teenKeep of its child Strength. */
+    str: { cap: 40, maxBonus: 0.15, train: [2, 1], battle: [3, 1], full: 4, half: 4, teenKeep: 0.5 },
     /* 2.4.94: the Junior Cup is a ladder per stage, like an arena cup: fixed foes of rising strength (the same for
      * everyone), the run is saved, a loss starts it again. foes: [name, species, genes (hp atk def spd), power]. Species
      * go from the weakest base stats up, power scales the foe's junior stats a notch per rung. Clearing the ladder adds
      * a trophy; the clear bonus pays once a day. Balance: tests/junior2494.test.js. */
     ladders: {
-      child: { name: 'Child Ladder', trophy: 'Little Star', foes: [['Scout', 'croc', [-1, -1, 0, 0], 1.0], ['Rival', 'elephant', [0, 0, 0, 0], 1.0], ['Champ', 'wolf', [0, 0, 0, 0], 1.06]] },
-      teen: { name: 'Teen Ladder', trophy: 'Rising Star', foes: [['Scout', 'lion', [-1, -1, 0, 0], 1.0], ['Rival', 'bear', [0, 0, 0, 0], 1.0], ['Ace', 'elephant', [0, 0, 0, 0], 1.03], ['Champ', 'wolf', [0, 0, 0, 0], 1.09]] }
+      child: { name: 'Child Ladder', trophy: 'Little Star', foes: [['Scout', 'croc', [-1, -1, 0, 0], 1.0], ['Rival', 'elephant', [0, 0, 0, 0], 1.0], ['Champ', 'wolf', [0, 0, 0, 0], 1.05]] },
+      teen: { name: 'Teen Ladder', trophy: 'Rising Star', foes: [['Scout', 'lion', [-1, -1, 0, 0], 1.0], ['Rival', 'bear', [0, 0, 0, 0], 1.0], ['Ace', 'elephant', [0, 0, 0, 0], 1.03], ['Champ', 'wolf', [0, 0, 0, 0], 1.06]] }
     }
   };
   var BOX = { start: 4, max: 12, prices: [100, 150, 200, 275, 350, 450, 575, 700] };  // price of slot 5, 6, ... 12
@@ -376,7 +385,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.5.3',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.6.0',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

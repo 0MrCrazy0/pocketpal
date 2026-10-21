@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 10;  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
+  var SCHEMA = 11;  // 2.6.0: Strength (p.str, p.strDay) for children and teens  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -76,6 +76,11 @@
      * placed list at the spots they showed (deco x 55, toy x 90). */
     9: function (st) {
       return PP.World.migrate10(st);
+    },
+    /* 10 -> 11 (2.6.0): children and teens start with Strength 0 (adults have none) */
+    10: function (st) {
+      (Array.isArray(st.slots) ? st.slots : []).forEach(function (p) { if (p && (p.stage === 'child' || p.stage === 'teen') && p.str == null) p.str = 0; });
+      return st;
     },
     /* 3 -> 4: 12/24-hour clock (from the browser locale); per-pal sleep schedules start on the stage defaults. */
     3: function (st) {
@@ -172,6 +177,7 @@
     out.weight = U.num(p.weight, 5, 1, 999);
     out.clock = U.int(p.clock, 0, 0); out.ageMin = U.int(p.ageMin, 0, 0); out.stageMin = U.int(p.stageMin, 0, 0);
     out.lastTickAt = U.num(p.lastTickAt, Date.now());
+    if ((p.stage === 'child' || p.stage === 'teen') && p.str != null) { out.str = Math.min(D.JUNIOR.str.cap, Math.round(U.num(p.str, 0, 0) * 2) / 2); if (p.strDay && Number.isFinite(p.strDay.d)) out.strDay = { d: U.int(p.strDay.d, 0, 0), n: U.int(p.strDay.n, 0, 0, 999) }; } else { delete out.str; delete out.strDay; }   // 2.6.0
     out.mistakes = U.int(p.mistakes, 0, 0, 999); out.totalMistakes = U.int(p.totalMistakes, 0, 0, 99999);
     out.acc = { hunger: U.num(p.acc && p.acc.hunger, 0, 0, 1), happy: U.num(p.acc && p.acc.happy, 0, 0, 1), poop: U.num(p.acc && p.acc.poop, 0, 0, 1) };
     if (p.acc && Number.isFinite(p.acc.weight)) out.acc.weight = U.num(p.acc.weight, 0, 0, 1);

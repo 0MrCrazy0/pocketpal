@@ -9,7 +9,7 @@
   function newState(now) {
     now = now || Date.now();
     var st0 = {
-      schema: 9 /* = PP.Save.SCHEMA */, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
+      schema: 11 /* = PP.Save.SCHEMA */, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
       slots: [null, null, null, null], boxSize: 4, active: 0,
       album: [], friends: [],
       arena: { rank: 0, attempt: 0, champion: false, cups: [], run: null, note: null },
@@ -181,7 +181,7 @@
       memo(p, e, t);                                        // 2.4.0 memory book
     });
     if (!p.fate && !p.elderSeen && PP.World.isElder(p)) {   // 2.4.0: an Elder may retire (never forced)
-      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder (' + PP.World.RETIRE.elderDays + '+ days as an adult) - retiring is optional', t); ev.push({ t: 'elder', name: p.name });
+      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder (' + PP.World.elderAt(p) + '+ days as an adult) - retiring is optional', t); ev.push({ t: 'elder', name: p.name });
     }
     if (grew) unlockEvents(state, ev);
     if (p.stage !== 'egg') {
@@ -488,6 +488,7 @@
     if (won) { p.wins++; p.happy = Math.min(4, p.happy + 1); p.energy = Math.min(100, p.energy + 4); }
     else { p.losses++; p.happy = Math.max(0, p.happy - 1); }
     out.xp = bankJunior(p, won ? JUNIOR.xpWin[p.stage] : JUNIOR.xpLoss);
+    out.str = PP.Evolution.battleStr(p, won); out.strNow = p.str || 0; out.strCap = JUNIOR.str.cap;   // 2.6.0
     out.bank = p.jxp; out.bankCap = JUNIOR.bankCap;
     var bonus = 0, J = juniorState(state), day = PP.Shop.dayOf(now(state));
     if (U.newDay(J.day, day)) { J.day = day; J.coins = 0; }                     // (a clock set back never resets the cap)

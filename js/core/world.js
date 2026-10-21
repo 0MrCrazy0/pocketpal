@@ -378,7 +378,9 @@
    * innate skill (one of the parent's skills, tier 1-3, known from birth) or the Family Ribbon (an heirloom hat). */
   var RETIRE = { minDays: 5, elderDays: 20 };
   function adultDays(p) { return p && p.stage === 'adult' ? Math.max(0, Math.floor((p.stageMin || 0) / 1440)) : 0; }   // stageMin keeps counting (pet minutes) once adult
-  function isElder(p) { return !!p && !p.fate && adultDays(p) >= RETIRE.elderDays; }
+  /* 2.6.0: careless adult years age a pal sooner - each adult care mistake past elderFree brings the Elder age a day nearer */
+  function elderAt(p) { var A = PP.DATA.RULES.adultCare; return Math.max(A.elderMin, RETIRE.elderDays - Math.max(0, PP.Stats.adultMistakes(p) - A.elderFree)); }
+  function isElder(p) { return !!p && !p.fate && adultDays(p) >= elderAt(p); }
   function canRetire(p) {
     if (!p || p.fate) return 'No pal';
     if (p.stage !== 'adult') return 'Only adults can retire';
@@ -722,7 +724,7 @@
     EVENTS: EVENTS, easterOf: easterOf, eventOnDate: eventOnDate, eventNow: eventNow, eventGift: eventGift, claimEventGift: claimEventGift,
     eventShop: eventShop, buyEventThing: buyEventThing, EVENT_PRICE: EVENT_PRICE,
     MEM_MAX: MEM_MAX, remember: remember, cleanMem: cleanMem, familyLine: familyLine,
-    RETIRE: RETIRE, adultDays: adultDays, isElder: isElder, canRetire: canRetire, traitOptions: traitOptions, retire: retire, topGen: topGen,
+    RETIRE: RETIRE, adultDays: adultDays, isElder: isElder, elderAt: elderAt, canRetire: canRetire, traitOptions: traitOptions, retire: retire, topGen: topGen,
     PLACES: PLACES, TRIP: TRIP, canTrip: canTrip, goTrip: goTrip, nextTripIn: nextTripIn,
     GIFTS: GIFTS, GIFT: GIFT, VISIT: VISIT, mail: mail, canSend: canSend, noteSent: noteSent, receive: receive, visit: visit, canVisit: canVisit, MBX: MBX, MKEY: MKEY,
     FCUP: FCUP, fcupFoes: fcupFoes, fcupStatus: fcupStatus, canFcup: canFcup, startFcup: startFcup, fcupResult: fcupResult,

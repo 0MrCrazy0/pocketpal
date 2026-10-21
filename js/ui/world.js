@@ -47,7 +47,7 @@
       function () { PP.Audio.play(r.found ? 'level' : 'happy'); PP.UI.open(tripResult(r)); });
   }
   function tripResult(r) {
-    return function () {
+    var scr = function () {
       var P = W.PLACES[r.where], h = '<ul class="goals">';
       h += '<li class="done"><span class="gk">\u2665</span>Happy +1</li><li><span class="gk">\u25cb</span>Energy \u2212' + r.energy + '</li>';
       h += '<li><span class="gk">\u25c9</span>' + (r.coins ? '+' + r.coins + ' coins' : 'No coins (today\u2019s coin cap is reached)') + '</li>';
@@ -59,6 +59,8 @@
       items.push({ label: 'OK', act: K().close });
       return { title: P.name.toUpperCase() + ' TRIP', html: h, items: items };
     };
+    scr.modal = true;   // 2.6.0: what the trip found is not lost to a stray icon tap
+    return scr;
   }
 
   /* ---------------------------------------------------------------- things */
@@ -146,7 +148,7 @@
       var why = W.canRetire(p);
       // 2.5.0: clearer words - retiring is not dying, and an Elder is not a new form
       var g2 = (p.gen || 1) + 1;
-      items.push({ label: 'Retire ' + p.name + ' (move to the Album)', sub: why || ((W.isElder(p) ? p.name + ' is an Elder (' + W.RETIRE.elderDays + '+ days as an adult). Retiring is optional - Elders can keep playing and battling. ' : '') +
+      items.push({ label: 'Retire ' + p.name + ' (move to the Album)', sub: why || ((W.isElder(p) ? p.name + ' is an Elder (' + W.elderAt(p) + '+ days as an adult). Retiring is optional - Elders can keep playing and battling. ' : '') +
         p.name + ' stays in your Album forever. An egg from ' + p.name + '\u2019s family starts generation ' + g2 + '.'), disabled: !!why, reason: why, act: function () { K().push(retireScreen); } });
       items.push({ label: 'Memory book: ' + p.name, sub: (p.mem || []).length + ' memories', act: function () { K().push(memScreen(p.id)); } });
     }

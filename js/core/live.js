@@ -78,6 +78,6 @@
 
   /* 2.4.94: battle-rules version. Bump it whenever the engine or move numbers change, so two different versions never
    * meet in a room (they would fall out of sync). 2 = 2.4.94 ties / sudden death + balance; 3 = 2.4.97 battle traits; older games = 0. */
-  PP.Live = { ENGINE: 3 /* 2.4.97: battle traits */, seedFor: seedFor, create: create, sum: sum, validMove: validMove, mapEvents: mapEvents, resolve: resolve, view: view, canon: canon,
+  PP.Live = { ENGINE: 4 /* 2.6.0: skill balance (2.4.97: 3 battle traits) */, seedFor: seedFor, create: create, sum: sum, validMove: validMove, mapEvents: mapEvents, resolve: resolve, view: view, canon: canon,
     endBy: endBy, checkCards: checkCards, validRoom: validRoom, idx: idx };
 })(typeof window !== 'undefined' ? window : globalThis);

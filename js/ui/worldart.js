@@ -176,12 +176,7 @@
       return;
     }
     if (ev === 'halloween') {
-      for (var b = 0; b < 2; b++) {                               // two little bats flap across the sky
-        var bx = Math.round(((tt / 60 + b * 120) % (R.W + 40)) - 20), by = top + 10 + b * 9 + Math.round(Math.sin(tt / 300 + b) * 3), up = Math.floor(tt / 180 + b) % 2;
-        ctx.fillStyle = night ? C.lite : C.ink;
-        ctx.fillRect(bx, by, 3, 2); ctx.fillRect(bx - 3, by + (up ? -1 : 1), 3, 1); ctx.fillRect(bx + 3, by + (up ? -1 : 1), 3, 1);
-        ctx.fillRect(bx - 4, by + (up ? -2 : 2), 1, 1); ctx.fillRect(bx + 6, by + (up ? -2 : 2), 1, 1);
-      }
+      // 2.6.0: the two flapping bats are gone (they read as birds drifting like clouds)
       drawArt(ctx, 'pumpkin', 152, R.FLOOR_TOP + 6 - 8 * 1.6, 1.6, false, night);   // a jack-o-lantern by the right tree
     } else if (ev === 'christmas') {
       ctx.fillStyle = C.lite;                                      // gentle snow
