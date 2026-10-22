@@ -12,7 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 12;  // 2.6.1: Elders become Legends (p.legend), Hall of Fame (state.hall)
+  var SCHEMA = 13;  // 2.6.3: arena / Junior Cup / Friends Cup progress per pal (p.arena, p.jtro, p.fcup), state.myth; 2.6.1: Legends, Hall of Fame
    // 2.6.0: Strength (p.str, p.strDay) for children and teens  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
@@ -77,6 +77,31 @@
      * placed list at the spots they showed (deco x 55, toy x 90). */
     9: function (st) {
       return PP.World.migrate10(st);
+    },
+    /* 12 -> 13 (2.6.3): battle progress moves onto the pals. The shared arena (cups, rank, Champion, the run), the Junior
+     * Cup trophies and the Friends Cup run + wins all go to the pal that is OUT now (else the first pal in the box); every
+     * other pal starts the arena fresh. Kept for the whole game: the once-a-day bonuses and coin caps (state.junior.paid /
+     * day / coins, state.fcup.day), and state.myth (the keeper has won the Myth Cup - for the secret lion form). */
+    12: function (st) {
+      var slots = Array.isArray(st.slots) ? st.slots : [], a = st.arena, real = function (p) { return p && typeof p === 'object' && typeof p.id === 'string' && D.SPECIES.indexOf(p.species) >= 0; };
+      var act = slots[U.int(st.active, 0, 0, slots.length ? slots.length - 1 : 0)];   // the same clamp as sanitizeSlots
+      var to = real(act) ? act : slots.filter(real)[0] || null;
+      var arena = a && typeof a === 'object' && Array.isArray(a.cups) ? PP.Arena.clean(a) : PP.Arena.migrate(st);
+      if (arena.cups.some(function (c, i) { return c.won && D.ARENA[i] && D.ARENA[i].post; })) st.myth = true;
+      var J = st.junior && typeof st.junior === 'object' ? st.junior : null, F = PP.World.cleanFcup(st.fcup);
+      if (to) {
+        to.arena = arena;
+        if (J && J.trophies && typeof J.trophies === 'object') to.jtro = { child: U.int(J.trophies.child, 0, 0, 1e6), teen: U.int(J.trophies.teen, 0, 0, 1e6) };
+        if (F.wins || F.run) to.fcup = { run: F.run && F.run.pal === to.id ? F.run : null, wins: F.wins };
+      }
+      delete st.arena;
+      if (J) delete J.trophies;
+      st.fcup = { day: F.day };
+      // each pal is its own save: everything on the state that was earned by playing (coins, items, shells, goals,
+      // trips, visits, things and hats, event gifts, cup bonus days) now belongs to the pal that is out; the others start fresh
+      st.owner = to ? to.id : null;
+      slots.forEach(function (p) { if (p && typeof p === 'object') delete p.own; });
+      return st;
     },
     /* 11 -> 12 (2.6.1): an adult that was already an Elder (seen, or old enough by the 2.6.0 rule) becomes a Legend */
     11: function (st) {
@@ -161,6 +186,7 @@
     e.mem = PP.World.cleanMem(a.mem).slice(-ALBUM_MEM);
     if (['gene', 'skill', 'ribbon', 'full'].indexOf(a.trait) < 0) delete e.trait;   // 2.6.1 'full' = a Legend's whole Family Ribbon
     if (typeof a.hat === 'string') { var h = PP.World.canon(a.hat); if (PP.World.thing(h) && PP.World.THINGS[h].kind === 'hat') e.hat = h; else delete e.hat; }   // 2.5.0: bowtie -> tophat
+    if (a.arena && typeof a.arena === 'object') e.arena = { cups: U.int(a.arena.cups, 0, 0, D.ARENA_MAIN), champ: a.arena.champ === true, myth: a.arena.myth === true }; else delete e.arena;   // 2.6.3
     e.parents = Array.isArray(a.parents) ? a.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : [];
     var snap = (e.fate === 'dead' || e.fate === 'gone') && a.snap ? sanitizePet(a.snap) : null;
     if (snap && snap.id === e.id && snap.species === e.species) e.snap = snap; else delete e.snap;
@@ -214,6 +240,11 @@
     if (p.jcup && typeof p.jcup === 'object' && PP.DATA.JUNIOR.stages.indexOf(p.jcup.stage) >= 0)   // 2.4.94: { stage, foe } = the ladder run
       out.jcup = { stage: p.jcup.stage, foe: p.jcup.live ? 0 : U.int(p.jcup.foe, 0, 0, PP.DATA.JUNIOR.ladders[p.jcup.stage].foes.length - 1) };   // 2.4.96: closed mid-fight = the run starts again
     else delete out.jcup;
+    /* 2.6.3: per-pal battle progress */
+    if (p.arena && typeof p.arena === 'object') out.arena = PP.Arena.clean(p.arena); else delete out.arena;
+    if (p.jtro && typeof p.jtro === 'object') out.jtro = { child: U.int(p.jtro.child, 0, 0, 1e6), teen: U.int(p.jtro.teen, 0, 0, 1e6) }; else delete out.jtro;
+    if (p.own && typeof p.own === 'object' && !Array.isArray(p.own)) out.own = cleanOwn(p.own); else delete out.own;   // 2.6.3: its own coins, items, shells...
+    if (p.fcup && typeof p.fcup === 'object') { var fc = PP.World.cleanFcup(p.fcup); out.fcup = { run: fc.run, wins: fc.wins }; } else delete out.fcup;
     if (p.praiseReady) out.praiseReady = true; else delete out.praiseReady;
     ['praiseAt', 'refuseAt', 'spoilAt'].forEach(function (k) { if (Number.isFinite(p[k])) out[k] = Math.round(p[k]); else delete out[k]; });
     out.snacks = Array.isArray(p.snacks) ? p.snacks.filter(Number.isFinite).slice(-10) : [];
@@ -262,9 +293,8 @@
 
   function cleanJunior(j) {
     j = j && typeof j === 'object' ? j : {};
-    var out = { trophies: {}, paid: {}, day: U.int(j.day, -1, -1), coins: U.int(j.coins, 0, 0, PP.DATA.JUNIOR.dailyCoins) };
+    var out = { paid: {}, day: U.int(j.day, -1, -1), coins: U.int(j.coins, 0, 0, PP.DATA.JUNIOR.dailyCoins) };
     PP.DATA.JUNIOR.stages.forEach(function (st) {
-      out.trophies[st] = U.int(j.trophies && j.trophies[st], 0, 0, 1e6);
       out.paid[st] = U.int(j.paid && j.paid[st], -1, -1);
     });
     return out;
@@ -280,7 +310,8 @@
     out.inv = PP.Shop.cleanInv(s.inv);
     out.album = Array.isArray(s.album) ? s.album.slice(-200).map(sanitizeAlbumEntry).filter(Boolean) : [];
     out.friends = Array.isArray(s.friends) ? s.friends.filter(function (c) { return !PP.Cards.validateCard(c); }).slice(0, 12).map(cleanFriend) : [];
-    out.arena = s.arena && Array.isArray(s.arena.cups) ? PP.Arena.clean(s.arena) : PP.Arena.migrate(s);   // 1.8.4 per-cup records
+    delete out.arena;   // 2.6.3: arena progress is per pal (p.arena; the 12 -> 13 migration moved it)
+    if (s.myth === true) out.myth = true; else delete out.myth;
     out.dex = {};
     if (s.dex && typeof s.dex === 'object') Object.keys(s.dex).forEach(function (k) {
       var m = /^([a-z]+):([a-z]+)$/.exec(k), v = s.dex[k];
@@ -288,9 +319,11 @@
       var e = {}; if (Number.isFinite(v.r) && v.r > 0) e.r = v.r; if (Number.isFinite(v.s) && v.s > 0) e.s = v.s;
       if (e.r || e.s) out.dex[k] = e;
     });
-    out.unlocks = Array.isArray(s.unlocks) ? s.unlocks.filter(function (id, i, a) { var sh = PP.Collection.shell(id); return sh && (sh.unlock || sh.price) && a.indexOf(id) === i; }) : [];
+    out.unlocks = cleanUnlocks(s.unlocks);
     var st = s.settings || {};
-    var shell = PP.Collection.shell(st.shell) && PP.Collection.shellStatus(out, st.shell).ok ? st.shell : 'black';
+    // 2.6.3: the shell colour is for the whole game: kept while the pal out or any pal in the box owns it
+    var shellOk = function (o) { return PP.Collection.shellStatus(Object.assign({}, out, o ? { unlocks: o.unlocks, wallet: o.wallet } : {}), st.shell).ok; };
+    var shell = PP.Collection.shell(st.shell) && (shellOk(null) || out.slots.some(function (p) { return p && p.own && shellOk(p.own); })) ? st.shell : 'black';
     out.settings = { sound: st.sound !== false, test: !!st.test, speed: U.num(st.speed, 1, 1, 3600), alerts: !!st.alerts,
       notify: !!st.notify, shell: shell, guideSeen: !!st.guideSeen, alertsAsked: !!st.alertsAsked, clock: st.clock === '12' || st.clock === '24' ? st.clock : PP.Time.defaultClock(),
       hints: st.hints !== false, music: st.music !== false, vibrate: st.vibrate !== false,   // 2.5.0 audit: the Vibrate switch was dropped on every load
@@ -312,7 +345,19 @@
     out.lobby = lb && typeof lb === 'object' && /^[0-9a-f]{16}$/.test(lb.id) && /^[0-9a-f]{32}$/.test(lb.token) && typeof lb.handle === 'string' && Number.isInteger(lb.week)
       ? { id: lb.id, token: lb.token, handle: lb.handle.replace(/[^A-Za-z0-9]/g, '').slice(0, 24), week: lb.week } : null;
     PP.World.cleanState(out, s);                      // 2.4.0: things, trips, mail, visits, events, family line
+    // 2.6.3: whose coins, items and shells are on the state (an unknown owner: the pal out takes them)
+    out.owner = typeof s.owner === 'string' && out.slots.some(function (p) { return p && p.id === s.owner; }) ? s.owner : null;
+    if (out.owner === null) delete out.owner;
     return out;
+  }
+  function cleanUnlocks(u) { return Array.isArray(u) ? u.filter(function (id, i, a) { var sh = PP.Collection.shell(id); return sh && (sh.unlock || sh.price) && a.indexOf(id) === i; }) : []; }
+  /* 2.6.3: a pal's own set (p.own) for when it is in the box: the same checks as the state's own fields */
+  function cleanOwn(o) {
+    var w = {}; PP.World.cleanState(w, o);
+    var r = { wallet: PP.Shop.cleanWallet(o.wallet), inv: PP.Shop.cleanInv(o.inv), unlocks: cleanUnlocks(o.unlocks), daily: PP.Daily.clean(o.daily),
+      junior: cleanJunior(o.junior), things: w.things, trips: w.trips, visits: w.visits, events: w.events, fcup: w.fcup };
+    if (o.myth === true) r.myth = true;
+    return r;
   }
 
   function serialize(state, now) {

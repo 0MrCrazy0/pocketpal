@@ -22,7 +22,7 @@
       ['Poop', function () { T.poop(st()); done('Poop!'); }], ['Sick', function () { T.sick(st()); done('Sick'); }], ['Tantrum', function () { T.fake(st()); done('Tantrum started'); }]]],
     ['Battle', [['+100 XP', function () { var n = T.xp(st(), 100); done('+100 XP' + (n ? ' (+' + n + ' Lv)' : '')); }], ['+1 Lv', function () { lvl(1); }], ['Max Lv', function () { lvl(99); }],
       ['+5 SP', function () { T.sp(st(), 5); done('+5 SP'); }]]],
-    ['Extra', [['Spawn mate', function () { var r = T.mate(st(), Date.now()); done(r.msg); }], ['Quick battle', quickBattle], ['Unlock arena', function () { T.unlockArena(st()); done('All cups unlocked'); }],
+    ['Extra', [['Spawn mate', function () { var r = T.mate(st(), Date.now()); done(r.msg); }], ['Quick battle', quickBattle],
       ['Full energy', function () { var p = pet(); if (p) p.energy = 100; done('Energy 100'); }],
       ['Revive RIP', function () { var r = T.revive(st()); done(r && r.msg ? r.msg : 'Nothing to revive'); }]]],
     // 2.4.0: seasonal events (Auto = the device date) and the wider world
@@ -37,7 +37,11 @@
     ['Str', [['0', function () { setStr(0); }], ['20', function () { setStr(20); }], ['40 (max)', function () { setStr(D.JUNIOR.str.cap); }]]],
     ['Care', [['0 adult', function () { setAdultMist(0); }], ['3 recent', function () { setAdultMist(3); }], ['6 recent', function () { setAdultMist(6); }], ['10 old', function () { setAdultMist(10, true); }]]],
     ['Hall', [['View', function () { A().clearToasts(); PP.UI.close(); PP.UI.open(PP.WorldUI.hallScreen); }], ['Clear', function () { var n = (st().hall || []).length; st().hall = []; done('Hall of Fame cleared (' + n + ')'); }]]],
-    ['Unlock', [['Champion (all cups)', function () { unlocked(T.champion(st()), 'Arena Champion!'); }], ['Fill Paldex', function () { unlocked(T.fillDex(st()), 'Paldex filled'); }],
+    /* 2.6.3: arena progress is per pal - these act on the pal that is out */
+    ['Arena', [['Open cups', function () { if (!pet()) { done('No pal'); return; } T.unlockArena(st()); done(pet().name + ': all cups open'); }],
+      ['Champion', function () { if (!pet()) { done('No pal'); return; } unlocked(T.champion(st()), pet().name + ': Arena Champion!'); }],
+      ['Reset', function () { if (!pet()) { done('No pal'); return; } T.resetArena(st()); done(pet().name + ': arena, Junior and Friends Cups fresh'); }]]],
+    ['Unlock', [['Fill Paldex', function () { unlocked(T.fillDex(st()), 'Paldex filled'); }],
       ['+500 coins', function () { T.coins(st(), 500); done('+500 coins (' + PP.Shop.coins(st()) + ')'); }]]]
   ];
 

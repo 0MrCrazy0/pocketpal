@@ -2,7 +2,8 @@
  * 1.8.4: every cup is a run of fixed foes (challenger, rival trainer, cup boss; the post-game
  * Myth Cup has 4). Foes are the same for everyone - species, form, level and name come from
  * DATA.ARENA, genes and skills from a fixed seed - so the cup screen can list them and tick
- * off the ones you have beaten. Per-cup records live in state.arena.cups (see record()). */
+ * off the ones you have beaten. Per-cup records live in the arena of the pal that is out (see of()).
+ * 2.6.3: arena progress is PER PAL (p.arena); before, one state.arena was shared by every pal. */
 (function (root) {
   'use strict';
   var PP = root.PP = root.PP || {};
@@ -35,9 +36,26 @@
   /* Old API (quick battles, older tests): a foe of the cup, picked by `attempt`. */
   function opponent(rank, attempt) { return foe(rank, Math.abs(attempt | 0) % foeCount(rank)); }
 
+  /* 2.6.3: the arena progress of the pal that is out: p.arena (made fresh the first time). With no pal out, a blank arena
+   * that is not stored. A plain { arena } object (used inside clean()) is read as it is. */
+  function fresh() { return { rank: 0, attempt: 0, champion: false, cups: [], run: null, note: null }; }
+  function of(state) {
+    if (!state) return fresh();
+    if (!Array.isArray(state.slots)) return state.arena || fresh();
+    var p = PP.Game && PP.Game.active ? PP.Game.active(state) : null;
+    if (!p) return fresh();
+    if (!p.arena || typeof p.arena !== 'object' || !Array.isArray(p.arena.cups)) p.arena = clean(p.arena);
+    return p.arena;
+  }
+  /* 2.6.3: a pal's arena record in one line, kept by its album and Hall of Fame entries: main cups won, Champion, Myth Cup */
+  function summary(a) {
+    var cups = 0, myth = false;
+    if (a && Array.isArray(a.cups)) a.cups.forEach(function (c, i) { if (c && c.won === true && D.ARENA[i]) { if (D.ARENA[i].post) myth = true; else cups++; } });
+    return { cups: Math.min(cups, D.ARENA_MAIN), champ: cups >= D.ARENA_MAIN, myth: myth };
+  }
   function blankRecord(rank) { return { won: false, best: 0, beat: cup(rank).foes.map(function () { return false; }), wins: 0, losses: 0 }; }
   function record(state, rank) {
-    var a = state.arena;
+    var a = of(state);
     if (!Array.isArray(a.cups)) a.cups = [];
     if (!a.cups[rank]) a.cups[rank] = blankRecord(rank);
     return a.cups[rank];
@@ -52,7 +70,7 @@
     b.wins = U.int(r.wins, 0, 0); b.losses = U.int(r.losses, 0, 0);
     return b;
   }
-  function won(state, rank) { var c = state.arena && state.arena.cups && state.arena.cups[rank]; return !!(c && c.won); }
+  function won(state, rank) { var a = of(state), c = a.cups && a.cups[rank]; return !!(c && c.won); }
   /* Cups won among the 12 main cups (the post-game cup does not count toward Champion). */
   function mainWon(state, upTo) {
     var n = 0, lim = Math.min(upTo || D.ARENA_MAIN, D.ARENA_MAIN);
@@ -62,12 +80,13 @@
   /* 'locked' | 'open' | 'cleared' */
   function status(state, rank) {
     if (won(state, rank)) return 'cleared';
-    if (D.ARENA[rank].post) return state.arena.champion ? 'open' : 'locked';
-    return rank <= state.arena.rank ? 'open' : 'locked';
+    var a = of(state);
+    if (D.ARENA[rank].post) return a.champion ? 'open' : 'locked';
+    return rank <= a.rank ? 'open' : 'locked';
   }
   /* The run in progress for the pal that is out (a run belongs to the pal that started it). */
   function runOf(state) {
-    var r = state.arena && state.arena.run, p = PP.Game && PP.Game.active ? PP.Game.active(state) : null;
+    var r = of(state).run, p = PP.Game && PP.Game.active ? PP.Game.active(state) : null;
     return r && (!r.pal || (p && p.id === r.pal)) ? r : null;
   }
   /* Which foe is next in this cup: the current run's position, or 0 for a fresh run. */
@@ -111,5 +130,5 @@
   }
 
   PP.Arena = { cups: D.ARENA, foe: foe, opponent: opponent, foeCount: foeCount, record: record, won: won, mainWon: mainWon, status: status,
-    nextFoe: nextFoe, runOf: runOf, clean: clean, migrate: migrate, blankRecord: blankRecord };
+    nextFoe: nextFoe, runOf: runOf, of: of, fresh: fresh, summary: summary, clean: clean, migrate: migrate, blankRecord: blankRecord };
 })(typeof window !== 'undefined' ? window : globalThis);

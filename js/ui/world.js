@@ -167,7 +167,7 @@
     var H = (st().hall || []).slice().reverse();
     var h = H.length ? '<ol class="family-line">' + H.map(function (e) {
       return '<li>' + K().thumb(e.species, e.form || 'good', 'idle', 14, '') + '<span><b>' + esc(e.name) + '</b> \u00b7 ' + esc(PP.Pet.formName({ species: e.species, stage: 'adult', form: e.form })) + ' \u00b7 gen ' + e.gen +
-        '<br><small>' + e.wins + ' wins, ' + e.losses + ' losses \u00b7 Lv' + e.level + ' \u00b7 ' + e.ageDays + ' days old \u00b7 ' + esc(K().tDate(e.at)) + '</small></span></li>';
+        '<br><small>' + e.wins + ' wins, ' + e.losses + ' losses \u00b7 Lv' + e.level + (e.arena && (e.arena.cups || e.arena.myth) ? ' \u00b7 ' + (e.arena.champ ? 'Champion' : e.arena.cups + ' cups') + (e.arena.myth ? ' + Myth' : '') : '') + ' \u00b7 ' + e.ageDays + ' days old \u00b7 ' + esc(K().tDate(e.at)) + '</small></span></li>';
     }).join('') + '</ol>' : '<p class="tip">No Legends here yet. A pal becomes a Legend after ' + W.LEGEND.baseDays + '+ days as a well-cared-for adult; retiring a Legend brings it here.</p>';
     return { title: 'HALL OF FAME (' + H.length + ')', html: h, items: [{ label: 'Back', act: K().pop }] };
   }

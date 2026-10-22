@@ -398,7 +398,7 @@
         '<p><b>Scrappy</b> (poor care) \u00b7 <b>Solid</b> (good care) \u00b7 <b>Champion</b> (max 2 mistakes, happy, disciplined, trained).</p>' +
         '<p class="tip">Status shows your care score and which form you are on track for.</p>'; } },
     { t: 'ADULT LIFE', hl: ['#menuBtn'], h: function () {
-      return '<p><b>Battle</b> the 12-cup arena (3 foes a cup, then a post-game Myth Cup) or friends (battle codes). <b>Run</b> escapes a quick battle; in the arena or a friend battle it is a forfeit. Wins give XP and skill points for your animal\'s <b>skill tree</b>.</p>' +
+      return '<p><b>Battle</b> the 12-cup arena (3 foes a cup, then a post-game Myth Cup) or friends (battle codes). <b>Run</b> escapes a quick battle; in the arena or a friend battle it is a forfeit. Wins give XP and skill points for your animal\'s <b>skill tree</b>. Every pal is its own game: its own coins, items, shells, things, goals, trips and arena progress.</p>' +
         '<p><b>Breed</b> two adults of the same animal (male + female) for a new generation. Fill the <b>Paldex</b> and win cups to unlock special <b>shell colours</b>.</p>' +
         '<p>Care for an adult well and in about 12 days it becomes a care-free <b>Legend</b>.</p>' +
         '<p class="tip">The MENU button (top right) opens everything.</p>'; } },
@@ -614,7 +614,7 @@
 
   /* 2.4.92: child / teen pals get their own battle menu - stage-matched CPU foes and same-stage live rooms only */
   function juniorBattleMenu(p, why) {
-    var J = D.JUNIOR, L = J.ladders[p.stage], c = G.ladderRun(p), run = c ? c.foe : 0, tro = G.juniorState(st()).trophies[p.stage] | 0;
+    var J = D.JUNIOR, L = J.ladders[p.stage], c = G.ladderRun(p), run = c ? c.foe : 0, tro = G.trophies(p)[p.stage] | 0;   // 2.6.3 per pal
     var bank = p.jxp || 0;
     var cn = PP.Stats.battleStats(p).notes;   // 2.6.0: say why it would fight weaker (hungry / unhappy / weight)
     return { title: 'BATTLE', html: (why ? '<p class="tip">' + esc(why) + '</p>' : '') + (cn.length ? '<p class="tip"><b>Weaker today: ' + esc(cn.join(', ')) + '</b> - feed and play first.</p>' : '') +
@@ -630,7 +630,7 @@
   function juniorLadderScreen() {
     var s = st(), p = pet(), J = D.JUNIOR;
     if (!p || !PP.Stats.isJunior(p)) return { title: 'JUNIOR CUP', html: '<p class="tip">The Junior Cup is for child and teen pals.</p>', items: [{ label: 'Back', act: pop }] };
-    var L = J.ladders[p.stage], c = G.ladderRun(p), next = c ? c.foe : 0, js = G.juniorState(s), tro = js.trophies[p.stage] | 0, day = PP.Shop.dayOf(G.now(s));
+    var L = J.ladders[p.stage], c = G.ladderRun(p), next = c ? c.foe : 0, js = G.juniorState(s), tro = G.trophies(p)[p.stage] | 0, day = PP.Shop.dayOf(G.now(s));
     var opp = G.ladderFoe(p.stage, next), of = PP.Battle.fighter(opp), mine = PP.Battle.fighter(p), why = G.canBattle(p);
     var pips = '<p class="pips" aria-label="foe ' + (next + 1) + ' of ' + L.foes.length + '">Run: ' + L.foes.map(function (f, j) { return j < next ? '\u25cf' : j === next ? '\u25c9' : '\u25cb'; }).join(' ') + '</p>';
     var list = '<ul class="foes">' + L.foes.map(function (f, j) {
@@ -672,7 +672,7 @@
       { label: 'Quick battle', sub: 'A practice fight with a pal of your level. No rank, coins or injuries. -' + D.RULES.costs.battle + ' energy, a little XP', disabled: !!why, reason: why, act: function () { close(); App().startAdultQuick(); } },
       { label: 'Arena', sub: 'Computer ladder: ' + D.ARENA_MAIN + ' cups + a post-game cup', disabled: !!why, reason: why, act: function () { push(arenaScreen); } },
       { label: 'Friend battle', sub: 'Fight a pal from a battle code', disabled: !!why, reason: why, act: function () { push(friendsScreen); } },
-      { label: 'Friends Cup', sub: 'Beat your friends\u2019 pals in a row (' + PP.World.FCUP.size + ' at most)', right: (st().fcup && st().fcup.wins) ? '\u2605' + st().fcup.wins : '', disabled: !!why, reason: why, act: function () { push(fcupScreen); } },
+      { label: 'Friends Cup', sub: 'Beat your friends\u2019 pals in a row (' + PP.World.FCUP.size + ' at most)', right: (pet() && pet().fcup && pet().fcup.wins) ? '\u2605' + pet().fcup.wins : '',   /* 2.6.3 per pal */ disabled: !!why, reason: why, act: function () { push(fcupScreen); } },
       { label: 'Live battle', sub: 'Room code: pick moves with a friend in real time', disabled: !!why, reason: why, act: function () { push(PP.LiveUI.liveScreen); } },
       { label: 'My battle code', sub: 'Share your pal (code or QR)', disabled: !p || p.stage !== 'adult', reason: 'Only adults have a battle card', act: function () { push(myCodeScreen); } },
       { label: 'Add friend code', sub: 'Paste, type or scan a code (battle or breed)', act: function () { push(addCodeScreen); } },
@@ -690,9 +690,9 @@
   function resetText() { var ms = PP.Daily.arenaReset(Date.now()); return Math.floor(ms / 3600000) + 'h ' + Math.floor((ms % 3600000) / 60000) + 'm'; }
   function weekResetText() { var ms = PP.Daily.weekReset(Date.now()); return Math.floor(ms / 86400000) + 'd ' + Math.floor((ms % 86400000) / 3600000) + 'h'; }
   function arenaScreen() {
-    var s = st(), p = pet(), A = PP.Arena, note = s.arena.note === 'reset', cut = s.arena.note === 'interrupted';
+    var s = st(), p = pet(), A = PP.Arena, note = A.of(s).note === 'reset', cut = A.of(s).note === 'interrupted';
     var items = D.ARENA.map(function (cup, i) {
-      var status = A.status(s, i), rec = s.arena.cups[i] || A.blankRecord(i), n = cup.foes.length;
+      var status = A.status(s, i), rec = A.of(s).cups[i] || A.blankRecord(i), n = cup.foes.length;
       var cur = A.runOf(s), run = cur && cur.cup === i ? cur.foe : 0, prog;
       if (status === 'locked') prog = cup.post ? 'locked: for Arena Champions (win all ' + D.ARENA_MAIN + ' main cups, you have ' + A.mainWon(s) + ')' : 'locked: win the ' + D.ARENA[i - 1].name + ' first';
       else if (status === 'cleared') prog = 'cleared \u00b7 ' + rec.wins + ' W / ' + rec.losses + ' L';
@@ -704,16 +704,16 @@
         disabled: status === 'locked', reason: cup.post ? 'Win all ' + D.ARENA_MAIN + ' main cups first' : 'Win the ' + (D.ARENA[i - 1] || {}).name + ' first',
         act: function () { push(arenaPreview(i)); } };
     });
-    if (note || cut) { s.arena.note = null; App().save(); }   // the migration / interrupted note shows once
-    return { title: 'ARENA' + (s.arena.champion ? ' \u2605 CHAMPION' : ''), html: (p ? '<p>Your BP: <b>' + PP.Stats.bp(PP.Stats.battleStats(p)) + '</b> \u00b7 cups won <b>' + A.mainWon(s) + '/' + D.ARENA_MAIN + '</b></p>' : '') +
-      '<p class="tip">Each cup: beat its foes in a row (a loss or a forfeit ends the run). \u2605 = cup won.</p>' +
+    if (note || cut) { A.of(s).note = null; App().save(); }   // the migration / interrupted note shows once
+    return { title: 'ARENA' + (A.of(s).champion ? ' \u2605 CHAMPION' : ''), html: (p ? '<p>Your BP: <b>' + PP.Stats.bp(PP.Stats.battleStats(p)) + '</b> \u00b7 cups won <b>' + A.mainWon(s) + '/' + D.ARENA_MAIN + '</b></p>' : '') +
+      '<p class="tip">Each cup: beat its foes in a row (a loss or a forfeit ends the run). \u2605 = cup won. ' + (p ? esc(p.name) + '\u2019s own cups: every pal climbs the arena by itself.' : 'Every pal climbs the arena by itself.') + '</p>' +
       (note ? '<p class="tip">Your old save had no per-cup record, so cup stars start fresh. Your open cups stay open - win a cup to earn its star.</p>' : '') +
       (cut ? '<p class="tip">The app closed during a cup fight, so that cup run starts again (not counted as a loss).</p>' : ''), items: items };
   }
   /* The cup screen: its foes (beaten ones ticked) and the next fight. */
   function arenaPreview(rank) {
     return function () {
-      var s = st(), p = pet(), A = PP.Arena, cup = D.ARENA[rank], rec = s.arena.cups[rank] || A.blankRecord(rank);
+      var s = st(), p = pet(), A = PP.Arena, cup = D.ARENA[rank], rec = A.of(s).cups[rank] || A.blankRecord(rank);
       var next = A.nextFoe(s, rank), opp = A.foe(rank, next), of = PP.Battle.fighter(opp), mine = p ? PP.Battle.fighter(p) : null;
       var cur = A.runOf(s), other = cur && cur.cup !== rank ? D.ARENA[cur.cup].name : null;
       var list = '<ul class="foes">' + cup.foes.map(function (f, j) {
@@ -744,7 +744,7 @@
       return '<li class="' + (j === S.next ? 'nextfoe' : '') + '">' + mark + thumb(c.species, 'adult_' + c.form, 'idle', 12, '', hatOf(c)) +
         '<span><b>' + esc(c.name) + '</b>' + (j === S.next ? ' \u25c2 next' : '') + '<br>' + esc(cardLabel(c)) + ' \u00b7 BP ' + PP.Battle.fighter(c).bp + '</span></li>';
     }).join('') + '</ul>' : '';
-    var F = s.fcup || {}, bonusToday = F.day != null && F.day >= PP.Shop.dayOf(G.now(s));
+    var F = (p && p.fcup) || {}, FD = s.fcup || {}, bonusToday = FD.day != null && FD.day >= PP.Shop.dayOf(G.now(s));   // 2.6.3: wins per pal, bonus day shared
     return { title: 'FRIENDS CUP' + (F.wins ? ' \u2605' + F.wins : ''), html:
       (S.ready ? '<p class="pips">Run: ' + S.foes.map(function (c, j) { return j < S.next ? '\u25cf' : j === S.next ? '\u25c9' : '\u25cb'; }).join(' ') + (mine ? ' \u00b7 your BP ' + mine.bp : '') + '</p>' : '') + list +
       '<p class="tip">' + (S.ready ? 'Your newest ' + S.foes.length + ' friend pals, weakest first. A loss ends the run. Win the cup: +' + W.FCUP.bonus + ' coins' + (bonusToday ? ' (already won today - XP and battle coins still count)' : ' (once a day)') + '.'
@@ -1270,7 +1270,7 @@
       '<p>The line under the screen shows the time left before a call counts, "Bedtime soon", "Bedtime: put your pal to bed" and "Sleeping until...". Tantrums are not mistakes, but ignoring one costs 8% discipline.</p>' +
       '<p>Tantrums: sometimes your pal calls for no reason. Scold during a tantrum for +25% discipline. Praise after training or a refused meal.</p>' +
       '<p>Egg 5 min \u2192 Baby 2h \u2192 Child 36h \u2192 Teen 60h \u2192 Adult (~4 days). Few mistakes, good mood, discipline and training give a Champion. Adults battle, level up, learn skills and breed. Child and teen pals can spar with pals of their own stage; their battle and training XP is saved and paid in when they grow up (at most up to level 4), but care alone decides the adult form.</p>' +
-      '<p><b>Battles</b> are best of 3: first to 2 round wins. If both pals fall on the same turn the round is a draw; a level match ends with a SUDDEN DEATH round (both pals at 40% HP). Adults: arena cups, Quick battle (practice - no stakes, a little XP) and friends. Child and teen pals: Quick battle and the Junior Cup ladders (3 child or 4 teen foes in a row, a trophy for each clear).</p>' +
+      '<p><b>Battles</b> are best of 3: first to 2 round wins. If both pals fall on the same turn the round is a draw; a level match ends with a SUDDEN DEATH round (both pals at 40% HP). Adults: arena cups, Quick battle (practice - no stakes, a little XP) and friends. Child and teen pals: Quick battle and the Junior Cup ladders (3 child or 4 teen foes in a row, a trophy for each clear). Each pal has its own cups, stars, trophies and Friends Cup wins; a new or bred egg starts the arena fresh. Each pal also has its own coins, bag, shells, things, daily goals and trips; your friends, settings, shell colour, Paldex and Hall of Fame are for the whole game.</p>' +
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
       '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected.</p>' +
       '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +

@@ -38,6 +38,9 @@
     { id: 'gift', need: 1, text: 'Send a gift' },
     { id: 'find', need: 1, text: 'Find a new thing' }   // 2.5.0: buy one or find one on a trip (only while one is still collectable)
   ];
+  /* Seasonal SHELL windows (getMonth(): 0 = January). Not the garden seasons (World.seasonOnDate, by hemisphere): Spooky is
+   * October and Frost the Christmas holidays everywhere, and Blossom counts BOTH springs (Mar-May and Sep-Nov) so the
+   * south and the north get the same chance. */
   var SEASONS = [
     { id: 'spooky', name: 'Spooky', months: [9], window: 'October' },
     { id: 'frost', name: 'Frost', months: [11, 0], window: 'December - January' },

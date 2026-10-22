@@ -421,14 +421,15 @@
   function hallAdd(state, p, now) {
     var H = state.hall || (state.hall = []);
     H.push({ id: p.id, name: p.name, species: p.species, form: p.form || 'good', gen: p.gen || 1, wins: p.wins || 0, losses: p.losses || 0,
-      level: p.level || 1, ageDays: Math.floor((p.ageMin || 0) / 1440), adultDays: adultDays(p), at: now });
+      level: p.level || 1, ageDays: Math.floor((p.ageMin || 0) / 1440), adultDays: adultDays(p), at: now, arena: PP.Arena.summary(p.arena) });   // 2.6.3: + its arena record
     if (H.length > LEGEND.hallMax) H.splice(0, H.length - LEGEND.hallMax);
   }
   function cleanHall(h) {
     return (Array.isArray(h) ? h : []).filter(function (e) { return e && typeof e === 'object' && typeof e.id === 'string' && D.SPECIES.indexOf(e.species) >= 0; }).slice(-LEGEND.hallMax).map(function (e) {
       return { id: e.id.slice(0, 40), name: PP.Pet.cleanName(e.name) || '?', species: e.species, form: D.FORMS.indexOf(e.form) >= 0 ? e.form : 'good', gen: U.int(e.gen, 1, 1, 999),
         wins: U.int(e.wins, 0, 0, 1e7), losses: U.int(e.losses, 0, 0, 1e7), level: U.int(e.level, 1, 1, 99), ageDays: U.int(e.ageDays, 0, 0, 1e5), adultDays: U.int(e.adultDays, 0, 0, 1e5),
-        at: Number.isFinite(e.at) && e.at > 0 ? Math.round(e.at) : 0 };
+        at: Number.isFinite(e.at) && e.at > 0 ? Math.round(e.at) : 0,
+        arena: { cups: U.int(e.arena && e.arena.cups, 0, 0, D.ARENA_MAIN), champ: !!(e.arena && e.arena.champ === true), myth: !!(e.arena && e.arena.myth === true) } };
     });
   }
   function bestGene(p) {
@@ -465,7 +466,7 @@
     all.forEach(function (opt) {
     if (opt.k === 'gene') { egg.genes[opt.v] = Math.min(3, Math.max(egg.genes[opt.v] || 0, (p.genes && p.genes[opt.v]) || 0) + 1); egg.heir.v = opt.v; }   // the parent's gene (or the egg's own, if better) + 1
     if (opt.k === 'skill') { egg.inheritedSkills = [opt.v].concat((egg.inheritedSkills || []).filter(function (x) { return x !== opt.v; })).slice(0, 2); egg.heir.v = opt.v; }
-    if (opt.k === 'ribbon') { give(state, 'heirloom', now); egg.hat = 'heirloom'; }
+    if (opt.k === 'ribbon') { var eo = egg.own || (egg.own = PP.Game.ownFresh()); eo.things.own.heirloom = now; egg.hat = 'heirloom'; }   // 2.6.3: the heir owns its ribbon (each pal is its own save)
     });
     if (legend) egg.heir.trait = 'full';
     if (p.hard) egg.hard = true;
@@ -607,7 +608,7 @@
       if (!raw || typeof raw !== 'object' || !GIFTS[raw.g]) return;
       var g = GIFTS[raw.g], who = PP.Pet.cleanName(raw.n) || 'A friend', p = PP.Game.active(state), used = false;
       if (M.used.n < GIFT.usePerDay) {
-        if (g.free && p && !p.fate && p.stage !== 'egg') { p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); if (p.legend) p.lovedAt = p.clock; used = true; }
+        if (g.free && p && !p.fate && p.stage !== 'egg') { p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); if (isLegend(p)) p.lovedAt = p.clock; used = true; }   // lovedAt is on the pal's own clock (pet minutes), like care.js
         else if (g.item && PP.Shop.count(state, g.item) < D.ECONOMY.maxStack) { state.inv[g.item] = (state.inv[g.item] || 0) + 1; used = true; }
         if (used) M.used.n++;
       }
@@ -663,7 +664,15 @@
    * XP and capped coins); winning the whole cup gives a bonus once a game day and counts in the trophy total. The run
    * belongs to the pal that started it and to that line-up (adding or removing a friend starts a new run). */
   var FCUP = { size: 3, min: 2, bonus: 20 };
-  function fcup(state) { return state.fcup || (state.fcup = { run: null, wins: 0, day: null }); }
+  /* 2.6.3: the Friends Cup run and wins are on the pal (p.fcup); the once-a-day bonus day is state.fcup, which is part of
+   * the pal's own set too (Game.OWN: each pal is its own save). With no pal out, a blank that is not stored. */
+  function fcup(state) {
+    var p = PP.Game.active(state);
+    if (!p) return { run: null, wins: 0 };
+    if (!p.fcup || typeof p.fcup !== 'object') p.fcup = { run: null, wins: 0 };
+    return p.fcup;
+  }
+  function fcupDay(state) { return state.fcup || (state.fcup = { day: null }); }
   function fcupFoes(state) {
     var list = (state.friends || []).filter(function (c) { return c && !PP.Cards.validateCard(c); }).slice(0, FCUP.size);
     return list.map(function (c) { return { c: c, bp: PP.Battle.fighter(c).bp }; })
@@ -696,7 +705,8 @@
     if (i + 1 < n) { F.run.foe = i + 1; out.next = i + 2; return out; }
     F.run = null; out.fcleared = true; F.wins = (F.wins || 0) + 1;
     var day = PP.Shop.dayOf(ms);
-    if (U.newDay(F.day, day)) { F.day = day;   // 2.4.96: once a day, and a clock set back does not pay it again
+    var FD = fcupDay(state);
+    if (U.newDay(FD.day, day)) { FD.day = day;   // 2.4.96: once a day, and a clock set back does not pay it again
       out.fbonus = PP.Shop.earn(state, FCUP.bonus, ms, false); out.coins = (out.coins || 0) + out.fbonus; }
     if (p) remember(p, 'cup', 'Won the Friends Cup' + (F.wins > 1 ? ' (' + F.wins + ' times)' : '') + '!', ms);
     return out;
@@ -714,14 +724,14 @@
 
   /* ------------------------------------------------------------------ state defaults / cleaning (save.js) */
   function defaults() {
-    return { things: { own: {}, placed: [] }, trips: cleanTrips(null), mail: cleanMail(null), visits: cleanVisits(null), events: { got: {} }, line: { top: 1, retired: 0 }, fcup: cleanFcup(null) };
+    return { things: { own: {}, placed: [] }, trips: cleanTrips(null), mail: cleanMail(null), visits: cleanVisits(null), events: { got: {} }, line: { top: 1, retired: 0 }, fcup: { day: null } };   // 2.6.3: run + wins are per pal (p.fcup)
   }
   function cleanState(out, s) {
     out.things = cleanThings(s.things);
     out.trips = cleanTrips(s.trips);
     out.mail = cleanMail(s.mail);
     out.visits = cleanVisits(s.visits);
-    out.fcup = cleanFcup(s.fcup);
+    out.fcup = { day: cleanFcup(s.fcup).day };   // 2.6.3: only the shared once-a-day bonus day
     var ev = { got: {} };
     if (s.events && s.events.got && typeof s.events.got === 'object') Object.keys(s.events.got).forEach(function (k) { if (/^(halloween|christmas|easter|spring)-\d{4}$/.test(k) && Number.isFinite(s.events.got[k])) ev.got[k] = Math.round(s.events.got[k]); });
     if (s.events && Number.isFinite(s.events.hello)) ev.hello = Math.round(s.events.hello);   // the day the event hello was shown
@@ -780,7 +790,7 @@
     RETIRE: RETIRE, LEGEND: LEGEND, isLegend: isLegend, legendDue: legendDue, canBreedLegend: canBreedLegend, breedLegend: breedLegend, breedLeft: breedLeft, hallAdd: hallAdd, cleanHall: cleanHall, adultDays: adultDays, isElder: isElder, elderAt: elderAt, canRetire: canRetire, traitOptions: traitOptions, retire: retire, topGen: topGen,
     PLACES: PLACES, TRIP: TRIP, canTrip: canTrip, goTrip: goTrip, nextTripIn: nextTripIn,
     GIFTS: GIFTS, GIFT: GIFT, VISIT: VISIT, mail: mail, canSend: canSend, noteSent: noteSent, receive: receive, visit: visit, canVisit: canVisit, MBX: MBX, MKEY: MKEY,
-    FCUP: FCUP, fcupFoes: fcupFoes, fcupStatus: fcupStatus, canFcup: canFcup, startFcup: startFcup, fcupResult: fcupResult,
+    FCUP: FCUP, cleanFcup: cleanFcup, fcupFoes: fcupFoes, fcupStatus: fcupStatus, canFcup: canFcup, startFcup: startFcup, fcupResult: fcupResult,
     defaults: defaults, cleanState: cleanState, cleanPet: cleanPet, migrate: migrate
   };
 })(typeof window !== 'undefined' ? window : globalThis);

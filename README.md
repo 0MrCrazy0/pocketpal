@@ -4,7 +4,7 @@ A little pixel pet that lives in a pink handheld, just like the 90s Tamagotchi a
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.6.2**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
+This is **version 2.6.3**. It's free, has no ads or accounts, and works offline. On a phone, open the link and choose **Add to Home Screen** to install it like an app.
 
 ## How to play
 
@@ -12,7 +12,7 @@ This is **version 2.6.2**. It's free, has no ads or accounts, and works offline.
 2. **Look after your pal.** Feed it, play with it, clean up its poop, give it medicine when it's sick and turn the lights off at bedtime.
 3. **Answer its calls.** When a **!** flashes, your pal needs something. Ignoring it for too long is a *care mistake*.
 4. **Watch it grow:** egg, then baby, child, teen and adult (about 4 days). Good care gives the best adult form.
-5. **Battle and collect.** Child and teen pals spar with pals of their own stage (quick battles, the Junior Cup, live rooms). Adults fight in the arena, learn skills, battle friends and have eggs of their own.
+5. **Battle and collect.** Child and teen pals spar with pals of their own stage (quick battles, the Junior Cup, live rooms). Adults fight in the arena, learn skills, battle friends and have eggs of their own. Every pal is its own game (its own coins, items, shells, things, goals, trips and arena), so a new pal starts fresh.
 
 There are 6 animals (croc, lion, eagle, elephant, bear and wolf), each with 3 main adult forms: **Scrappy**, **Solid** and **Champion**. A Solid pal can also grow into a **Mighty**, **Swift** or **Sturdy** form, depending on the training games it played most as a teen. **Status, page 2** shows which way it's heading. Each animal also has one **secret form** that only appears for something special, like a perfect childhood, a long training streak or a Myth Cup win. The Paldex shows a dark silhouette and a hint until you find it.
 

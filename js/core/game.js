@@ -9,21 +9,46 @@
   function newState(now) {
     now = now || Date.now();
     var st0 = {
-      schema: 11 /* = PP.Save.SCHEMA */, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
+      schema: 13 /* = PP.Save.SCHEMA */, createdAt: now, seed: U.hash('world', now, Math.random()) >>> 0,
       slots: [null, null, null, null], boxSize: 4, active: 0,
       album: [], friends: [],
-      arena: { rank: 0, attempt: 0, champion: false, cups: [], run: null, note: null },
       dex: {}, unlocks: [],
       wallet: { coins: D.ECONOMY.startCoins, day: null, earned: 0, lastDaily: null, streak: 0, mistakesAt: null }, inv: {},
       settings: { sound: true, test: false, speed: 1, alerts: false, notify: false, shell: 'black', guideSeen: false, alertsAsked: false, clock: PP.Time.defaultClock(),
-        hints: true, music: true, hardNext: false, cloud: false, reportCard: true, alertTypes: PP.Reminders.defaults() },
-      daily: null, hints: { done: {} }, backup: { lastExport: null, snoozeUntil: null },
-      timeOffset: 0, lastSeenAt: now
+        hints: true, music: true, vibrate: true, lobby: false, hardNext: false, cloud: false, reportCard: true, alertTypes: PP.Reminders.defaults() },
+      daily: PP.Daily ? PP.Daily.clean(null) : null, hints: { done: {} }, backup: { lastExport: null, since: now, snoozeUntil: null },   // 2.6.3: daily and backup.since as a first load fills them in
+      timeOffset: 0, lastSeenAt: now,
+      hall: [], junior: { paid: { child: -1, teen: -1 }, day: -1, coins: 0 }   // 2.6.3: as a first load would fill them in
     };
     return Object.assign(st0, PP.World.defaults());   // 2.4.0: things, trips, mail, visits, events, family line
   }
   function now(state, realNow) { return (realNow || Date.now()) + (state.timeOffset || 0); }
-  function active(state) { return state.slots[state.active] || null; }
+  /* 2.6.3: each pal is its own save. The pal that is out keeps its coins, items, shells, goals, trips, things and
+   * cup bonus days on the state itself (so the rest of the code reads them as before); every other pal keeps its own
+   * set in p.own. state.owner names whose set is on the state. Switching pals swaps the sets. The friend mailbox
+   * (state.mail: its address, key and gift log) is the keeper's, like friends: a gift that arrives goes to the pal out. */
+  var OWN = ['wallet', 'inv', 'unlocks', 'daily', 'junior', 'things', 'trips', 'visits', 'events', 'fcup', 'myth'];
+  function ownFresh() {
+    var w = PP.World.defaults();
+    return { wallet: PP.Shop.cleanWallet(null), inv: {}, unlocks: [], daily: PP.Daily ? PP.Daily.clean(null) : null,
+      junior: { paid: { child: -1, teen: -1 }, day: -1, coins: 0 }, things: w.things, trips: w.trips, visits: w.visits,
+      events: w.events, fcup: w.fcup, myth: false };
+  }
+  function ownPack(state) { var o = {}; OWN.forEach(function (k) { if (state[k] !== undefined) o[k] = state[k]; }); return o; }
+  function ownLoad(state, o) { var f = ownFresh(); OWN.forEach(function (k) { state[k] = o && o[k] !== undefined ? o[k] : f[k]; }); if (!state.myth) delete state.myth; }
+  function syncOwner(state) {
+    if (!state || !state.slots) return;
+    var p = state.slots[state.active] || null, id = p ? p.id : null;
+    if (!id || state.owner === id) return;
+    if (state.owner) {
+      var o = null; state.slots.forEach(function (q) { if (q && q.id === state.owner) o = q; });
+      if (o) o.own = ownPack(state);           // the pal going back in the box takes its set with it
+      ownLoad(state, p.own);                   // a pal with no set yet (new or bred egg) starts fresh
+    } else if (p.own) ownLoad(state, p.own);   // no owner yet (a new game or an old save): the pal out adopts the state's set
+    delete p.own;
+    state.owner = id;
+  }
+  function active(state) { syncOwner(state); return state.slots[state.active] || null; }
   function freeSlot(state) {
     for (var i = 0; i < state.slots.length; i++) if (!state.slots[i]) return i;
     return -1;
@@ -43,6 +68,7 @@
     });
     e.fate = p.fate == null ? null : p.fate; e.hatchedAt = p.hatchedAt || e.hatchedAt || null;
     e.days = PP.Pet.ageDays(p);
+    var ar = PP.Arena.summary(p.arena); if (ar.cups || ar.myth) e.arena = ar; else delete e.arena;   // 2.6.3: its own arena record
     if (p.hard) e.hard = true; else delete e.hard;          // 1.9.0: hard-mode memorial
     if (p.golden) e.golden = true; else delete e.golden;
     if (p.fateCause) e.cause = String(p.fateCause).slice(0, 30); else if (!p.fate) delete e.cause;
@@ -67,9 +93,19 @@
   }
 
   /* 1.9.7: has this player won the post-game Myth Cup? */
+  /* 2.6.3: arena progress is per pal, but the Myth Cup rule is about the KEEPER ("hatched after its keeper won the
+   * Myth Cup"), so a clear by any pal sets state.myth for good. */
   function mythWon(state) {
+    if (state && state.myth === true) return true;
     for (var r = 0; r < D.ARENA.length; r++) if (D.ARENA[r].post && PP.Arena.won(state, r)) return true;
     return false;
+  }
+  /* 2.6.3: Junior Cup trophies are per pal (p.jtro); the daily coin cap and the once-a-day clear bonus stay in state.junior */
+  function trophies(p) {
+    if (!p) return {};
+    var t = p.jtro && typeof p.jtro === 'object' ? p.jtro : (p.jtro = {});
+    JUNIOR.stages.forEach(function (st) { t[st] = t[st] | 0; });
+    return t;
   }
   /* ---------------------------------------------------------------- lifecycle */
   function startEgg(state, species, realNow, opts) {
@@ -81,12 +117,14 @@
     if (mythWon(state)) egg.myth = true;                   // 1.9.7: laid after the Myth Cup -> Eclipsar can appear
     state.slots[i] = egg;
     var a = active(state);
-    if (!a || a.fate) state.active = i;
+    if (!a || a.fate) { state.active = i; syncOwner(state); }
     return { ok: true, slot: i, pet: egg };
   }
   function setActive(state, i, realNow) {
     if (i < 0 || i >= state.slots.length || !state.slots[i]) return { ok: false, msg: 'Empty slot' };
+    syncOwner(state);   // 2.6.3: put the old pal's coins, items and shells away first
     state.active = i;
+    syncOwner(state);   // ...and get this pal's own out
     PP.Care.outOfBox(state.slots[i], now(state, realNow)); // it was in stasis: no catch-up for frozen time (1.9.1: and awake if its night is over)
     return { ok: true, msg: state.slots[i].name + ' is out!' };
   }
@@ -103,6 +141,7 @@
       // (it used to be simulated for all of it, up to 14 days, and could even die)
       if (j >= 0) PP.Care.outOfBox(state.slots[j], now(state, realNow));
     }
+    syncOwner(state);   // 2.6.3: a released pal takes its coins and things with it; the next pal gets its own
     return { ok: true, msg: 'Goodbye, ' + p.name + '!' };
   }
 
@@ -163,6 +202,7 @@
     p.lastTickAt = now(state, opts.now);
     state.slots[slot] = p;
     if (!state.slots[state.active] || state.slots[state.active].fate) state.active = slot;
+    syncOwner(state);
     PP.World.remember(p, 'revive', 'Came back to life!', p.lastTickAt);   // 2.4.0
     albumUpsert(state, p);
     return { ok: true, msg: p.name + ' is back!' + (cost ? ' (-' + cost + 'c)' : ''), slot: slot, pet: p, cost: cost };
@@ -288,9 +328,8 @@
   function juniorState(state) {
     var j = state.junior;
     if (!j || typeof j !== 'object') j = state.junior = {};
-    if (!j.trophies || typeof j.trophies !== 'object') j.trophies = {};
     if (!j.paid || typeof j.paid !== 'object') j.paid = {};
-    JUNIOR.stages.forEach(function (st) { j.trophies[st] = j.trophies[st] | 0; if (j.paid[st] == null) j.paid[st] = -1; });
+    JUNIOR.stages.forEach(function (st) { if (j.paid[st] == null) j.paid[st] = -1; });   // 2.6.3: trophies are per pal (trophies(p))
     if (j.day == null) j.day = -1;
     j.coins = j.coins | 0;
     return j;
@@ -330,7 +369,7 @@
     if (PP.Arena.status(state, rank) === 'locked') return { ok: false, msg: D.ARENA[rank].post ? 'Become Arena Champion first' : 'Win the previous cup first' };
     var idx = PP.Arena.nextFoe(state, rank);
     var r = startBattle(state, PP.Arena.foe(rank, idx), { kind: 'arena', rank: rank, foe: idx }, seed);
-    if (r.ok) state.arena.run = { cup: rank, foe: idx, pal: active(state).id, live: 1 };   // 2.4.96: live = a fight is on (see Arena.clean)
+    if (r.ok) PP.Arena.of(state).run = { cup: rank, foe: idx, pal: active(state).id, live: 1 };   // 2.4.96: live = a fight is on (see Arena.clean)
     return r;
   }
   /* Quick (wild) battle - no arena or friend record; the only kind you can simply run from. */
@@ -499,8 +538,8 @@
       if (!won) c.foe = 0;
       else if (i + 1 >= n) {
         c.foe = 0; out.cleared = true;
-        J.trophies[p.stage] = (J.trophies[p.stage] | 0) + 1; out.trophies = J.trophies[p.stage];
-        if (J.trophies[p.stage] === 1) { out.firstClear = true; out.trophy = L.trophy; }
+        var TR = trophies(p); TR[p.stage] = (TR[p.stage] | 0) + 1; out.trophies = TR[p.stage];
+        if (TR[p.stage] === 1) { out.firstClear = true; out.trophy = L.trophy; }
         if (U.newDay(J.paid[p.stage], day)) {   /* 2.4.96: was !== (a clock set back paid the clear bonus again) */ J.paid[p.stage] = day; bonus = JUNIOR.coins.clear; } else out.bonusPaid = true;
       } else { c.foe = i + 1; out.next = c.foe + 1; }
     }
@@ -523,7 +562,7 @@
     var won = B.winner === 0, oppLv = B.f[1].level, out = { won: won, xp: 0, levels: 0, injured: false, unlocked: null, coins: 0, kind: B.meta.kind };
     var cleared = false, champ = false, arena = B.meta.kind === 'arena', rank = B.meta.rank | 0, rec = arena ? PP.Arena.record(state, rank) : null;
     if (arena) {
-      state.arena.attempt++;
+      PP.Arena.of(state).attempt++;
       out.cup = D.ARENA[rank].name; out.foe = (B.meta.foe | 0) + 1; out.foes = PP.Arena.foeCount(rank);
     }
     /* Power Training dummy: training rewards, no injury, no win/loss, no Paldex mark. */
@@ -570,7 +609,7 @@
       out.fled = B.fled; out.won = false;
       p.energy = Math.min(100, p.energy + Math.floor(R.costs.battle / 2));
       if (B.fled === 'forfeit') p.losses++;
-      if (arena) { rec.losses++; state.arena.run = null; }
+      if (arena) { rec.losses++; PP.Arena.of(state).run = null; }
       // 2.4.96: running from a Junior Cup fight ends the ladder run too (no loss is counted) -
       // before, the run was kept, so a losing fight could be escaped and tried again for free
       if (B.meta.kind === 'junior' && ladderRun(p) && ladderRun(p).foe) { ladderRun(p).foe = 0; out.cupReset = true; }
@@ -589,19 +628,19 @@
         var fi = B.meta.foe | 0, n = PP.Arena.foeCount(rank);
         rec.wins++; rec.beat[fi] = true; rec.best = Math.max(rec.best, fi + 1);
         if (fi + 1 >= n) {                                    // the boss is down: cup cleared
-          state.arena.run = null; out.cleared = true;
+          PP.Arena.of(state).run = null; out.cleared = true;
           if (!rec.won) {
             rec.won = true; cleared = true; out.firstClear = true;
-            if (!D.ARENA[rank].post && rank + 1 < D.ARENA_MAIN && state.arena.rank < rank + 1) { state.arena.rank = rank + 1; out.unlocked = D.ARENA[rank + 1].name; }
-            if (!D.ARENA[rank].post && !state.arena.champion && PP.Arena.mainWon(state) === D.ARENA_MAIN) { state.arena.champion = true; champ = true; out.unlocked = 'ARENA CHAMPION + ' + D.ARENA[D.ARENA_MAIN].name; }
-            if (D.ARENA[rank].post) out.myth = true;
+            if (!D.ARENA[rank].post && rank + 1 < D.ARENA_MAIN && PP.Arena.of(state).rank < rank + 1) { PP.Arena.of(state).rank = rank + 1; out.unlocked = D.ARENA[rank + 1].name; }
+            if (!D.ARENA[rank].post && !PP.Arena.of(state).champion && PP.Arena.mainWon(state) === D.ARENA_MAIN) { PP.Arena.of(state).champion = true; champ = true; out.unlocked = 'ARENA CHAMPION + ' + D.ARENA[D.ARENA_MAIN].name; }
+            if (D.ARENA[rank].post) { out.myth = true; state.myth = true; }
           }
-        } else { state.arena.run = { cup: rank, foe: fi + 1, pal: p.id }; out.next = fi + 2; }
+        } else { PP.Arena.of(state).run = { cup: rank, foe: fi + 1, pal: p.id }; out.next = fi + 2; }
       }
     } else {
       p.losses++; out.xp = D.LEVEL.lossXp(p.level, oppLv);
       if (!p.legend) p.happy = Math.max(0, p.happy - 1);   // 2.6.1: a Legend shrugs a loss off (no sad heart, no injury)
-      if (arena) { rec.losses++; state.arena.run = null; }
+      if (arena) { rec.losses++; PP.Arena.of(state).run = null; }
       if (!p.legend && U.roll(p.seed, p.clock, 'injury', p.losses) < 0.2) { p.sick = true; p.sickDoses = 0; out.injured = true; }
     }
     var lv0 = p.level;
@@ -690,10 +729,11 @@
       r.pet.lastBredClock = -1e9; albumUpsert(state, r.pet);
       return { ok: true, msg: 'Mate ' + r.pet.name + ' added to slot ' + (r.slot + 1) };
     },
-    unlockArena: function (state) { state.arena.rank = D.ARENA_MAIN - 1; },   // opens every main cup - no stars (1.8.4)
+    resetArena: function (state) { var p = active(state); if (!p) return; p.arena = PP.Arena.clean(null); delete p.jtro; p.fcup = { run: null, wins: 0 }; },   // 2.6.3 per pal
+    unlockArena: function (state) { PP.Arena.of(state).rank = D.ARENA_MAIN - 1; },   // opens every main cup - no stars (1.8.4)
     coins: function (state, n) { return PP.Shop.add(state, n); },
     champion: function (state) {   // test cheat: mark the 12 main cups won
-      state.arena.rank = D.ARENA_MAIN - 1; state.arena.champion = true;
+      PP.Arena.of(state).rank = D.ARENA_MAIN - 1; PP.Arena.of(state).champion = true;
       for (var i = 0; i < D.ARENA_MAIN; i++) { var r = PP.Arena.record(state, i); r.won = true; r.best = r.beat.length; r.beat = r.beat.map(function () { return true; }); }
       return PP.Collection.checkUnlocks(state);
     },
@@ -704,7 +744,7 @@
     revive: function (state) { return revive(state, { slot: state.active, free: true, now: Date.now() }); }
   };
 
-  PP.Game = { startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
-    update: update, act: act, exercise: exercise, canBattle: canBattle, juniorFoe: juniorFoe, ladderFoe: ladderFoe, ladderRun: ladderRun, juniorState: juniorState, startJuniorQuick: startJuniorQuick, startAdultQuick: startAdultQuick, quickFoe: quickFoe, quickPin: quickPin, QUICK_PIN_MIN: QUICK_PIN_MIN, startJuniorCup: startJuniorCup, bankJunior: bankJunior, canTrainDummy: canTrainDummy, startDummy: startDummy, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
+  PP.Game = { syncOwner: syncOwner, ownFresh: ownFresh, OWN: OWN, startLive: startLive, newState: newState, now: now, active: active, freeSlot: freeSlot, startEgg: startEgg, setActive: setActive, release: release, revive: revive, reviveCost: reviveCost, lostPals: lostPals,
+    update: update, act: act, exercise: exercise, canBattle: canBattle, juniorFoe: juniorFoe, ladderFoe: ladderFoe, ladderRun: ladderRun, juniorState: juniorState, trophies: trophies, mythWon: mythWon, startJuniorQuick: startJuniorQuick, startAdultQuick: startAdultQuick, quickFoe: quickFoe, quickPin: quickPin, QUICK_PIN_MIN: QUICK_PIN_MIN, startJuniorCup: startJuniorCup, bankJunior: bankJunior, canTrainDummy: canTrainDummy, startDummy: startDummy, startArena: startArena, startBattle: startBattle, startFriend: startFriend, startQuick: startQuick, startVisitor: startVisitor, startDaily: startDaily, startWeekly: startWeekly, visitorCard: visitorCard, finishBattle: finishBattle,
     addFriend: addFriend, breedWith: breedWith, mates: mates, albumUpsert: albumUpsert, albumFind: albumFind, familyTree: familyTree, Test: Test };
 })(typeof window !== 'undefined' ? window : globalThis);
