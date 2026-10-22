@@ -62,6 +62,7 @@
     };
   }
   function hasRealCall(p) {
+    if (isLegend(p)) return false;
     var n = realNeeds(p);
     return n.hunger || n.happy || n.sick || n.lights;
   }
@@ -70,7 +71,7 @@
    * icon on the LCD). Tantrums count too: they need a scolding. */
   var ATTENTION_ORDER = ['sick', 'hunger', 'happy', 'lights', 'poop', 'tantrum'];
   function attention(p) {
-    if (!p || p.fate || p.stage === 'egg') return [];
+    if (!p || p.fate || p.stage === 'egg' || isLegend(p)) return [];
     var n = realNeeds(p), out = [];
     ATTENTION_ORDER.forEach(function (k) { if (k === 'tantrum' ? !!p.fake : n[k]) out.push(k); });
     return out;
@@ -103,6 +104,17 @@
     }
     return false;
   }
+  /* 2.6.1 LEGEND: care-free - full hearts, no mess, never sick or tired out, no care calls or mistakes, cannot die. It
+   * stays awake (no bedtime to miss) and gets its energy back (1 every 3 min). */
+  function legendMinute(p, tMs) {
+    p.hunger = R.maxHearts; p.happy = R.maxHearts; p.poop = 0; p.sick = false; p.sickDoses = 0; p.health = 100; p.fake = null;
+    p.weight = Math.min(Math.max(p.weight, Math.ceil(baseWeight(p) * 0.7)), Math.floor(baseWeight(p) * 1.5));
+    p.asleep = false; p.sleepKind = null; p.wokeAt = null; p.need = {}; p.night = null; p.hardHungry = 0; p.hardSick = 0;
+    if (p.clock % 3 === 0) p.energy = Math.min(100, p.energy + 1);
+    p.dayMin = null; p.stepAt = tMs; p.holdTo = null;
+  }
+  function isLegend(p) { return !!p && !p.fate && p.stage === 'adult' && p.legend === true; }
+  function legendCare(p, msg) { p.lovedAt = p.clock; p.happy = R.maxHearts; return res(true, msg, 'happy'); }
   function stepMinute(p, tMs, ctx, ev) {
     if (p.fate) return;
     p.clock++;
@@ -116,6 +128,8 @@
       return;
     }
     p.ageMin++; p.stageMin++;
+    if (p.stage === 'adult' && PP.World && PP.World.legendDue(p)) { p.legend = true; ev.push({ t: 'legend' }); }
+    if (p.legend && p.stage === 'adult') { legendMinute(p, tMs); return; }
     var cfg = careCfg(p);
     ctx.now = tMs;
     var mod = (ctx.minuteOf || defaultMinuteOf)(tMs);
@@ -280,6 +294,8 @@
     if (!p.asleep) {
       if (p.happy <= 0 && p.discipline < 40) p.unhappyMin++;
       else if (p.happy >= 2) p.unhappyMin = 0;
+      // 2.6.1 audit: a pal used to run away with no warning at all. Halfway there it says so (once per sad spell).
+      if (p.unhappyMin === R.runawayMin / 2) ev.push({ t: 'sadWarn', left: R.runawayMin / 2 });
     }
     if (p.unhappyMin >= R.runawayMin && !mercy) {
       p.fate = 'gone'; p.fateCause = 'ran away'; ev.push({ t: 'ranaway', hard: !!p.hard });
@@ -374,6 +390,7 @@
 
   function feedMeal(p) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) { p.energy = Math.min(100, p.energy + R.energyFood.meal); var r0 = legendCare(p, 'Yum! ' + p.name + ' feels well-loved'); r0.anim = 'eat'; return r0; }
     if (p.asleep) return asleepRes();
     if (p.fake) return res(false, 'Tantrum! It refuses food', 'refuse');   // a tantrum is not a good deed
     if (p.hunger >= R.maxHearts) {
@@ -388,6 +405,7 @@
   }
   function feedSnack(p) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) { p.energy = Math.min(100, p.energy + R.energyFood.snack); var r1 = legendCare(p, 'Sweet! ' + p.name + ' feels well-loved'); r1.anim = 'eat'; return r1; }
     if (p.asleep) return asleepRes();
     p.snacks = (p.snacks || []).filter(function (c) { return p.clock - c < R.snackWindowMin; });
     p.snacks.push(p.clock);
@@ -410,6 +428,7 @@
   }
   function medicine(p) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) return res(false, 'Legends never get sick', 'happy');
     if (p.asleep) return asleepRes();               // 2.2.0: it could be given medicine in its sleep
     if (!p.sick) {
       p.happy = Math.max(0, p.happy - 1);
@@ -434,6 +453,7 @@
    * nowMs / opts (minuteOf) are optional; without them the last simulated minute is used. */
   function toggleLights(p, nowMs, opts) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) { p.lights = !p.lights; p.asleep = false; return res(true, p.lights ? 'Lights on' : 'Lights off - Legends need no bedtime', null); }
     var mod = nowMs != null ? minuteFn(opts)(nowMs) : p.dayMin, sch = PP.Sleep.of(p);
     var inNight = mod != null && PP.Sleep.isNight(mod, sch);
     p.lights = !p.lights;
@@ -474,6 +494,7 @@
   }
   function scold(p) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) return res(false, 'A Legend never misbehaves - nothing to scold', 'happy');
     if (p.stage === 'baby') return res(false, 'Babies don\u2019t throw tantrums yet. Nothing to scold!');   // 2.5.2: no penalty, no tantrums, the meter cannot drop
     if (p.asleep) return asleepRes();
     if (p.fake) {
@@ -489,6 +510,7 @@
   function praiseOpen(p) { return !!p.praiseReady && p.clock - (p.praiseAt == null ? p.clock : p.praiseAt) <= R.praise.deedMin; }
   function praise(p) {
     var b = blocked(p); if (b) return b;
+    if (isLegend(p)) return legendCare(p, 'Good Legend! ' + p.name + ' glows with pride');
     if (p.stage === 'baby') return res(false, 'Praise starts when it\u2019s a child. Train it for discipline +5% now');
     if (p.asleep) return asleepRes();
     var open = praiseOpen(p);
@@ -560,6 +582,7 @@
         msg += ' +' + gxp + ' XP' + (glv ? ' LEVEL UP!' : '');
       }
     }
+    if (success && isLegend(p)) p.lovedAt = p.clock;   // 2.6.1: the well-loved glow
     return res(true, msg, success ? 'happy' : 'idle');
   }
 
@@ -580,7 +603,7 @@
    * push reminders. Returns { at: ms, need } or null if nothing within maxMin. */
   function nextCall(p, fromMs, opts) {
     opts = opts || {};
-    if (!p || p.fate || p.stage === 'egg') return null;
+    if (!p || p.fate || p.stage === 'egg' || isLegend(p)) return null;
     var q = U.deepCopy(p), max = opts.maxMin || 12 * 60, ctx = { minuteOf: minuteFn(opts), offline: false };
     q.lastTickAt = fromMs;
     for (var i = 1; i <= max; i++) {
@@ -604,6 +627,7 @@
   function minText(m) { m = Math.max(1, Math.ceil(m)); return m < 60 ? m + ' min' : Math.floor(m / 60) + 'h ' + ('0' + (m % 60)).slice(-2) + 'm'; }
   function careStatus(p, minOfDay, fmt) {
     if (!p || p.fate || p.stage === 'egg') return null;
+    if (isLegend(p)) return { kind: 'legend', text: 'Legend: care-free \u00b7 play, train or battle' };   // 2.6.1: no bedtime, no calls
     fmt = fmt || function (m) { return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); };
     var sch = PP.Sleep.of(p), best = null, n = realNeeds(p);
     ['sick', 'hunger', 'happy', 'lights', 'poop'].forEach(function (k) {
@@ -622,7 +646,7 @@
   }
   var BEDTIME_SOON_MIN = 15;
 
-  PP.Care = { SLEEP_MSG: SLEEP_MSG, nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
+  PP.Care = { isLegend: isLegend, legendMinute: legendMinute, SLEEP_MSG: SLEEP_MSG, nextCall: nextCall, attention: attention, ATTENTION_ORDER: ATTENTION_ORDER,
     careStatus: careStatus, minText: minText, BEDTIME_SOON_MIN: BEDTIME_SOON_MIN, tick: tick, stepMinute: stepMinute, realNeeds: realNeeds, hasRealCall: hasRealCall,
     feedMeal: feedMeal, feedSnack: feedSnack, clean: clean, medicine: medicine, toggleLights: toggleLights, nightReport: nightReport, outOfBox: outOfBox,
     scold: scold, praise: praise, praiseOpen: praiseOpen, exercise: exercise, canExercise: canExercise, babyTrainNote: babyTrainNote, moodPose: moodPose, isTired: isTired,

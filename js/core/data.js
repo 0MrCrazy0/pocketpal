@@ -51,9 +51,10 @@
     maxHearts: 4, maxPoop: 4,
     /* 2.6.0: sickness chance per hour awake (half asleep, hardy gene -40% at most): mostly from neglect */
     sick: { base: 0.003, poop: 0.04, pile: 0.03, pileAt: 3, hungry: 0.05, unhappy: 0.02, heavy: 0.02 },
-    /* 2.6.0: adults keep making care mistakes. They no longer change the form, but the last 3 days of them weaken the
-     * pal in battle (3+ = -5%, 6+ = -10%) and every adult mistake past 5 brings the Elder age a day nearer (min 10 days). */
-    adultCare: { recentMin: 3 * 1440, weak: [[6, 0.9], [3, 0.95]], elderFree: 5, elderMin: 10 },
+    /* 2.6.0: adults keep making care mistakes. They do not change the form, but the last 3 days of them weaken the pal
+     * in battle (3+ = -5%, 6+ = -10%), and (2.6.1) each adult mistake past 3 puts the Legend age a day later
+     * (World.LEGEND: 12 days, 20 at most). A Legend makes none. */
+    adultCare: { recentMin: 3 * 1440, weak: [[6, 0.9], [3, 0.95]] },
     firstDayGraceMin: 1440,  // 1.9.0: for this long after hatching (normal mode) every need window is doubled
     callGraceMin: 30,        // a real need (hungry/unhappy/sick call) left this long = 1 care mistake
     neglectRepeatMin: 180,   // ...and another every 3 h it stays unanswered
@@ -385,7 +386,7 @@
       honey: { name: 'Honey', fx: 'honey', bitten: 'honey_bitten', icon: 9,  glyph: 'food_honey' },
       fruit: { name: 'Fruit', fx: 'fruit', bitten: 'fruit_bitten', icon: 10, glyph: 'food_fruit' }
     },
-    VERSION: '2.6.0',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
+    VERSION: '2.6.2',          // 1.9.2: the optional cloudflare-worker.js reports this same version again (no separate WORKER_VERSION)
     SPECIES: SPECIES, SPECIES_INFO: SPECIES_INFO, STAGES: STAGES, STAGE_MIN: STAGE_MIN,
     FORMS: FORMS, STYLE_FORMS: STYLE_FORMS, STYLE: STYLE, FORM_INFO: FORM_INFO, NAMES: NAMES, CARE: CARE, RULES: RULES, EVO: EVO, SECRET: SECRET,
     LEVEL: LEVEL, MOVES: MOVES, SKILLS: SKILLS, ARENA: ARENA, ARENA_MAIN: ARENA_MAIN, NAME_BITS: NAME_BITS, SHELLS: SHELLS,

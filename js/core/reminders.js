@@ -62,6 +62,7 @@
       }
       return first.hatch ? [{ type: 'hatch', at: first.hatch }] : [];
     }
+    if (PP.World && PP.World.isLegend(p)) return [];   // 2.6.1: a care-free Legend never needs a push (no 'Bedtime soon', no calls)
     var q = U.deepCopy(p), max = opts.maxMin || AHEAD_MIN, first = {}, n = 0;
     var ctx = { minuteOf: opts.minuteOf || PP.Care.defaultMinuteOf, offline: false };
     q.lastTickAt = fromMs;
@@ -114,7 +115,7 @@
       out.push({ at: at, type: e.type });
     });
     var any = TYPES.some(function (t) { return on[t.id]; });
-    if (!out.length && any && p && !p.fate && p.stage !== 'egg') {
+    if (!out.length && any && p && !p.fate && p.stage !== 'egg' && !(PP.World && PP.World.isLegend(p))) {
       var ck = realNow + CHECK_MS, cm = mof(nowG + CHECK_MS);
       if (sch && PP.Sleep.isNight(cm, sch)) ck += (PP.Sleep.until(cm, sch.wake) + 30) * U.MIN;   // 2.4.95: not in the night
       out.push({ at: ck, type: 'check' });

@@ -80,7 +80,7 @@
   }
   function stageAge(p) {
     if (p.stage === 'egg') return 'EGG';
-    var label = { baby: 'BABY', child: 'CHILD', teen: 'TEEN', adult: 'ADULT' }[p.stage] || '';
+    var label = PP.World.isLegend(p) ? 'LEGEND' : { baby: 'BABY', child: 'CHILD', teen: 'TEEN', adult: 'ADULT' }[p.stage] || '';   // 2.6.1
     return label + ' ' + PP.Pet.ageText(p).toUpperCase();   // 2.5.2: '5 HRS' / '2 DAYS' (was '0H' / '1D')
   }
   /* The strip as boxes [kind, x, width] - also used by the layout audit to prove nothing overlaps. */
@@ -581,6 +581,7 @@
     // 2.4.0: the pal's hat, on the head-top anchor of this very frame (2.5.0: every pose, sleep included)
     if (p.hat && PP.WorldArt) PP.WorldArt.drawHat(ctx, PP.World.shown(st, p).hat, p.species, S.stageKeyOf(p), pose, frame, px, y, flip, false);
     if (p.golden && !p.asleep) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);
+    if (PP.World.isLegend(p) && p.lovedAt != null && p.clock - p.lovedAt < PP.World.LEGEND.lovedMin && !p.golden) goldSparkle(ctx, px, y, reducedMotion() ? 0 : t);   // 2.6.1 well-loved glow
     // 2.6.0: a pal walking past a garden thing goes behind it (no clipping through toys); seated / playing pals stay in front
     if (!(w.act && w.act.seat) && toyK == null) gardenBoxes(app).forEach(function (b) { if (bodyHits(px, b) && b.id !== 'swing' && b.id !== 'bench') PP.WorldArt.drawItem(ctx, b.id, b.x, sceneInfo(st).phase === 'night', t); });
     if (toyK != null && toyK > 0.15 && toyK < 0.9) S.drawFx(ctx, 'note', px + (flip ? 4 : PS - 20), y + 6 - Math.round(toyK * 14), 1);

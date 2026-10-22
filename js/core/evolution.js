@@ -78,6 +78,7 @@
     p.stageMin = 0;
     var newBase = D.CARE[p.stage].weight;
     p.weight = Math.max(newBase, p.weight + (newBase - oldBase));
+    if (p.stage === 'child') p.str = 0;   // 2.6.1 audit: a new child starts at Strength 0 (was missing until its first training)
     if (p.stage === 'teen') p.str = Math.floor((p.str || 0) * D.JUNIOR.str.teenKeep);   // 2.6.0: a new teen keeps half
     if (p.stage === 'adult') { becomeAdult(p); delete p.str; delete p.strDay; }
   }
@@ -101,6 +102,7 @@
   /* Test mode helper: jump straight to a stage/form. */
   function forceStage(p, stage, form) {
     if (D.STAGES.indexOf(stage) < 0) return;
+    p._fromStage = p.stage;
     p.fate = null;
     if (stage === 'adult') {
       p.stageMin = 0;
@@ -114,6 +116,12 @@
     var cum = { egg: 0, baby: 0, child: D.STAGE_MIN.baby, teen: D.STAGE_MIN.baby + D.STAGE_MIN.child,
       adult: D.STAGE_MIN.baby + D.STAGE_MIN.child + D.STAGE_MIN.teen };
     p.ageMin = Math.max(p.ageMin, cum[stage]);
+    // 2.6.1 admin audit: a jump follows the real growing rules - Strength 0..40 for a child / teen (half kept by a new
+    // teen), none for an adult; the Legend marks always end (a fresh adult starts at adult day 0)
+    var was = p._fromStage;
+    if (stage === 'child' || stage === 'teen') { p.str = stage === 'teen' && was === 'child' ? Math.floor((p.str || 0) * D.JUNIOR.str.teenKeep) : (was === stage ? (p.str || 0) : 0); }
+    else { delete p.str; delete p.strDay; }
+    delete p.legend; delete p.legendBredAt; delete p.lovedAt; delete p._fromStage;
   }
   function minutesToNextStage(p) {
     if (!D.STAGE_MIN[p.stage]) return null;

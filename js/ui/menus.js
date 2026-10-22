@@ -237,7 +237,7 @@
     return '<tr><td>Strength</td><td>' + bar(p.str || 0, D.JUNIOR.str.cap, 'Strength') + ' ' + esc(strText(p)) + '</td></tr>';
   }
   var STYLE_NOTE = 'Power / Quick / Calm are style points: they only pick the adult form (Mighty / Swift / Sturdy), not battle power. Strength (from training and battles) makes a young pal stronger in fights.';
-  /* 2.6.0: care mistakes in words - the young ones pick the adult form; an adult's still count (health, battles, Elder age) */
+  /* 2.6.0: care mistakes in words - the young ones pick the adult form; an adult's still count (health, battles, Legend age) */
   function mistakesText(p) {
     if (p.stage !== 'adult') return p.mistakes + ' (these decide the adult form)';
     var a = PP.Stats.adultMistakes(p), r = PP.Stats.recentAdultMistakes(p), wk = D.RULES.adultCare.weak.filter(function (q) { return r >= q[0]; })[0];
@@ -400,6 +400,7 @@
     { t: 'ADULT LIFE', hl: ['#menuBtn'], h: function () {
       return '<p><b>Battle</b> the 12-cup arena (3 foes a cup, then a post-game Myth Cup) or friends (battle codes). <b>Run</b> escapes a quick battle; in the arena or a friend battle it is a forfeit. Wins give XP and skill points for your animal\'s <b>skill tree</b>.</p>' +
         '<p><b>Breed</b> two adults of the same animal (male + female) for a new generation. Fill the <b>Paldex</b> and win cups to unlock special <b>shell colours</b>.</p>' +
+        '<p>Care for an adult well and in about 12 days it becomes a care-free <b>Legend</b>.</p>' +
         '<p class="tip">The MENU button (top right) opens everything.</p>'; } },
     { t: 'READY?', h: function () {
       return '<p>Time keeps running when the app is closed, but fairly: a night away or a day at work can never kill your pal.</p>' +
@@ -425,7 +426,19 @@
       var pg = pages[page % pages.length], h = '';
       var top = '<div class="st-top">' + thumb(p.species, S.stageKeyOf(p), PP.Care.moodPose(p), 26, '', hatOf(p)) + '<div><b>' + esc(p.name) + '</b> ' + (p.sex === 'M' ? '\u2642' : '\u2640') +
         '<br>' + esc(PP.Pet.formName(p)) + ' \u00b7 ' + esc(p.stage === 'adult' ? FORM_LABEL[p.form] + ' adult' : p.stage) + '<br>Gen ' + p.gen + (p.stage === 'egg' ? ' \u00b7 Egg' : ' \u00b7 Age ' + PP.Pet.ageText(p)) + (PP.World ? ' \u00b7 Things ' + PP.World.counts(st()).got + '/' + PP.World.counts(st()).total : '') + '</div></div>';   // 2.5.0 collected
-      if (pg === 'care') {
+      if (pg === 'care' && PP.World.isLegend(p)) {   // 2.6.1: a Legend is care-free - the care meters are greyed out
+        var loved = p.lovedAt != null && p.clock - p.lovedAt < PP.World.LEGEND.lovedMin;
+        h = top + '<p class="legend-badge">\u2605 LEGEND \u2605</p><table class="kv">' +
+          '<tr class="off"><td>Hunger</td><td>' + hearts(4) + ' care-free</td></tr>' +
+          '<tr class="off"><td>Happy</td><td>' + hearts(4) + ' care-free</td></tr>' +
+          '<tr><td>Energy</td><td>' + bar(p.energy, 100, 'Energy') + ' ' + Math.round(p.energy) + '%</td></tr>' +
+          '<tr class="off"><td>Health</td><td>Never sick, never in danger</td></tr>' +
+          '<tr class="off"><td>Care mistakes</td><td>None any more (' + PP.Stats.adultMistakes(p) + ' as an adult)</td></tr>' +
+          '<tr><td>Strength</td><td>Full strength: all stats and skills</td></tr>' +
+          '<tr><td>Loved</td><td>' + (loved ? 'Well-loved glow \u2728' : 'Feed, play or praise for a happy glow') + '</td></tr>' +
+          '<tr><td>Status</td><td>Legend \u00b7 breed or retire any time (Family)</td></tr>' +
+          '</table>';
+      } else if (pg === 'care') {
         h = top + '<table class="kv">' +
           '<tr><td>Hunger</td><td>' + hearts(p.hunger) + '</td></tr>' +
           '<tr><td>Happy</td><td>' + hearts(p.happy) + '</td></tr>' +
@@ -436,7 +449,7 @@
           '<tr title="Status strip: WT + LO / OK / HI. All icons: MENU \u25b8 Screen icons"><td>Weight</td><td>' + p.weight + 'g' + (PP.Care.isOverweight(p) ? ' (heavy, strip: HI)' : PP.Care.isUnderweight(p) ? ' (skinny, strip: LO)' : ' (strip: OK)') + '</td></tr>' +
           (p.fate ? '' : '<tr><td>Growing</td><td>' + esc(PP.Evolution.growText(p)) + '</td></tr>') +   // 2.5.2: by the real rule (was 'Grows in 0h 0m' all night)
           (p.stage !== 'egg' ? '<tr><td>Sleeps</td><td>' + schedText(PP.Sleep.of(p)) + (p.sched ? '' : ' (default)') + '</td></tr>' : '') +
-          '<tr><td>Status</td><td>' + (p.fate ? esc(p.fateCause || p.fate) : p.asleep ? (p.sleepKind === 'nap' ? 'Napping' : 'Asleep') + (p.lights ? ' (lights ON!)' : '') : p.fake ? 'Tantrum!' : 'Awake') + '</td></tr>' +
+          '<tr><td>Status</td><td>' + (p.fate ? esc(p.fateCause || p.fate) : (p.unhappyMin || 0) >= D.RULES.runawayMin / 2 && !p.asleep ? 'Very sad - might run away! Play with it' : p.asleep ? (p.sleepKind === 'nap' ? 'Napping' : 'Asleep') + (p.lights ? ' (lights ON!)' : '') : p.fake ? 'Tantrum!' : 'Awake') + '</td></tr>' +
           '</table>';
       } else if (pg === 'leaning') {
         h = top + leaningHtml(p);
@@ -835,7 +848,7 @@
 
   function slotLine(p) {
     if (!p) return 'empty';
-    return PP.Pet.formName(p) + ' \u00b7 ' + (p.stage === 'adult' ? FORM_LABEL[p.form] + ' Lv' + p.level : p.stage) + (p.hard ? ' \u00b7 HARD' : '') + (p.golden ? ' \u00b7 golden' : '') + (p.fate ? ' \u00b7 ' + (p.fate === 'dead' ? 'R.I.P.' : 'gone') : '');
+    return PP.Pet.formName(p) + ' \u00b7 ' + (p.stage === 'adult' ? FORM_LABEL[p.form] + ' Lv' + p.level : p.stage) + (PP.World.isLegend(p) ? ' \u00b7 LEGEND' : '') + (p.hard ? ' \u00b7 HARD' : '') + (p.golden ? ' \u00b7 golden' : '') + (p.fate ? ' \u00b7 ' + (p.fate === 'dead' ? 'R.I.P.' : 'gone') : '');
   }
   function palBox() {
     var s = st();
@@ -1261,7 +1274,7 @@
       '<p>When the <b>!</b> flashes (status strip, row 2), your pal needs something: the bubble next to it shows what.</p>' +
       '<p><b>The sky shows your pal\u2019s mood:</b> sunny when it is very happy and well cared for (a rainbow if it was raining just before), clouds when it is okay, grey then rain when it is sad or hungry, drizzle when it is sick, and a storm with lightning when it is badly neglected.</p>' +
       '<p>Lights: turn them off when your pal falls asleep. Lights on always wakes it. In its sleep hours it wakes up grumpy (happy -1, once a night), stays up while the lights are on (up to 30 min) and then dozes off again; lights off puts it straight back to bed. While it sleeps you can clean up, but feeding, medicine, play, training and battles wait until it is awake.</p>' +
-      '<p><b>Out and about:</b> MENU \u25b8 Trips (beach, forest, town, lake, mountain), Things (hats, toys, garden - place up to 3 toys and 3 garden things), Family (retiring moves an adult to the Album - it does not die - and an heir egg carries one trait), Gifts &amp; visits, and every pal\u2019s Memory book. Battle \u25b8 Friends Cup pits you against your friends\u2019 pals. Halloween, Christmas and Easter bring seasonal items, and the garden follows the real season (Settings ▸ Seasons).</p>' +
+      '<p><b>Out and about:</b> MENU \u25b8 Trips (beach, forest, town, lake, mountain), Things (hats, toys, garden - place up to 3 toys and 3 garden things), Family (retiring moves an adult to the Album - it does not die - and an heir egg carries one trait; after about 12 days a well-cared-for adult becomes a care-free <b>Legend</b> at full strength that can lay an egg or retire to the Hall of Fame), Gifts &amp; visits, and every pal\u2019s Memory book. Battle \u25b8 Friends Cup pits you against your friends\u2019 pals. Halloween, Christmas and Easter bring seasonal items, and the garden follows the real season (Settings ▸ Seasons).</p>' +
       '<p>Paldex: raise all ' + DEX_ADULTS + ' adult forms. Milestones and arena cups unlock special shell colours (MENU \u25b8 Shell colour).</p><p><b>Screen icons</b></p>' + legendHtml(), items: [{ label: 'Open the guide', act: function () { replace(guideScreen(0)); } }, { label: 'Back', act: pop }] };
   }
 

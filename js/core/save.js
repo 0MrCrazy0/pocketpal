@@ -12,7 +12,8 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
-  var SCHEMA = 11;  // 2.6.0: Strength (p.str, p.strDay) for children and teens  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
+  var SCHEMA = 12;  // 2.6.1: Elders become Legends (p.legend), Hall of Fame (state.hall)
+   // 2.6.0: Strength (p.str, p.strDay) for children and teens  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
   var MIGRATIONS = {
     /* 1 -> 2: Paldex, shell colours, first-run guide flag, notification opt-in. */
     1: function (st) {
@@ -76,6 +77,17 @@
      * placed list at the spots they showed (deco x 55, toy x 90). */
     9: function (st) {
       return PP.World.migrate10(st);
+    },
+    /* 11 -> 12 (2.6.1): an adult that was already an Elder (seen, or old enough by the 2.6.0 rule) becomes a Legend */
+    11: function (st) {
+      (Array.isArray(st.slots) ? st.slots : []).forEach(function (p) {
+        if (!p || typeof p !== 'object' || p.stage !== 'adult' || p.fate) return;
+        var days = Math.floor((p.stageMin || 0) / 1440), adm = Math.max(0, (p.totalMistakes || 0) - (p.mistakes || 0));
+        if (p.elderSeen === true || days >= Math.max(10, 20 - Math.max(0, adm - 5))) p.legend = true;
+        delete p.elderSeen;
+      });
+      if (!Array.isArray(st.hall)) st.hall = [];
+      return st;
     },
     /* 10 -> 11 (2.6.0): children and teens start with Strength 0 (adults have none) */
     10: function (st) {
@@ -147,7 +159,7 @@
     e.name = PP.Pet.cleanName(a.name) || '?';
     e.fate = (a.fate === 'dead' || a.fate === 'gone' || a.fate === 'released' || a.fate === 'retired') ? a.fate : null;   // 2.4.0 + retired
     e.mem = PP.World.cleanMem(a.mem).slice(-ALBUM_MEM);
-    if (['gene', 'skill', 'ribbon'].indexOf(a.trait) < 0) delete e.trait;
+    if (['gene', 'skill', 'ribbon', 'full'].indexOf(a.trait) < 0) delete e.trait;   // 2.6.1 'full' = a Legend's whole Family Ribbon
     if (typeof a.hat === 'string') { var h = PP.World.canon(a.hat); if (PP.World.thing(h) && PP.World.THINGS[h].kind === 'hat') e.hat = h; else delete e.hat; }   // 2.5.0: bowtie -> tophat
     e.parents = Array.isArray(a.parents) ? a.parents.slice(0, 2).map(function (r) { return cleanRef(r, 0); }) : [];
     var snap = (e.fate === 'dead' || e.fate === 'gone') && a.snap ? sanitizePet(a.snap) : null;

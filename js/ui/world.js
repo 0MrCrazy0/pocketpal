@@ -133,7 +133,7 @@
   }
 
   /* ---------------------------------------------------------------- family + memory book */
-  var TRAIT = { gene: 'a strong gene', skill: 'an innate skill', ribbon: 'the Family Ribbon' };
+  var TRAIT = { gene: 'a strong gene', skill: 'an innate skill', ribbon: 'the Family Ribbon', full: 'the full Family Ribbon (gene, skill and hat)' };
   function keyOf(e) { return e.stage === 'adult' ? 'adult_' + (e.form || 'good') : e.stage === 'egg' ? 'egg' : e.stage; }
   function familyScreen() {
     var s = st(), p = pet(), line = p ? W.familyLine(s, p, 8) : [];
@@ -145,19 +145,42 @@
     else h += '<p class="tip">No pal yet.</p>';
     var items = [];
     if (p && !p.fate) {
-      var why = W.canRetire(p);
-      // 2.5.0: clearer words - retiring is not dying, and an Elder is not a new form
-      var g2 = (p.gen || 1) + 1;
-      items.push({ label: 'Retire ' + p.name + ' (move to the Album)', sub: why || ((W.isElder(p) ? p.name + ' is an Elder (' + W.elderAt(p) + '+ days as an adult). Retiring is optional - Elders can keep playing and battling. ' : '') +
-        p.name + ' stays in your Album forever. An egg from ' + p.name + '\u2019s family starts generation ' + g2 + '.'), disabled: !!why, reason: why, act: function () { K().push(retireScreen); } });
+      var why = W.canRetire(p), g2 = (p.gen || 1) + 1;
+      if (W.isLegend(p)) {   // 2.6.1: a Legend may breed (and stay) or retire to the Hall of Fame, any time
+        var bw = W.canBreedLegend(s, p);
+        items.push({ label: 'Lay an egg (' + p.name + ' stays)', sub: bw || 'A generation ' + g2 + ' egg with a strong gene goes in a free Pal Box slot. ' + p.name + ' keeps playing and battling.', disabled: !!bw, reason: bw,
+          act: function () { var r = W.breedLegend(s, s.slots.indexOf(p), now()); PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg); if (r.ok) { App().save(); App().refreshIcons(); } K().refresh(); } });
+        items.push({ label: 'Retire ' + p.name + ' to the Hall of Fame', sub: p.name + ' is a Legend. It joins the Hall of Fame and the Album (it does not die), and its heir egg gets the full Family Ribbon: a strong gene, an innate skill and the ribbon hat.',
+          act: function () { K().push(retireScreen); } });
+      } else {
+        items.push({ label: 'Retire ' + p.name + ' (move to the Album)', sub: why || (p.name + ' stays in your Album forever. An egg from ' + p.name + '\u2019s family starts generation ' + g2 + '. After ' + W.elderAt(p) + ' days as an adult ' + p.name + ' becomes a care-free Legend.'),
+          disabled: !!why, reason: why, act: function () { K().push(retireScreen); } });
+      }
       items.push({ label: 'Memory book: ' + p.name, sub: (p.mem || []).length + ' memories', act: function () { K().push(memScreen(p.id)); } });
     }
+    items.push({ label: 'Hall of Fame', sub: (s.hall || []).length + ' Legend' + ((s.hall || []).length === 1 ? '' : 's') + ' retired with honours', act: function () { K().push(hallScreen); } });
     if (line.length > 1) items.push({ label: 'Family memory book', sub: line.length + ' generations', act: function () { K().push(familyBook); } });
     items.push({ label: 'Back', act: K().pop });
-    return { title: 'FAMILY', html: h, items: items, detail: function () { return 'Retiring is optional, never forced, and it is not dying: after ' + W.RETIRE.minDays + ' days as an adult a pal can move to the Album and leave an heir egg with one family trait. After ' + W.RETIRE.elderDays + ' days it is called an Elder - Elders can keep playing and battling. A retired pal stays in your Album forever.'; } };
+    return { title: 'FAMILY', html: h, items: items, detail: function () { return 'Retiring is optional, never forced, and it is not dying. After ' + W.RETIRE.minDays + ' days as an adult a pal can move to the Album and leave an heir egg with one family trait. With good care it becomes a Legend after ' + W.LEGEND.baseDays + ' days as an adult (later with care mistakes, ' + W.LEGEND.maxDays + ' at most): Legends need no care, keep their full strength, and can lay an egg or retire to the Hall of Fame any time.'; } };
+  }
+  function hallScreen() {
+    var H = (st().hall || []).slice().reverse();
+    var h = H.length ? '<ol class="family-line">' + H.map(function (e) {
+      return '<li>' + K().thumb(e.species, e.form || 'good', 'idle', 14, '') + '<span><b>' + esc(e.name) + '</b> \u00b7 ' + esc(PP.Pet.formName({ species: e.species, stage: 'adult', form: e.form })) + ' \u00b7 gen ' + e.gen +
+        '<br><small>' + e.wins + ' wins, ' + e.losses + ' losses \u00b7 Lv' + e.level + ' \u00b7 ' + e.ageDays + ' days old \u00b7 ' + esc(K().tDate(e.at)) + '</small></span></li>';
+    }).join('') + '</ol>' : '<p class="tip">No Legends here yet. A pal becomes a Legend after ' + W.LEGEND.baseDays + '+ days as a well-cared-for adult; retiring a Legend brings it here.</p>';
+    return { title: 'HALL OF FAME (' + H.length + ')', html: h, items: [{ label: 'Back', act: K().pop }] };
   }
   function retireScreen() {
     var s = st(), p = pet(); if (!p || W.canRetire(p)) return null;
+    if (W.isLegend(p)) {
+      return K().confirm('RETIRE ' + p.name.toUpperCase() + '?', p.name + ' joins the Hall of Fame and the Album with its memory book (it does not die). Its heir egg, generation ' + ((p.gen || 1) + 1) +
+        ', takes this slot with the full Family Ribbon: a strong gene, an innate skill and the ribbon hat.' + (p.hard ? ' The heir keeps hard mode.' : '') + ' You cannot bring ' + p.name + ' back to the Pal Box.', function () {
+        var r = W.retire(s, s.slots.indexOf(p), 'gene', now());
+        PP.Audio.play(r.ok ? 'level' : 'no'); toast(r.msg);
+        if (r.ok) { App().resetWalker(); App().save(); App().refreshIcons(); K().close(); } else K().pop();
+      })();
+    }
     var items = W.traitOptions(p).map(function (o) {
       return { label: o.label, sub: o.sub, disabled: !!o.disabled, reason: o.sub, act: function () {
         K().push(K().confirm('RETIRE ' + p.name.toUpperCase() + '?', p.name + ' moves to the Album with its memory book (it does not die). Its heir egg, generation ' + ((p.gen || 1) + 1) + ', takes this slot and gets: ' + o.label + '.' +
@@ -288,6 +311,6 @@
     if (M && M.key && online() && !(root.document && root.document.hidden) && Math.abs(Date.now() - (M.checkAt || 0)) > CHECK_MS) checkBox(true);   // abs: a clock that was ahead never stops the checks
   }
 
-  PP.WorldUI = { tripsScreen: tripsScreen, tripResult: tripResult, thingsScreen: thingsScreen, thingShop: thingShop, familyScreen: familyScreen, retireScreen: retireScreen,
+  PP.WorldUI = { tripsScreen: tripsScreen, tripResult: tripResult, thingsScreen: thingsScreen, thingShop: thingShop, familyScreen: familyScreen, hallScreen: hallScreen, retireScreen: retireScreen,
     memScreen: memScreen, familyBook: familyBook, giftsScreen: giftsScreen, friendWorld: friendWorld, tick: tick, boxId: boxId, checkBox: checkBox, setupBox: setupBox };
 })(typeof window !== 'undefined' ? window : globalThis);

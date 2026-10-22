@@ -180,9 +180,9 @@
       if (e.t === 'died' || e.t === 'ranaway') albumUpsert(state, p);
       memo(p, e, t);                                        // 2.4.0 memory book
     });
-    if (!p.fate && !p.elderSeen && PP.World.isElder(p)) {   // 2.4.0: an Elder may retire (never forced)
-      p.elderSeen = true; PP.World.remember(p, 'elder', 'Became an Elder (' + PP.World.elderAt(p) + '+ days as an adult) - retiring is optional', t); ev.push({ t: 'elder', name: p.name });
-    }
+    ev.forEach(function (e) {   // 2.6.1: an Elder is a Legend - care-free, full strength, breed or retire any time
+      if (e.t === 'legend') { e.name = p.name; PP.World.remember(p, 'elder', 'Became a Legend after ' + PP.World.adultDays(p) + ' days as an adult', t); }
+    });
     if (grew) unlockEvents(state, ev);
     if (p.stage !== 'egg') {
       var d = PP.Shop.claimDaily(state, t);
@@ -600,9 +600,9 @@
       }
     } else {
       p.losses++; out.xp = D.LEVEL.lossXp(p.level, oppLv);
-      p.happy = Math.max(0, p.happy - 1);
+      if (!p.legend) p.happy = Math.max(0, p.happy - 1);   // 2.6.1: a Legend shrugs a loss off (no sad heart, no injury)
       if (arena) { rec.losses++; state.arena.run = null; }
-      if (U.roll(p.seed, p.clock, 'injury', p.losses) < 0.2) { p.sick = true; p.sickDoses = 0; out.injured = true; }
+      if (!p.legend && U.roll(p.seed, p.clock, 'injury', p.losses) < 0.2) { p.sick = true; p.sickDoses = 0; out.injured = true; }
     }
     var lv0 = p.level;
     out.levels = PP.Stats.addXp(p, out.xp);

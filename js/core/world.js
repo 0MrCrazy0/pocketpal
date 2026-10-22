@@ -372,22 +372,64 @@
   }
 
   /* ------------------------------------------------------------------ generations
-   * An adult can retire after RETIRE.minDays pet-days as an adult (an Elder from RETIRE.elderDays: a gentle nudge, never
+   * An adult can retire after RETIRE.minDays pet-days as an adult (2.6.1: a Legend any time - see LEGEND below; never
    * forced). Retiring keeps the pal in the album (fate 'retired', its memory book too) and leaves an heir egg in its slot:
    * the same species, generation + 1, with ONE trait the player picks: a gene (the parent's best gene + 1, max 3), an
    * innate skill (one of the parent's skills, tier 1-3, known from birth) or the Family Ribbon (an heirloom hat). */
   var RETIRE = { minDays: 5, elderDays: 20 };
+  /* 2.6.1 LEGENDS: an Elder is a reward now - the pal becomes a care-free Legend (full strength, cannot die). Good adult
+   * care gets there sooner: LEGEND.baseDays as an adult, +1 day per adult care mistake past LEGEND.free, never later than
+   * LEGEND.maxDays (the old Elder age). 2.6.0 had it backwards (careless years made a pal an Elder sooner). */
+  var LEGEND = { baseDays: 12, free: 3, maxDays: 20, breedCoolMin: 3 * 1440, hallMax: 100, lovedMin: 6 * 60 };
   function adultDays(p) { return p && p.stage === 'adult' ? Math.max(0, Math.floor((p.stageMin || 0) / 1440)) : 0; }   // stageMin keeps counting (pet minutes) once adult
-  /* 2.6.0: careless adult years age a pal sooner - each adult care mistake past elderFree brings the Elder age a day nearer */
-  function elderAt(p) { var A = PP.DATA.RULES.adultCare; return Math.max(A.elderMin, RETIRE.elderDays - Math.max(0, PP.Stats.adultMistakes(p) - A.elderFree)); }
-  function isElder(p) { return !!p && !p.fate && adultDays(p) >= elderAt(p); }
+  function elderAt(p) { return Math.min(LEGEND.maxDays, LEGEND.baseDays + Math.max(0, PP.Stats.adultMistakes(p) - LEGEND.free)); }
+  function isLegend(p) { return !!p && !p.fate && p.stage === 'adult' && p.legend === true; }
+  function legendDue(p) { return !!p && !p.fate && p.stage === 'adult' && !p.legend && adultDays(p) >= elderAt(p); }
+  function isElder(p) { return isLegend(p); }
   function canRetire(p) {
     if (!p || p.fate) return 'No pal';
     if (p.stage !== 'adult') return 'Only adults can retire';
+    if (isLegend(p)) return null;                       // a Legend may retire (or breed) at any time
     if (p.asleep) return 'It is asleep';
     var d = adultDays(p);
     if (d < RETIRE.minDays) return 'Too young to retire (adult for ' + d + '/' + RETIRE.minDays + ' days)';
     return null;
+  }
+  function breedLeft(p) { return p && p.legendBredAt != null ? Math.max(0, LEGEND.breedCoolMin - ((p.clock || 0) - p.legendBredAt)) : 0; }
+  function canBreedLegend(state, p) {
+    if (!isLegend(p)) return 'Only a Legend can lay an egg on its own';
+    var w = breedLeft(p); if (w > 0) return 'Resting after its last egg (' + Math.ceil(w / 1440) + ' more day' + (Math.ceil(w / 1440) === 1 ? '' : 's') + ')';
+    if (PP.Game.freeSlot(state) < 0) return 'Your Pal Box is full (' + state.slots.length + '/' + state.slots.length + '). Retire or release a pal, or buy a bigger box in the shop';
+    return null;
+  }
+  /* a Legend keeps living and lays an egg with its best gene + 1 (the Strong gene trait); the egg goes in a free Pal Box slot */
+  function breedLegend(state, slot, ms) {
+    var p = state.slots[slot], why = canBreedLegend(state, p);
+    if (why) return { ok: false, msg: why };
+    var now = Math.round(ms || Date.now()), gk = bestGene(p), free = PP.Game.freeSlot(state);
+    var egg = PP.Pet.createEgg({ species: p.species, now: now, seed: U.hash(state.seed, 'legendegg', p.id, now), gen: Math.min(999, (p.gen || 1) + 1), parents: [PP.Breeding.parentRef(p)] });
+    egg.genes[gk] = Math.min(3, Math.max(egg.genes[gk] || 0, (p.genes && p.genes[gk]) || 0) + 1);
+    egg.heir = { from: p.id, name: p.name, trait: 'gene', v: gk };
+    if (p.hard) egg.hard = true;
+    p.legendBredAt = p.clock || 0;
+    remember(p, 'egg', 'Laid an egg as a Legend (generation ' + egg.gen + ')', now);
+    remember(egg, 'heir', 'Laid by the Legend ' + p.name + ' (gen ' + (p.gen || 1) + '): Strong ' + gk.toUpperCase(), now);
+    state.slots[free] = egg;
+    var L = state.line || (state.line = { top: 1, retired: 0 }); L.top = Math.max(L.top || 1, egg.gen);
+    return { ok: true, egg: egg, slot: free, msg: p.name + ' laid an egg (generation ' + egg.gen + ', Strong ' + gk.toUpperCase() + ')! It waits in Pal Box slot ' + (free + 1) + ' - pick it there to hatch it.' };
+  }
+  function hallAdd(state, p, now) {
+    var H = state.hall || (state.hall = []);
+    H.push({ id: p.id, name: p.name, species: p.species, form: p.form || 'good', gen: p.gen || 1, wins: p.wins || 0, losses: p.losses || 0,
+      level: p.level || 1, ageDays: Math.floor((p.ageMin || 0) / 1440), adultDays: adultDays(p), at: now });
+    if (H.length > LEGEND.hallMax) H.splice(0, H.length - LEGEND.hallMax);
+  }
+  function cleanHall(h) {
+    return (Array.isArray(h) ? h : []).filter(function (e) { return e && typeof e === 'object' && typeof e.id === 'string' && D.SPECIES.indexOf(e.species) >= 0; }).slice(-LEGEND.hallMax).map(function (e) {
+      return { id: e.id.slice(0, 40), name: PP.Pet.cleanName(e.name) || '?', species: e.species, form: D.FORMS.indexOf(e.form) >= 0 ? e.form : 'good', gen: U.int(e.gen, 1, 1, 999),
+        wins: U.int(e.wins, 0, 0, 1e7), losses: U.int(e.losses, 0, 0, 1e7), level: U.int(e.level, 1, 1, 99), ageDays: U.int(e.ageDays, 0, 0, 1e5), adultDays: U.int(e.adultDays, 0, 0, 1e5),
+        at: Number.isFinite(e.at) && e.at > 0 ? Math.round(e.at) : 0 };
+    });
   }
   function bestGene(p) {
     var g = p.genes || {}, best = 'atk';
@@ -408,23 +450,30 @@
     var p = state.slots[slot], why = canRetire(p);
     if (why) return { ok: false, msg: why };
     var opt = traitOptions(p).filter(function (o) { return o.k === traitK && !o.disabled; })[0];
+    var legend = isLegend(p);
+    if (legend) opt = { k: 'full', label: 'the full Family Ribbon' };   // 2.6.1: a Legend passes on everything
     if (!opt) return { ok: false, msg: 'Pick a trait' };
-    var now = Math.round(ms || Date.now());
-    remember(p, 'retire', 'Retired after ' + adultDays(p) + ' days as an adult, Lv' + p.level + ', ' + (p.wins || 0) + ' wins', now);
+    var now = Math.round(ms || Date.now()), all = legend ? traitOptions(p).filter(function (o) { return !o.disabled; }) : [opt];
+    if (legend) hallAdd(state, p, now);
+    remember(p, 'retire', (legend ? 'A Legend, retired to the Hall of Fame after ' : 'Retired after ') + adultDays(p) + ' days as an adult, Lv' + p.level + ', ' + (p.wins || 0) + ' wins', now);
     p.fate = 'retired'; p.fateCause = 'retired';
     PP.Game.albumUpsert(state, p);
     var a = PP.Game.albumFind(state, p.id); if (a) a.trait = opt.k;
     var egg = PP.Pet.createEgg({ species: p.species, now: now, seed: U.hash(state.seed, 'heir', p.id, now), gen: Math.min(999, (p.gen || 1) + 1),
       parents: [PP.Breeding.parentRef(p)] });
     egg.heir = { from: p.id, name: p.name, trait: opt.k };
+    all.forEach(function (opt) {
     if (opt.k === 'gene') { egg.genes[opt.v] = Math.min(3, Math.max(egg.genes[opt.v] || 0, (p.genes && p.genes[opt.v]) || 0) + 1); egg.heir.v = opt.v; }   // the parent's gene (or the egg's own, if better) + 1
     if (opt.k === 'skill') { egg.inheritedSkills = [opt.v].concat((egg.inheritedSkills || []).filter(function (x) { return x !== opt.v; })).slice(0, 2); egg.heir.v = opt.v; }
     if (opt.k === 'ribbon') { give(state, 'heirloom', now); egg.hat = 'heirloom'; }
+    });
+    if (legend) egg.heir.trait = 'full';
     if (p.hard) egg.hard = true;
     remember(egg, 'heir', 'Laid by ' + p.name + ' (gen ' + (p.gen || 1) + ') as its heir: ' + opt.label, now);
     state.slots[slot] = egg;
     var L = state.line || (state.line = { top: 1, retired: 0 });
     L.retired = (L.retired || 0) + 1; L.top = Math.max(L.top || 1, egg.gen);
+    if (legend) return { ok: true, egg: egg, msg: p.name + ' joined the Hall of Fame! Its heir egg has the full Family Ribbon (generation ' + egg.gen + ').' };
     return { ok: true, egg: egg, msg: p.name + ' retired. Its heir egg is here (generation ' + egg.gen + ')!' };
   }
   function topGen(state) {
@@ -558,7 +607,7 @@
       if (!raw || typeof raw !== 'object' || !GIFTS[raw.g]) return;
       var g = GIFTS[raw.g], who = PP.Pet.cleanName(raw.n) || 'A friend', p = PP.Game.active(state), used = false;
       if (M.used.n < GIFT.usePerDay) {
-        if (g.free && p && !p.fate && p.stage !== 'egg') { p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); used = true; }
+        if (g.free && p && !p.fate && p.stage !== 'egg') { p.happy = Math.min(D.RULES.maxHearts, p.happy + 1); if (p.legend) p.lovedAt = p.clock; used = true; }
         else if (g.item && PP.Shop.count(state, g.item) < D.ECONOMY.maxStack) { state.inv[g.item] = (state.inv[g.item] || 0) + 1; used = true; }
         if (used) M.used.n++;
       }
@@ -680,6 +729,7 @@
     var L = s.line && typeof s.line === 'object' ? s.line : {};
     out.line = { top: U.int(L.top, 1, 1, 999), retired: U.int(L.retired, 0, 0, 1e6) };
     out.line.top = topGen(out);
+    out.hall = cleanHall(s.hall);
     return out;
   }
   /* per pal (sanitizePet): memory book, worn hat, heir note */
@@ -687,11 +737,14 @@
     out.mem = cleanMem(p.mem);
     var h = canon(p.hat);
     if (typeof h === 'string' && thing(h) && THINGS[h].kind === 'hat') out.hat = h; else delete out.hat;
-    if (p.heir && typeof p.heir === 'object' && ['gene', 'skill', 'ribbon'].indexOf(p.heir.trait) >= 0) {
+    if (p.heir && typeof p.heir === 'object' && ['gene', 'skill', 'ribbon', 'full'].indexOf(p.heir.trait) >= 0) {
       out.heir = { from: String(p.heir.from || '').slice(0, 40), name: PP.Pet.cleanName(p.heir.name) || '?', trait: p.heir.trait };
       if (typeof p.heir.v === 'string') out.heir.v = p.heir.v.slice(0, 24);
     } else delete out.heir;
-    if (p.elderSeen === true) out.elderSeen = true; else delete out.elderSeen;
+    delete out.elderSeen;   // 2.6.1: Elders are Legends (p.legend, set by the schema 12 migration)
+    if (p.legend === true && out.stage === 'adult') out.legend = true; else delete out.legend;
+    if (Number.isFinite(p.legendBredAt) && out.legend) out.legendBredAt = Math.round(p.legendBredAt); else delete out.legendBredAt;
+    if (Number.isFinite(p.lovedAt) && out.legend) out.lovedAt = Math.round(p.lovedAt); else delete out.lovedAt;
     if (Number.isFinite(p.toyAt) && p.toyAt > 0) out.toyAt = Math.round(p.toyAt); else delete out.toyAt;   // 2.5.0 toy play cap
     return out;
   }
@@ -724,7 +777,7 @@
     EVENTS: EVENTS, easterOf: easterOf, eventOnDate: eventOnDate, eventNow: eventNow, eventGift: eventGift, claimEventGift: claimEventGift,
     eventShop: eventShop, buyEventThing: buyEventThing, EVENT_PRICE: EVENT_PRICE,
     MEM_MAX: MEM_MAX, remember: remember, cleanMem: cleanMem, familyLine: familyLine,
-    RETIRE: RETIRE, adultDays: adultDays, isElder: isElder, elderAt: elderAt, canRetire: canRetire, traitOptions: traitOptions, retire: retire, topGen: topGen,
+    RETIRE: RETIRE, LEGEND: LEGEND, isLegend: isLegend, legendDue: legendDue, canBreedLegend: canBreedLegend, breedLegend: breedLegend, breedLeft: breedLeft, hallAdd: hallAdd, cleanHall: cleanHall, adultDays: adultDays, isElder: isElder, elderAt: elderAt, canRetire: canRetire, traitOptions: traitOptions, retire: retire, topGen: topGen,
     PLACES: PLACES, TRIP: TRIP, canTrip: canTrip, goTrip: goTrip, nextTripIn: nextTripIn,
     GIFTS: GIFTS, GIFT: GIFT, VISIT: VISIT, mail: mail, canSend: canSend, noteSent: noteSent, receive: receive, visit: visit, canVisit: canVisit, MBX: MBX, MKEY: MKEY,
     FCUP: FCUP, fcupFoes: fcupFoes, fcupStatus: fcupStatus, canFcup: canFcup, startFcup: startFcup, fcupResult: fcupResult,

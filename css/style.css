@@ -378,3 +378,6 @@ body.finish-gilded .device { background:
 #overlay:not([hidden]) ~ .hint { display: none; }
 /* 2.5.1: on narrow phones the bell / MENU / sound pills reach the middle of the shell: drop the speaker slot they sat on */
 @media (max-width: 360px) { .device::before { display: none; } }
+/* 2.6.1 Legends: badge + greyed (care-free) rows */
+.legend-badge { margin: calc(var(--u) * .6) 0; text-align: center; font-weight: bold; letter-spacing: .15em; color: #f4d35e; text-shadow: 0 0 calc(var(--u) * 1.2) rgba(244, 211, 94, .7); }
+.kv tr.off td { opacity: .45; }

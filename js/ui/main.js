@@ -187,7 +187,8 @@
         case 'poop': poops++; break;   // the attention call (checkAttention) beeps for it
         case 'call': if (!offline) App.toast(p.name + ' ' + (e.fake ? 'is calling you...?' : CALL_TEXT[e.need] || 'needs you!')); break;
         case 'daily': App.toast('Daily bonus: +' + e.coins + ' coins' + (e.streak > 1 ? ' (' + e.streak + '-day streak)' : '') + (e.care ? ' incl. care bonus' : '')); break;
-        case 'elder': App.toast(e.name + ' is an Elder now (' + PP.World.elderAt(G.active(App.state)) + '+ days as an adult)! Retiring is optional - Elders can keep playing and battling (MENU \u25b8 Family).'); info.lines.push(e.name + ' became an Elder'); break;   // 2.4.0
+        case 'sadWarn': PP.Audio.play('no'); App.toast(p.name + ' is very sad and might run away! Play games with it until it has 2+ happy hearts.', true); info.lines.push(p.name + ' got very sad'); break;   // 2.6.1
+        case 'legend': PP.Audio.play('level'); App.toast(e.name + ' is a LEGEND now! No more care needed, full strength in battle. Lay an egg or retire it to the Hall of Fame any time (MENU \u25b8 Family).'); info.lines.push(e.name + ' became a Legend'); break;
         case 'unlock': PP.Audio.play('level'); App.toast('New shell colour unlocked: ' + e.name + '! (MENU \u25b8 Shell colour)'); info.lines.push('Unlocked the ' + e.name + ' shell'); break;
         case 'sick': line(e, 'Got sick'); if (!offline) App.toast(p.name + ' got sick!'); break;
         case 'sleep': if (!offline) { App.toast(p.name + (e.again ? ' dozed off again. Lights off!' : ' fell asleep. Lights off!')); PP.Audio.play('lullaby'); } woke = null; break;

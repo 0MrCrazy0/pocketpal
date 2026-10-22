@@ -18,7 +18,7 @@
     ['Stage', [['Egg', function () { stage('egg'); }], ['Baby', function () { stage('baby'); }], ['Child', function () { stage('child'); }], ['Teen', function () { stage('teen'); }]]],
     ['Adult', [['Scrappy', function () { stage('adult', 'bad'); }], ['Solid', function () { stage('adult', 'good'); }], ['Champion', function () { stage('adult', 'perfect'); }], ['Secret', function () { stage('adult', 'secret'); }]]],
     ['Style', [['Mighty', function () { stage('adult', 'power'); }], ['Swift', function () { stage('adult', 'swift'); }], ['Sturdy', function () { stage('adult', 'guard'); }]]],   // 2.4.0
-    ['Needs', [['Fill all', function () { T.fill(st()); done('All needs filled'); }], ['Hungry', function () { var p = pet(); if (p) { p.hunger = 0; p.happy = Math.min(p.happy, 1); } done('Hungry'); }],
+    ['Needs', [['Fill all', function () { T.fill(st()); done('All needs filled'); }], ['Hungry', function () { var p = pet(); if (p) { p.hunger = 0; p.happy = Math.min(p.happy, 1); } done(p && p.legend ? 'Hungry (a Legend is fed again next minute)' : 'Hungry'); }],
       ['Poop', function () { T.poop(st()); done('Poop!'); }], ['Sick', function () { T.sick(st()); done('Sick'); }], ['Tantrum', function () { T.fake(st()); done('Tantrum started'); }]]],
     ['Battle', [['+100 XP', function () { var n = T.xp(st(), 100); done('+100 XP' + (n ? ' (+' + n + ' Lv)' : '')); }], ['+1 Lv', function () { lvl(1); }], ['Max Lv', function () { lvl(99); }],
       ['+5 SP', function () { T.sp(st(), 5); done('+5 SP'); }]]],
@@ -29,12 +29,38 @@
     ['Event', [['Auto', function () { ev(null); }], ['Halloween', function () { ev('halloween'); }], ['Christmas', function () { ev('christmas'); }], ['Easter', function () { ev('easter'); }], ['Off', function () { ev('off'); }]]],
     ['Season', [['Auto', function () { se(null); }], ['Winter', function () { se('winter'); }], ['Spring', function () { se('spring'); }], ['Off', function () { se('off'); }]]],   // 2.5.0
     ['World', [['Trip ready', function () { var T9 = st().trips; T9.last = null; T9.n = 0; done('Trips ready'); }], ['All things', function () { Object.keys(PP.World.THINGS).forEach(function (id) { PP.World.give(st(), id, Date.now()); }); done('Every thing owned'); }],
-      ['Elder', function () { var p = pet(); if (p && p.stage === 'adult') { p.stageMin = Math.max(p.stageMin, PP.World.RETIRE.elderDays * 1440); done('Elder (can retire)'); } else done('Adults only'); }],
+      ['Legend now', function () { legendNow(); }],
       ['Gift in', function () { var r = PP.World.receive(st(), [{ g: 'treat', n: 'Tester', s: 1 }], G.now(st())); done(r.length ? 'Got a ' + r[0].name + (r[0].used ? '' : ' (note)') : 'No gift'); }]]],
+    // 2.6.1: Legends, Strength (children / teens), adult care mistakes, the Hall of Fame
+    ['Legend', [['Make Legend', legendNow], ['Lay egg', function () { var r = PP.World.breedLegend(st(), st().active, G.now(st())); done(r.msg); }],
+      ['Not Legend', function () { var p = pet(); if (p && p.legend) { delete p.legend; p.stageMin = 0; done('Adult again (day 0)'); } else done('Not a Legend'); }]]],
+    ['Str', [['0', function () { setStr(0); }], ['20', function () { setStr(20); }], ['40 (max)', function () { setStr(D.JUNIOR.str.cap); }]]],
+    ['Care', [['0 adult', function () { setAdultMist(0); }], ['3 recent', function () { setAdultMist(3); }], ['6 recent', function () { setAdultMist(6); }], ['10 old', function () { setAdultMist(10, true); }]]],
+    ['Hall', [['View', function () { A().clearToasts(); PP.UI.close(); PP.UI.open(PP.WorldUI.hallScreen); }], ['Clear', function () { var n = (st().hall || []).length; st().hall = []; done('Hall of Fame cleared (' + n + ')'); }]]],
     ['Unlock', [['Champion (all cups)', function () { unlocked(T.champion(st()), 'Arena Champion!'); }], ['Fill Paldex', function () { unlocked(T.fillDex(st()), 'Paldex filled'); }],
       ['+500 coins', function () { T.coins(st(), 500); done('+500 coins (' + PP.Shop.coins(st()) + ')'); }]]]
   ];
 
+  function legendNow() {
+    var p = pet(); if (!p || p.fate) { done('No pal'); return; }
+    if (p.stage !== 'adult') { done('Adults only (use Adult first)'); return; }
+    if (p.legend) { done(p.name + ' is already a Legend'); return; }
+    p.stageMin = Math.max(p.stageMin, PP.World.elderAt(p) * 1440 - 1); p.lastTickAt = Math.min(p.lastTickAt, G.now(st()) - 60000);
+    A().handleEvents(G.update(st()), false); done(p.legend ? null : 'Could not make a Legend');
+  }
+  function setStr(n) {
+    var p = pet(); if (!p || (p.stage !== 'child' && p.stage !== 'teen')) { done('Children and teens only (adults have no Strength)'); return; }
+    p.str = n; done('Strength ' + n + '/' + D.JUNIOR.str.cap);
+  }
+  function setAdultMist(n, old) {   // adult mistakes = lifetime - young ones; recent = the last 3 pet-days (battle form)
+    var p = pet(); if (!p || p.stage !== 'adult') { done('Adults only'); return; }
+    if (p.legend) { done('Legends make no care mistakes'); return; }
+    var t = p.lastTickAt || G.now(st());
+    p.totalMistakes = (p.mistakes || 0) + n;
+    p.mistakeAt = []; for (var i = 0; i < n; i++) p.mistakeAt.push(old ? t - 5 * 1440 * 60000 - i : t - 60000 * (i + 1));
+    p.mistakeLog = p.mistakeAt.map(function () { return 'Test panel'; });
+    done(n + ' adult mistakes' + (old ? ' (older than 3 days)' : ' (recent)') + ' \u00b7 Legend at adult day ' + PP.World.elderAt(p));
+  }
   function unlocked(fresh, msg) {
     A().handleEvents(fresh.map(function (s) { return { t: 'unlock', shell: s.id, name: s.name }; }), false);
     done(msg + (fresh.length ? '' : ' (no new shells)'));
@@ -107,6 +133,8 @@
     if (!p) { info.textContent = 'No pal'; return; }
     var t = p.name + ' \u00b7 ' + PP.Pet.formName(p) + ' \u00b7 ' + p.stage + (p.form ? '/' + p.form : '') + ' \u00b7 age ' + (p.ageMin / 60).toFixed(1) + 'h';
     var nx = PP.Evolution.minutesToNextStage(p);
+    if (p.stage === 'child' || p.stage === 'teen') t += '\nStrength ' + (p.str || 0) + '/' + D.JUNIOR.str.cap;
+    if (p.stage === 'adult') t += '\n' + (p.legend ? 'LEGEND' : 'adult day ' + PP.World.adultDays(p) + ', Legend at ' + PP.World.elderAt(p)) + ' \u00b7 adult mistakes ' + PP.Stats.adultMistakes(p) + ' (' + PP.Stats.recentAdultMistakes(p) + ' in 3 days) \u00b7 hall ' + (s.hall || []).length;
     t += '\nmistakes ' + p.mistakes + ' (life ' + p.totalMistakes + ') \u00b7 score ' + PP.Evolution.careScore(p) + ' \u00b7 track ' + (PP.Evolution.forecast(p) || '-') + (nx != null ? ' \u00b7 next stage ' + nx + 'm' : '');
     t += '\nH' + p.hunger + ' J' + p.happy + ' E' + Math.round(p.energy) + ' D' + Math.round(p.discipline) + ' HP' + Math.round(p.health) + ' W' + p.weight + ' poop' + p.poop + (p.sick ? ' SICK' : '') + (p.asleep ? ' asleep' : '') + (p.lights ? '' : ' dark');
     if (p.stage === 'adult') t += '\nLv' + p.level + ' xp' + p.xp + ' sp' + p.sp + ' BP' + PP.Stats.bp(PP.Stats.battleStats(p)) + ' \u00b7 arena ' + PP.Arena.mainWon(s) + '/' + D.ARENA_MAIN + ' cups';

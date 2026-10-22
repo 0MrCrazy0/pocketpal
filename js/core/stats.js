@@ -67,7 +67,7 @@
   /* 2.6.0 adult care: mistakes made as an adult (lifetime total minus the young ones) and those of the last 3 pet-days */
   function adultMistakes(p) { return p && p.stage === 'adult' ? Math.max(0, (p.totalMistakes || 0) - (p.mistakes || 0)) : 0; }
   function recentAdultMistakes(p) {
-    if (!p || p.stage !== 'adult' || !Array.isArray(p.mistakeAt)) return 0;
+    if (!p || p.stage !== 'adult' || p.legend === true || !Array.isArray(p.mistakeAt)) return 0;   // 2.6.1: a Legend is never 'Neglected'
     var now = p.lastTickAt || 0, win = D.RULES.adultCare.recentMin * 60000;
     return Math.min(adultMistakes(p), p.mistakeAt.filter(function (t) { return t > 0 && now - t < win; }).length);
   }

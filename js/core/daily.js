@@ -68,6 +68,7 @@
     return POOL.filter(function (g) {
       if (g.adult && st !== 'adult') return false;
       if (g.notBaby && st === 'baby') return false;
+      if (PP.World && PP.World.isLegend(p) && (g.id === 'clean' || g.id === 'lights' || g.id === 'happy')) return false;   // 2.6.1: a care-free Legend has no mess, no bedtime and always-full hearts
       if (g.id === 'visit' && !fr.length) return false;
       if (g.id === 'gift' && !(box && mbFriend)) return false;
       if (g.id === 'find' && !(state && PP.World && PP.World.collectable(state, p))) return false;
@@ -163,7 +164,9 @@
   /* Watch the pal for goals that are states rather than actions. */
   function observe(state, t) {
     var p = PP.Game.active(state);
-    if (p && !p.fate && p.stage !== 'egg' && p.happy >= PP.DATA.RULES.maxHearts) record(state, 'happy', t);
+    if (!p || p.fate || p.stage === 'egg' || p.happy < PP.DATA.RULES.maxHearts) return;
+    if (PP.World && PP.World.isLegend(p) && p.lovedAt !== p.clock) return;   // 2.6.1: a Legend's hearts are always full - only a cuddle right now counts
+    record(state, 'happy', t);
   }
   function coinMult(state, t) { var d = today(state, t); return d && d.event === 'lucky' ? 2 : 1; }
   function visitorReady(state, t) { var d = today(state, t); return !!(d && d.event === 'visitor' && !d.eventUsed); }
@@ -213,7 +216,7 @@
     var sp = PP.DATA.SPECIES[seed % PP.DATA.SPECIES.length], form = ['bad', 'good', 'power'][seed % 3];
     return { id: 'daily' + day, name: 'Daily Challenger', species: sp, form: form, level: 12 + (seed % 6), genes: { hp: 1, atk: 1, def: 0, spd: 0 }, skills: [], sex: 'M' };
   }
-  PP.Daily = { POOL: POOL, SEASONS: SEASONS, EVENTS: EVENTS, SEASON_DAYS: SEASON_DAYS, GOAL_COINS: GOAL_COINS, ALL_BONUS: ALL_BONUS, VISITOR_BONUS: VISITOR_BONUS, HARD_BONUS: HARD_BONUS,
+  PP.Daily = { eligible: eligible, POOL: POOL, SEASONS: SEASONS, EVENTS: EVENTS, SEASON_DAYS: SEASON_DAYS, GOAL_COINS: GOAL_COINS, ALL_BONUS: ALL_BONUS, VISITOR_BONUS: VISITOR_BONUS, HARD_BONUS: HARD_BONUS,
     ensure: ensure, roll: roll, record: record, observe: observe, today: today, text: text, coinMult: coinMult, seasonsAt: seasonsAt,
     visitorReady: visitorReady, useVisitor: useVisitor, seasonDays: seasonDays, season: season, placeGolden: placeGolden, drain: drain, clean: clean, notes: notes, arenaCard: arenaCard, loginBonus: loginBonus, weeklyFoe: weeklyFoe, weekOf: weekOf, arenaReset: arenaReset, weekReset: weekReset };
 })(typeof window !== 'undefined' ? window : globalThis);
