@@ -6,7 +6,7 @@ A little pixel pet that lives in a handheld (it starts in Midnight, and you can 
 
 **[▶ Play PocketPal](https://0mrcrazy0.github.io/pocketpal/)**
 
-This is **version 2.6.5**. It's free, with no ads and no accounts, and it works offline.
+This is **version 2.6.6**. It's free, with no ads and no accounts, and it works offline.
 
 ## Put it on your phone
 

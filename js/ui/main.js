@@ -7,8 +7,23 @@
   var ICONS = ['status', 'feed', 'train', 'clean', 'med', 'lights', 'battle', 'disc'];
   var storageMode = 'local';
   var storage = (function () {
-    try { var s = root.localStorage, k = 'pocketpal2.rewrite.probe'; s.setItem(k, '1'); s.removeItem(k); return s; }
-    catch (e) { storageMode = 'memory'; return memoryStorage(); }
+    var s = null, k = 'pocketpal2.rewrite.probe';
+    try { s = root.localStorage; s.setItem(k, '1'); s.removeItem(k); return s; }
+    catch (e) {
+      /* 2.6.6: a failed TEST WRITE used to switch to memory storage, so a full localStorage (it is shared by every
+       * site on the same origin, e.g. all of one github.io account) opened an EMPTY game ("No pal yet") although the
+       * save was still there. Now: if storage can be read, use it - free our spare copies and try again; if writes
+       * still fail, the pals load and the "storage full" warning shows on the first save. */
+      try {
+        if (s && typeof s.getItem === 'function') {
+          s.getItem('pocketpal2.rewrite.save');
+          try { s.removeItem(k); s.removeItem('pocketpal2.rewrite.corrupt'); s.removeItem('pocketpal2.rewrite.save.preimport'); } catch (e2) {}
+          try { s.setItem(k, '1'); s.removeItem(k); } catch (e3) { storageMode = 'full'; }
+          return s;
+        }
+      } catch (e4) { /* not readable either: private mode / blocked */ }
+      storageMode = 'memory'; return memoryStorage();
+    }
   })();
   function memoryStorage() { var m = {}; return { getItem: function (k) { return k in m ? m[k] : null; }, setItem: function (k, v) { m[k] = String(v); }, removeItem: function (k) { delete m[k]; } }; }
 
@@ -30,6 +45,7 @@
     App.state.lastSeenAt = Date.now();
     var ok = PP.Save.save(storage, App.state, Date.now());
     App.lastSaveReal = Date.now();
+    rememberTheme();
     if (!ok && !App.saveWarned) { App.saveWarned = true; App.toast('Could not save - browser storage is full. Free some space or export a backup (Settings > Save transfer).'); }
     if (ok) App.saveWarned = false;
   };
@@ -181,6 +197,12 @@
     else { try { var pr = Notification.requestPermission(on); if (pr && pr.then) pr.then(on); } catch (e) { on('denied'); } }
   };
   App.resetAll = function () { PP.Save.wipe(storage); App.state = G.newState(Date.now()); App.resetWalker(); App.save(); applySettings(); App.toast('Fresh start!'); setTimeout(firstEgg, 50); };
+  /* 2.6.6: the chosen shell colour is kept under its own small key, so index.html can set theme-color (the browser /
+   * app top bar) before any script loads; Shells.apply sets it again once the game runs. */
+  function rememberTheme() {
+    try { var sh = PP.Collection.shell(App.state.settings.shell); if (sh && storage.getItem('pocketpal2.rewrite.theme') !== sh.base) storage.setItem('pocketpal2.rewrite.theme', sh.base); } catch (e) {}
+  }
+  App.rememberTheme = rememberTheme;
   function applySettings() {
     PP.Audio.setEnabled(App.state.settings.sound); PP.Audio.setMusic(App.state.settings.music !== false); App.updateSoundBtn(); App.updateBellBtn();
     PP.Shells.apply(App.state.settings.shell);
@@ -776,7 +798,8 @@
     if (!App.state.settings.test) App.state.timeOffset = 0;
     applySettings();
     if (loaded.message) App.toast(loaded.message);
-    if (storageMode !== 'local') App.toast('Saving is off in this browser (private mode or storage blocked) - progress lasts until you close this tab.');
+    if (storageMode === 'full') App.toast('Browser storage is full - your pals are here, but new progress may not save. Export a backup (Settings > Save transfer) and free some space.');
+    else if (storageMode !== 'local') App.toast('Saving is off in this browser (private mode or storage blocked) - progress lasts until you close this tab.');
     App.lastUpdateReal = App.state.lastSeenAt || Date.now();
     PP.Sprites.load(function () {});
     updateSim(true);

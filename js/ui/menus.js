@@ -1106,7 +1106,7 @@
     return { title: 'CARE ALERTS', html: html, items: items, live: true };
   }
   function aboutScreen() {
-    var saving = App().storageMode === 'local' ? 'Saved in this browser only' : 'OFF - storage is blocked here, progress ends with this tab';
+    var saving = App().storageMode === 'local' ? 'Saved in this browser only' : App().storageMode === 'full' ? 'Browser storage is full - new progress may not save' : 'OFF - storage is blocked here, progress ends with this tab';
     var online = 'Battle codes work offline on this device. Live battles, gifts, cloud save, care alerts and the weekly lobby (off unless a grown-up switches it on) use your own worker, only when you use them.';   // 2.4.98: + gifts, lobby
     return { title: 'ABOUT', html: '<p><b>PocketPal</b> v' + esc(D.VERSION) + '</p>' +
       '<ul class="away"><li>Saving: ' + esc(saving) + '</li><li>Online: ' + esc(online) + '</li><li>No accounts, ads, tracking or cookies</li>' +

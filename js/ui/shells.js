@@ -19,7 +19,7 @@
   }
   /* Show a shell (used for the live preview too). */
   function apply(id) {
-    var s = PP.Collection.shell(id) || PP.Collection.shell('pink');
+    var s = PP.Collection.shell(id) || PP.Collection.shell('black');   // 2.6.6: unknown ids fall back to the default (Midnight), not pink
     var v = vars(s), de = document.documentElement;
     for (var k in v) de.style.setProperty(k, v[k]);
     var b = document.body;

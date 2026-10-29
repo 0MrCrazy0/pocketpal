@@ -1,7 +1,7 @@
 /* PocketPal - handheld shell + green LCD */
 :root {
   /* shell colours (overwritten by the chosen shell, see js/ui/shells.js) */
-  --shell: #e85a71; --shell-dark: #c43c55; --shell-lite: #f2788c; --ring: #b83550; --rim: #f9b4c0;
+  --shell: #34343f; --shell-dark: #1d1d26; --shell-lite: #4b4b5a; --ring: #101016; --rim: #6a6a7c;   /* 2.6.6: Midnight, the default shell */
   --label: rgba(255,255,255,.35); --label-strong: rgba(255,255,255,.6); --sbtn-bg: rgba(0,0,0,.28); --sbtn-fg: #fff; --sbtn-bd: rgba(255,255,255,.3);
   --lcd: #9bbc0f; --lcd-lite: #cee06e; --mid: #8bac0f; --dark: #306230; --ink: #0f380f;
   --lcd-w: min(460px, calc(100vw - 48px), calc((100dvh - 220px) * 1.35));

@@ -12,6 +12,7 @@
   var KEY = 'pocketpal2.rewrite.save';
   var BACKUP_KEY = 'pocketpal2.rewrite.backup';
   var CORRUPT_KEY = 'pocketpal2.rewrite.corrupt';
+  var RESCUE_KEY = 'pocketpal2.rewrite.rescue';   // 2.6.6: the last save that had pals, kept when an empty game would replace it
   var SCHEMA = 13;  // 2.6.3: arena / Junior Cup / Friends Cup progress per pal (p.arena, p.jtro, p.fcup), state.myth; 2.6.1: Legends, Hall of Fame
    // 2.6.0: Strength (p.str, p.strDay) for children and teens  // 2.5.0: Bowtie -> Top Hat, placed garden things (2.4.97: 9 battle traits, lobby seat, lobby parent switch)
   var MIGRATIONS = {
@@ -161,6 +162,8 @@
       if (x.from === active) newActive = i;
     });
     if (newActive == null) newActive = active < slots.length ? active : 0;
+    // 2.6.6: the active slot is empty but another slot has a pal: show that pal, not "No pal yet"
+    if (!slots[newActive]) { var live = -1, any = -1; slots.forEach(function (p, i) { if (p && any < 0) any = i; if (p && !p.fate && live < 0) live = i; }); if (live >= 0 || any >= 0) newActive = live >= 0 ? live : any; }
     return { slots: slots, active: newActive };
   }
 
@@ -420,8 +423,47 @@
   function safeGet(storage, k) { try { return storage.getItem(k); } catch (e) { return null; } }
   function safeSet(storage, k, v) { try { storage.setItem(k, v); return true; } catch (e) { return false; } }
 
-  /* Returns { state, status: 'new'|'ok'|'backup'|'reset', message } */
+  /* 2.6.6: how many pals a state holds (box slots, eggs included, plus the Album). 0 = an empty game. */
+  function palCount(st) {
+    if (!st || typeof st !== 'object') return 0;
+    var n = 0; (Array.isArray(st.slots) ? st.slots : []).forEach(function (p) { if (p) n++; });
+    return n + (Array.isArray(st.album) ? st.album.length : 0);
+  }
+  function savedAtOf(raw) { try { var o = JSON.parse(raw); return typeof o.savedAt === 'number' ? o.savedAt : 0; } catch (e) { return 0; } }
+  /* 2.6.6: look through every PocketPal copy in storage (the save, backup, rescue, corrupt and pre-import copies, plus
+   * any other "pocketpal..." key that holds a save) and return the readable one with the most pals (newest on a tie).
+   * Read-only: nothing is written or removed here. */
+  function scan(storage, now) {
+    var keys = [KEY, BACKUP_KEY, RESCUE_KEY, CORRUPT_KEY, KEY + '.preimport'];
+    try {
+      var n = typeof storage.length === 'number' ? storage.length : 0;
+      for (var i = 0; i < n; i++) { var k = storage.key(i); if (k && /^pocketpal/i.test(k) && keys.indexOf(k) < 0) keys.push(k); }
+    } catch (e) { /* storage that can't be listed: the known keys are enough */ }
+    var best = null;
+    keys.forEach(function (k) {
+      var raw = safeGet(storage, k); if (!raw || raw.charAt(0) !== '{') return;
+      var r = parse(raw, now); if (!r.ok) return;
+      var c = palCount(r.state); if (!c) return;
+      var at = savedAtOf(raw);
+      if (!best || c > best.pals || (c === best.pals && at > best.savedAt)) best = { key: k, state: r.state, pals: c, savedAt: at };
+    });
+    return best;
+  }
+
+  /* Returns { state, status: 'new'|'ok'|'backup'|'reset'|'newer'|'recovered', message } */
   function load(storage, now) {
+    now = now || Date.now();
+    var res = load1(storage, now);
+    /* 2.6.6: never open an EMPTY game while a copy with pals is still in storage (a save lost or emptied by a
+     * failed write, an empty game saved over it, a damaged save with a good older copy...). */
+    if (res.status !== 'newer' && !palCount(res.state)) {
+      var best = scan(storage, now);
+      if (best) return { state: best.state, status: 'recovered', from: best.key,
+        message: 'Found your pals in a saved copy and brought them back (' + best.pals + ').' };
+    }
+    return res;
+  }
+  function load1(storage, now) {
     now = now || Date.now();
     var raw = safeGet(storage, KEY), r = null;
     if (raw) {
@@ -445,24 +487,33 @@
   function save(storage, state, now) {
     now = now || Date.now();
     state.lastSeenAt = now;
-    var json = serialize(state, now);
+    var json = serialize(state, now), empty = !palCount(state);
+    /* 2.6.6: an empty game is about to replace a save that has pals: keep that save as the rescue copy first
+     * (unless the rescue copy already holds as many pals). Reset everything wipes first, so it is not kept. */
+    if (empty) {
+      var prev = safeGet(storage, KEY), pr = prev ? parse(prev, now) : null;
+      if (pr && pr.ok && palCount(pr.state)) {
+        var rr = safeGet(storage, RESCUE_KEY), rp = rr ? parse(rr, now) : null;
+        if (!(rp && rp.ok && palCount(rp.state) >= palCount(pr.state))) safeSet(storage, RESCUE_KEY, prev);
+      }
+    }
     var ok = safeSet(storage, KEY, json);
     if (!ok) {   // storage full: free the spare copies (corrupt text, pre-import copy, backup) and try once more
       try { storage.removeItem(CORRUPT_KEY); storage.removeItem(KEY + '.preimport'); storage.removeItem(BACKUP_KEY); } catch (e) {}
       state._backupAt = 0;
       ok = safeSet(storage, KEY, json);
     }
-    if (ok && (!state._backupAt || now - state._backupAt > 10 * U.MIN)) {
+    if (ok && !empty && (!state._backupAt || now - state._backupAt > 10 * U.MIN)) {   // 2.6.6: an empty game never replaces the backup
       state._backupAt = now;
       safeSet(storage, BACKUP_KEY, serialize(state, now));
     }
     return ok;
   }
   function wipe(storage) {
-    try { storage.removeItem(KEY); storage.removeItem(BACKUP_KEY); } catch (e) {}
+    try { storage.removeItem(KEY); storage.removeItem(BACKUP_KEY); storage.removeItem(RESCUE_KEY); storage.removeItem(CORRUPT_KEY); storage.removeItem(KEY + '.preimport'); } catch (e) {}   // 2.6.6: a deliberate reset leaves no copy to recover
   }
 
-  PP.Save = { KEY: KEY, BACKUP_KEY: BACKUP_KEY, CORRUPT_KEY: CORRUPT_KEY, SCHEMA: SCHEMA,
+  PP.Save = { KEY: KEY, BACKUP_KEY: BACKUP_KEY, CORRUPT_KEY: CORRUPT_KEY, RESCUE_KEY: RESCUE_KEY, SCHEMA: SCHEMA, palCount: palCount, scan: scan,
     load: load, save: save, parse: parse, serialize: serialize, sanitizeState: sanitizeState, sanitizePet: sanitizePet, wipe: wipe,
     exportCode: exportCode, importCode: importCode, checksum: fnv };
 })(typeof window !== 'undefined' ? window : globalThis);
