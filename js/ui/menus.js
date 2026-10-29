@@ -1111,7 +1111,15 @@
     return { title: 'ABOUT', html: '<p><b>PocketPal</b> v' + esc(D.VERSION) + '</p>' +
       '<ul class="away"><li>Saving: ' + esc(saving) + '</li><li>Online: ' + esc(online) + '</li><li>No accounts, ads, tracking or cookies</li>' +
       '<li>Works offline once loaded over http(s)</li></ul><p class="tip">Move your pals to another device with Settings \u25b8 Save transfer.</p>',
-      items: [{ label: 'Back', act: pop }] };
+      items: [{ label: 'Share the game', sub: 'Send a friend the PocketPal link', act: shareGame }, { label: 'Back', act: pop }] };
+  }
+  /* 2.6.5: share the play link (the chat preview card comes from index.html's og: tags). The phone's share sheet where
+   * there is one, else copy the link. Only the public game link is sent - never a save or battle code. */
+  function gameUrl() { var c = document.querySelector('link[rel="canonical"]'); return (c && c.href) || location.href.split(/[?#]/)[0]; }
+  function shareGame() {
+    var url = gameUrl(), text = 'Come raise a pixel pet with me in PocketPal!';
+    if (navigator.share) navigator.share({ title: 'PocketPal', text: text, url: url }).catch(function () {});
+    else copyText(url);
   }
   function renameScreen() {
     var p = pet();

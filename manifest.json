@@ -1,8 +1,8 @@
 {
   "name": "PocketPal",
   "short_name": "PocketPal",
-  "version": "2.6.4",
-  "description": "Raise a pixel pet in a pink handheld: six animals, 42 adult forms, battles, skill trees and breeding. Works offline.",
+  "version": "2.6.5",
+  "description": "Raise a pixel pet in a handheld you can repaint: six animals, 42 adult forms, battles, skill trees and breeding. Works offline.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
