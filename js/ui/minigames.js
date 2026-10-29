@@ -130,10 +130,10 @@
     var t = now();
     // Power Training: pick an unlocked skill, then land the timing hit
     if (g.kind === 'dummy' && g.phase === 'pick') {
-      if (btn === 'A' || btn === 'PREV' || btn === 'LEFT') {
+      if (btn === 'PREV' || btn === 'LEFT') {
         g.moveI = (g.moveI + g.moves.length - 1) % g.moves.length; PP.Audio.play('move'); return;
       }
-      if (btn === 'RIGHT') {
+      if (btn === 'A' || btn === 'RIGHT') {   // 2.6.4: A steps forward, as everywhere else (it went backwards)
         g.moveI = (g.moveI + 1) % g.moves.length; PP.Audio.play('move'); return;
       }
       if (btn === 'B') {

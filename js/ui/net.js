@@ -67,8 +67,19 @@
 
   /* announce: only when the player just switched alerts on (bell / Settings). 1.9.2: the background re-arm on every
    * hide / pagehide / launch is silent. */
+  /* 2.6.4: the last schedule the worker accepted. An upload the worker would treat as unchanged (same endpoint and
+   * quiet hours, every time within its 60 s tolerance) is skipped, e.g. the hide + pagehide pair; it is re-sent after
+   * 6 h anyway in case the worker lost it. Stored only after the worker said ok, so a failed upload is retried. */
+  var SIG_KEY = 'pocketpal2.alertSig', SIG_RESEND = 6 * 3600e3;
+  function sigGet() { try { var j = JSON.parse(localStorage.getItem(SIG_KEY) || 'null'); return j && typeof j === 'object' ? j : null; } catch (e) { return null; } }
+  function sigSet(v) { try { if (v) localStorage.setItem(SIG_KEY, JSON.stringify(v)); else localStorage.removeItem(SIG_KEY); } catch (e) { /* storage off */ } }
+  function sameSig(a, b, now) {
+    return !!(a && b && a.ep === b.ep && Array.isArray(a.times) && a.times.length === b.times.length && now - (+a.sent || 0) < SIG_RESEND &&
+      a.times.every(function (t, i) { return Math.abs(t - b.times[i]) < 60e3; }) && JSON.stringify(a.quiet || []) === JSON.stringify(b.quiet || []));
+  }
   function scheduleAlert(state, announce) {
     if (!state || !state.settings.alerts || !('serviceWorker' in navigator)) return;
+    if (PP.App && PP.App.passive) return;   // 2.6.4: a paused tab (another tab, or a newer save) must not replace the real schedule
     var m = mode(), list = plan(state);
     Net.last = { list: list, at: Date.now(), mode: m };
     if (m === 'none' || m === 'open') return;
@@ -91,7 +102,12 @@
         return sub || fresh();
       }).then(function (sub) {
         /* times = the 1.9.7 schedule; at = its first time, for a worker that is still on 1.9.4 */
-        return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null, quiet: PP.Reminders.quietSpans(state, Date.now()) });   // 2.4.96 quiet
+        var quiet = PP.Reminders.quietSpans(state, Date.now()), sig = { ep: sub.endpoint, times: times.slice().sort(function (a, b) { return a - b; }), quiet: quiet };
+        if (!announce && times.length && sameSig(sigGet(), sig, Date.now())) return null;   // 2.6.4: the worker has it already
+        return api('/alerts', { subscription: sub.toJSON(), times: times, at: times.length ? times[0] : null, quiet: quiet }).then(function (j) {   // 2.4.96 quiet
+          if (j && j.ok) { if (j.scheduled) { sig.sent = Date.now(); sigSet(sig); } else sigSet(null); }
+          return j;
+        }, function (e) { sigSet(null); throw e; });
       }).then(function (j) {
         if (announce && PP.App && PP.App.toast && j) PP.App.toast(j.scheduled ? 'Next alert: ' + nextText(list) : (list.length ? 'Next alert: ' + nextText(list) : 'No alert types are on'));
       });
@@ -110,6 +126,7 @@
         navigator.serviceWorker.ready.then(function (reg) {
           if (reg.getNotifications) reg.getNotifications({ includeTriggered: true }).then(function (ns) { ns.forEach(function (n) { if (n.tag && n.tag.indexOf('pp-local-') === 0) n.close(); }); }).catch(function () {});
           return reg.pushManager && reg.pushManager.getSubscription().then(function (sub) {
+            sigSet(null);
             if (sub && enabled()) return api('/alerts', { subscription: sub.toJSON(), at: null });
           });
         }).catch(function () {});
@@ -144,5 +161,5 @@
     return out;
   }
 
-  var Net = PP.Net = { enabled: enabled, scheduleAlert: scheduleAlert, setAlerts: setAlerts, mode: mode, limits: limits, plan: plan, sameKey: sameKey, last: null, isIOS: isIOS };
+  var Net = PP.Net = { enabled: enabled, scheduleAlert: scheduleAlert, setAlerts: setAlerts, mode: mode, limits: limits, plan: plan, sameKey: sameKey, last: null, isIOS: isIOS, _sameSig: sameSig };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -368,7 +368,7 @@
     var obj;
     try { obj = JSON.parse(raw); } catch (e) { return { ok: false, error: 'not JSON' }; }
     if (!obj || typeof obj !== 'object' || typeof obj.schema !== 'number' || !obj.state || typeof obj.state !== 'object' || Array.isArray(obj.state)) return { ok: false, error: 'not a PocketPal save' };   // 1.9.3: a non-object state was read as a fresh game (hiding the backup)
-    if (obj.schema > SCHEMA) return { ok: false, error: 'made by a newer version' };
+    if (obj.schema > SCHEMA) return { ok: false, newer: true, error: 'made by a newer version' };
     var st = obj.state;
     for (var v = obj.schema; v < SCHEMA; v++) {
       if (!MIGRATIONS[v]) return { ok: false, error: 'no migration from ' + v };
@@ -423,15 +423,20 @@
   /* Returns { state, status: 'new'|'ok'|'backup'|'reset', message } */
   function load(storage, now) {
     now = now || Date.now();
-    var raw = safeGet(storage, KEY);
+    var raw = safeGet(storage, KEY), r = null;
     if (raw) {
-      var r = parse(raw, now);
+      r = parse(raw, now);
       if (r.ok) { safeSet(storage, BACKUP_KEY, raw); return { state: r.state, status: 'ok', message: '' }; }
       safeSet(storage, CORRUPT_KEY, raw);
     }
     var braw = safeGet(storage, BACKUP_KEY);
+    var b = braw ? parse(braw, now) : null;
+    /* 2.6.4: a save (or backup) written by a NEWER PocketPal - e.g. an old cached copy opened offline after an update.
+       It used to fall through to "starting fresh" (or to an older backup), and the next autosave overwrote the real pal.
+       Now the game opens read-only ('newer'): main.js saves nothing until the new version is loaded. */
+    if ((r && r.newer) || (b && b.newer)) return { state: PP.Game.newState(now), status: 'newer',
+      message: 'This save is from a newer PocketPal. Connect to the internet and reopen the game to update - your pal is safe.' };
     if (braw) {
-      var b = parse(braw, now);
       if (b.ok) return { state: b.state, status: 'backup', message: raw ? 'Save was damaged - restored the backup copy.' : 'Restored from backup.' };
     }
     return { state: PP.Game.newState(now), status: raw ? 'reset' : 'new',

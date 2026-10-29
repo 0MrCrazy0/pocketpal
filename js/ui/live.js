@@ -29,7 +29,18 @@
   }
   function other(side) { return side === 'h' ? 'g' : 'h'; }
   function stopPoll() { if (L && L.timer) { clearTimeout(L.timer); L.timer = null; } }
-  function poll(fn, ms) { stopPoll(); if (L) L.timer = setTimeout(function () { if (L) fn(); }, ms); }
+  /* 2.6.4 (KV reads are a shared daily budget): a hidden tab polls every 10 s, and a host lobby nobody has joined
+   * for 2 min every 5 s. Showing the tab again polls at once. */
+  var POLL_HIDDEN = 10000, POLL_IDLE = 5000, LOBBY_IDLE_MS = 120000;
+  function pollDelay(fn, ms) {
+    if (typeof document !== 'undefined' && document.hidden) return Math.max(ms, POLL_HIDDEN);
+    if (fn === lobbyTick && L && L.state === 'lobby' && Date.now() - (L.at || 0) > LOBBY_IDLE_MS) return Math.max(ms, POLL_IDLE);
+    return ms;
+  }
+  function poll(fn, ms) { stopPoll(); if (L) { L.next = fn; L.timer = setTimeout(function () { if (L) { L.next = null; fn(); } }, pollDelay(fn, ms)); } }
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && L && L.timer && L.next) { var fn = L.next; stopPoll(); L.next = null; fn(); }
+  });
   function getRoom() { return call('/room/' + L.room + '?side=' + L.side); }
   /* 404: the room expired (45 min without a write); 403: our seat was taken (two guests joined at once) */
   function gone(e) { return e && (e.status === 404 || e.status === 403); }
@@ -284,5 +295,5 @@
 
   root.addEventListener && root.addEventListener('pagehide', beacon);
   PP.LiveUI = { enabled: enabled, liveScreen: liveScreen, joinScreen: joinScreen, create: create, join: join, leave: leave, rematch: rematch, friendItem: friendItem,
-    _session: function () { return L; } };
+    _session: function () { return L; } , _pollDelay: function (lobby, ms, at) { var keep = L; L = { state: lobby ? 'lobby' : 'turn', at: at }; try { return pollDelay(lobby ? lobbyTick : null, ms); } finally { L = keep; } } };
 })(typeof window !== 'undefined' ? window : globalThis);

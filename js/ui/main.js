@@ -22,6 +22,9 @@
   /* Saving. A tab that lost the "tab lock" to a newer tab never saves (it would overwrite
    * the newer tab's progress). A failed write (storage full) warns once per session. */
   App.storageMode = storageMode;
+  /* 2.6.4 (Cloudflare free plan: 1,000 KV writes a day for everyone): a care action re-plans the alerts 60 s after the
+   * LAST action of a burst, not 1.5 s after each one; hiding the app sends it at once. */
+  App.ALERT_REPLAN_MS = 60000;
   App.save = function () {
     if (App.passive || !App.state) return;
     App.state.lastSeenAt = Date.now();
@@ -48,6 +51,17 @@
     if (UI.isOpen()) UI.close();
     var el = document.getElementById('tabLock'); if (el) el.hidden = false;
     var b = document.getElementById('tabLockBtn'); if (b) b.focus();
+  }
+  /* 2.6.4: the save was written by a newer PocketPal (an old cached copy opened offline, a half-finished update).
+   * Stay passive - no sim, no saves, no first egg, no alert upload - so the real pal is never overwritten, say so, and
+   * ask the service worker to fetch the new version. "Reload" tries again. */
+  function newerSave() {
+    App.newerSave = true; App.passive = true;
+    var m = document.getElementById('tabLockMsg');
+    if (m) m.innerHTML = '<b>This save is from a newer PocketPal.</b><br>Your pal is safe. This copy of the game is out of date, so it is paused and will not save. Connect to the internet and reload to update.';
+    var b = document.getElementById('tabLockBtn'); if (b) b.textContent = 'Reload';
+    var el = document.getElementById('tabLock'); if (el) el.hidden = false;
+    try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) { /* no SW */ }
   }
   function initTabLock() {
     if (root.BroadcastChannel) {
@@ -395,7 +409,7 @@
     // 2.3.21: the cheerful snack jingle only for a snack it enjoyed - an overfed snack (care mistake / tummy ache) sounds sad
     } else PP.Audio.play(!r.ok ? 'no' : action === 'snack' && r.anim === 'eat' ? 'snack' : r.anim === 'eat' ? 'eat' : action === 'clean' || r.anim === 'happy' ? 'happy' : action === 'lights' ? 'ok' : 'sad');
     refreshIcons(); checkAttention(); App.save();
-    if (r.ok && PP.Net) { clearTimeout(App.alertTimer); App.alertTimer = setTimeout(function () { PP.Net.scheduleAlert(App.state); }, 1500); }   // 2.4.92: re-plan the alerts at once (it waited for the app to be hidden)
+    if (r.ok && PP.Net) { clearTimeout(App.alertTimer); App.alertTimer = setTimeout(function () { App.alertTimer = null; PP.Net.scheduleAlert(App.state); }, App.ALERT_REPLAN_MS); }   // 2.4.92: re-plan the alerts (it waited for the app to be hidden); 2.6.4: once per burst of care, see ALERT_REPLAN_MS
   };
   /* Items from the Pal Store bag (Feed / Medicine menus and the Bag). */
   App.useItem = function (id) {
@@ -562,7 +576,7 @@
     if (App.scene === 'battle') { PP.BattleView.input(btn); return; }
     if (App.scene === 'mini') { PP.Mini.input(btn); return; }
     if (btn === 'A') { App.iconSel = (App.iconSel + 1) % ICONS.length; PP.Audio.play('move'); }
-    else if (btn === 'PREV') { App.iconSel = (App.iconSel + ICONS.length - 1) % ICONS.length; PP.Audio.play('move'); }
+    else if (btn === 'PREV') { App.iconSel = App.iconSel < 0 ? ICONS.length - 1 : (App.iconSel + ICONS.length - 1) % ICONS.length; PP.Audio.play('move'); }   // 2.6.4: from no icon, PREV picks the last one (was the 2nd last)
     else if (btn === 'B') {
       if (!G.active(App.state)) { homeB(); return; }   // PRESS B FOR AN EGG - never open Status first
       if (App.iconSel >= 0) activateIcon(App.iconSel);
@@ -757,6 +771,7 @@
     initTabLock();
     var loaded = PP.Save.load(storage, Date.now());
     App.state = loaded.state;
+    if (loaded.status === 'newer') newerSave();
     if (!App.testAllowed) { App.state.settings.test = false; App.state.settings.speed = 1; }
     if (!App.state.settings.test) App.state.timeOffset = 0;
     applySettings();
@@ -768,7 +783,7 @@
     if (App.state.settings.test) PP.TestPanel.show();
     var noGuide = /[?&]guide=0\b/.test(root.location.search);
     // Fresh start: egg first. Guide runs after the first egg (onEggStarted). Never show the guide with an empty LCD.
-    if (!G.active(App.state)) setTimeout(firstEgg, 300);
+    if (!G.active(App.state) && !App.newerSave) setTimeout(firstEgg, 300);
     // background ticks: keep the sim (and opt-in alerts) going while the tab is hidden
     setInterval(function () { if (document.hidden) { updateSim(); favicon(); } }, 30000);
     document.getElementById('soundBtn').addEventListener('click', function () {
@@ -786,10 +801,10 @@
     });
     document.addEventListener('visibilitychange', function () {
       if (PP.Mini) PP.Mini.pause(document.hidden);   // 2.3.1: a mini-game's countdown stops while the app is hidden
-      if (document.hidden) { App.save(); if (PP.Net) PP.Net.scheduleAlert(App.state); }
+      if (document.hidden) { App.save(); clearTimeout(App.alertTimer); App.alertTimer = null; if (PP.Net) PP.Net.scheduleAlert(App.state); }   // 2.6.4: hiding flushes a pending re-plan
       else { updateSim(true); }
     });
-    root.addEventListener('pagehide', function () { App.save(); if (PP.Net) PP.Net.scheduleAlert(App.state); });
+    root.addEventListener('pagehide', function () { App.save(); clearTimeout(App.alertTimer); App.alertTimer = null; if (PP.Net) PP.Net.scheduleAlert(App.state); });
     root.addEventListener('resize', fitLcd);
     if (root.ResizeObserver) new root.ResizeObserver(fitLcd).observe(document.querySelector('.lcd'));
     root.requestAnimationFrame(frame);

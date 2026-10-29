@@ -492,7 +492,7 @@
       w = F.width(txt, 1) + 10; x = q5((W - w) / 2);
       ctx.fillStyle = C.ink; ctx.fillRect(x, y, w, 11);
       ctx.fillStyle = C.lite; ctx.fillRect(x + 0.8, y + 0.8, w - 1.6, 9.4);
-      ctx.fillStyle = C.ink; ctx.fillRect(x - 3, y + 2.5, 3, 6); ctx.fillRect(x + w, y + 2.5, 3, 6);      // ribbon tails
+      ctx.fillStyle = C.ink; ctx.fillRect(x - 3, q5(y + 2.5), 3, 6); ctx.fillRect(x + w, q5(y + 2.5), 3, 6);      // ribbon tails (2.6.4: on the device-pixel grid - y + 2.5 blurred into an off-palette green)
       F.draw(ctx, txt, W / 2, y + 2.5, C.ink, 1, 'center');
       bv.introRects.push({ seq: ++bv.seq, kind: 'ribbon', x: x - 3, y: y, w: w + 6, h: 11 });
       return;
