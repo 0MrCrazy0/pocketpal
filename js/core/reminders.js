@@ -38,7 +38,7 @@
   var CHECK_MS = 3 * 3600e3;    // nothing due: one welfare check-in after 3 h
   var POOP_LEAD_MIN = 60;
 
-  function defaults() { return { lights: true, hunger: true, medicine: true, poop: true, calls: true, wake: false, rested: true, hatch: true, tantrum: true, bedsoon: true, evolve: true }; }
+  function defaults() { return { lights: true, hunger: true, medicine: true, poop: true, calls: true, wake: true, rested: true, hatch: true, tantrum: true, bedsoon: true, evolve: true }; }
   function clean(o) {
     var d = defaults(), out = {};
     TYPES.forEach(function (t) { out[t.id] = o && typeof o === 'object' && typeof o[t.id] === 'boolean' ? o[t.id] : d[t.id]; });
